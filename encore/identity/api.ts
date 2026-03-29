@@ -93,6 +93,30 @@ type UserRow = {
   updated_at: string;
 };
 
+const USER_SELECT = `
+  SELECT
+    id,
+    email,
+    display_name,
+    password_hash,
+    photo_url,
+    role,
+    host_plan,
+    kyc_status,
+    balance,
+    referral_count,
+    tier,
+    referral_code,
+    referred_by_code,
+    payment_method,
+    payment_instructions,
+    payment_reference_prefix,
+    last_login_at,
+    created_at,
+    updated_at
+  FROM users
+`;
+
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
@@ -149,9 +173,10 @@ export const signup = api<SignupParams, SessionResponse>(
     const email = normalizeEmail(params.email);
     validatePassword(params.password);
 
-    const existing = await identityDB.queryRow<UserRow>`
-      SELECT * FROM users WHERE email = ${email}
-    `;
+    const existing = await identityDB.rawQueryRow<UserRow>(
+      `${USER_SELECT} WHERE email = $1`,
+      email,
+    );
     if (existing) {
       if (existing.password_hash) {
         throw APIError.alreadyExists("An account already exists for this email.");
@@ -210,9 +235,10 @@ export const login = api<LoginParams, SessionResponse>(
   { expose: true, method: "POST", path: "/auth/login" },
   async (params) => {
     const email = normalizeEmail(params.email);
-    const existing = await identityDB.queryRow<UserRow>`
-      SELECT * FROM users WHERE email = ${email}
-    `;
+    const existing = await identityDB.rawQueryRow<UserRow>(
+      `${USER_SELECT} WHERE email = $1`,
+      email,
+    );
     if (!existing || !existing.password_hash) {
       throw APIError.unauthenticated("Invalid email or password.");
     }
@@ -241,9 +267,10 @@ export const devLogin = api<DevLoginParams, DevLoginResponse>(
   { expose: true, method: "POST", path: "/auth/dev-login" },
   async (params) => {
     const email = normalizeEmail(params.email);
-    const existing = await identityDB.queryRow<UserRow>`
-      SELECT * FROM users WHERE email = ${email}
-    `;
+    const existing = await identityDB.rawQueryRow<UserRow>(
+      `${USER_SELECT} WHERE email = $1`,
+      email,
+    );
 
     const now = new Date().toISOString();
     const role = params.role ?? "guest";
@@ -315,9 +342,10 @@ export const getSession = api<void, SessionResponse>(
   { expose: true, method: "GET", path: "/auth/session", auth: true },
   async () => {
     const auth = requireAuth();
-    const user = await identityDB.queryRow<UserRow>`
-      SELECT * FROM users WHERE id = ${auth.userID}
-    `;
+    const user = await identityDB.rawQueryRow<UserRow>(
+      `${USER_SELECT} WHERE id = $1`,
+      auth.userID,
+    );
     if (!user) throw APIError.notFound("User session could not be resolved.");
     const mappedUser = mapUser(user);
     return issueSession(mappedUser);
@@ -328,9 +356,10 @@ export const upsertProfile = api<UpsertProfileParams, SessionResponse>(
   { expose: true, method: "PUT", path: "/users/me", auth: true },
   async (params) => {
     const auth = requireAuth();
-    const existing = await identityDB.queryRow<UserRow>`
-      SELECT * FROM users WHERE id = ${auth.userID}
-    `;
+    const existing = await identityDB.rawQueryRow<UserRow>(
+      `${USER_SELECT} WHERE id = $1`,
+      auth.userID,
+    );
     if (!existing) throw APIError.notFound("User not found.");
 
     const nextRole = params.role ?? existing.role;
@@ -408,10 +437,7 @@ export const listUsers = api<void, { users: UserProfile[] }>(
   { expose: true, method: "GET", path: "/admin/users", auth: true },
   async () => {
     requireRole("admin", "support");
-    const rows = await identityDB.queryAll<UserRow>`
-      SELECT * FROM users
-      ORDER BY created_at DESC
-    `;
+    const rows = await identityDB.rawQueryAll<UserRow>(`${USER_SELECT} ORDER BY created_at DESC`);
     return { users: rows.map(mapUser) };
   },
 );
@@ -420,9 +446,10 @@ export const adminUpdateUser = api<AdminUpdateUserParams, { user: UserProfile }>
   { expose: true, method: "PUT", path: "/admin/users/:userId", auth: true },
   async (params) => {
     requireRole("admin", "support");
-    const existing = await identityDB.queryRow<UserRow>`
-      SELECT * FROM users WHERE id = ${params.userId}
-    `;
+    const existing = await identityDB.rawQueryRow<UserRow>(
+      `${USER_SELECT} WHERE id = $1`,
+      params.userId,
+    );
     if (!existing) throw APIError.notFound("User not found.");
 
     const nextDisplayName = params.displayName ?? existing.display_name;
@@ -476,9 +503,10 @@ export const adminSetPassword = api<AdminSetPasswordParams, { ok: true }>(
   async ({ userId, password }) => {
     requireRole("admin", "support");
     validatePassword(password);
-    const existing = await identityDB.queryRow<UserRow>`
-      SELECT * FROM users WHERE id = ${userId}
-    `;
+    const existing = await identityDB.rawQueryRow<UserRow>(
+      `${USER_SELECT} WHERE id = $1`,
+      userId,
+    );
     if (!existing) throw APIError.notFound("User not found.");
 
     const passwordHash = await hashPassword(password);
@@ -500,9 +528,10 @@ export const setUserKycStatus = api<{
   { expose: true, method: "POST", path: "/admin/users/kyc-status", auth: true },
   async (params) => {
     requireRole("admin", "support");
-    const existing = await identityDB.queryRow<UserRow>`
-      SELECT * FROM users WHERE id = ${params.userId}
-    `;
+    const existing = await identityDB.rawQueryRow<UserRow>(
+      `${USER_SELECT} WHERE id = $1`,
+      params.userId,
+    );
     if (!existing) throw APIError.notFound("User not found.");
     const now = new Date().toISOString();
 
