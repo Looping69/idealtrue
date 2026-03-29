@@ -10,7 +10,7 @@ import { Loader2, Camera, User as UserIcon, Mail, Shield, Calendar, ShieldCheck,
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import KYCModal from '@/components/KYCModal';
-import { requestProfilePhotoUpload, updateEncoreProfile } from '@/lib/identity-client';
+import { requestEmailVerification, requestProfilePhotoUpload, updateEncoreProfile } from '@/lib/identity-client';
 
 export default function AccountPage() {
   const { user, profile, refreshProfile } = useAuth();
@@ -19,6 +19,7 @@ export default function AccountPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [isSwitchingRole, setIsSwitchingRole] = useState(false);
   const [isMakingAdmin, setIsMakingAdmin] = useState(false);
+  const [isSendingVerification, setIsSendingVerification] = useState(false);
   const [isKYCModalOpen, setIsKYCModalOpen] = useState(false);
   const [formData, setFormData] = useState({
     displayName: '',
@@ -156,6 +157,26 @@ export default function AccountPage() {
     }
   };
 
+  const handleSendVerification = async () => {
+    setIsSendingVerification(true);
+    try {
+      await requestEmailVerification();
+      toast({
+        title: "Verification email sent",
+        description: "Check your inbox for the verification link.",
+      });
+    } catch (error) {
+      console.error('Failed to send verification email:', error);
+      toast({
+        variant: "destructive",
+        title: "Email failed",
+        description: "Could not send a verification email right now.",
+      });
+    } finally {
+      setIsSendingVerification(false);
+    }
+  };
+
   if (!profile) return null;
 
   return (
@@ -201,7 +222,12 @@ export default function AccountPage() {
             <div className="w-full pt-4 border-t border-outline-variant space-y-3 text-left">
               <div className="flex items-center gap-3 text-sm text-on-surface-variant">
                 <Mail className="w-4 h-4" />
-                <span className="truncate">{profile.email}</span>
+                <div className="min-w-0">
+                  <div className="truncate">{profile.email}</div>
+                  <div className={cn("text-[11px] font-semibold", profile.emailVerified ? "text-green-600" : "text-amber-600")}>
+                    {profile.emailVerified ? 'Email verified' : 'Email not verified'}
+                  </div>
+                </div>
               </div>
               <div className="flex items-center gap-3 text-sm text-on-surface-variant">
                 <Shield className="w-4 h-4" />
@@ -261,6 +287,18 @@ export default function AccountPage() {
                       className="bg-surface-container-low"
                     />
                     <p className="text-[10px] text-on-surface-variant italic">Email cannot be changed as it is linked to your Google account.</p>
+                    {!profile.emailVerified && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="mt-2 rounded-xl"
+                        onClick={handleSendVerification}
+                        disabled={isSendingVerification}
+                      >
+                        {isSendingVerification ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Mail className="w-4 h-4 mr-2" />}
+                        Send verification email
+                      </Button>
+                    )}
                   </div>
 
                   <div className="space-y-4 pt-4 border-t border-outline-variant">

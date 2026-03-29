@@ -1,30 +1,105 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Home, Users, ChevronRight, Loader2, CheckCircle2 } from 'lucide-react';
+import { Home, Users, ChevronRight, Loader2, CheckCircle2, MailCheck, KeyRound } from 'lucide-react';
 import { UserRole } from '@/types';
 import { cn } from '@/lib/utils';
 import { motion } from 'motion/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { requestPasswordReset, resetPasswordWithToken, verifyEmailToken } from '@/lib/identity-client';
 
 export default function SignupPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { signIn, signUp } = useAuth();
   const [mode, setMode] = useState<'signup' | 'signin'>('signup');
+  const urlMode = searchParams.get('mode');
+  const actionToken = searchParams.get('token') || '';
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
+  const [verificationState, setVerificationState] = useState<'idle' | 'success' | 'error'>('idle');
 
   const isSignupMode = mode === 'signup';
+  const isResetPasswordMode = urlMode === 'reset-password' && !!actionToken;
+  const isVerifyEmailMode = urlMode === 'verify-email' && !!actionToken;
+  const isForgotPasswordMode = mode === 'signin' && !isResetPasswordMode && !isVerifyEmailMode;
+
+  const passwordActionTitle = useMemo(() => {
+    if (isVerifyEmailMode) return 'Verify your email';
+    if (isResetPasswordMode) return 'Set a new password';
+    return isSignupMode ? 'Join Ideal Stay' : 'Sign in to Ideal Stay';
+  }, [isResetPasswordMode, isSignupMode, isVerifyEmailMode]);
+
+  useEffect(() => {
+    if (!isVerifyEmailMode || verificationState !== 'idle') return;
+
+    let cancelled = false;
+    setIsVerifyingEmail(true);
+    verifyEmailToken(actionToken)
+      .then(() => {
+        if (!cancelled) {
+          setVerificationState('success');
+        }
+      })
+      .catch((error) => {
+        console.error('Email verification failed:', error);
+        if (!cancelled) {
+          setVerificationState('error');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsVerifyingEmail(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [actionToken, isVerifyEmailMode, verificationState]);
+
+  const handlePasswordResetRequest = async () => {
+    if (!email.trim()) return;
+    setIsSubmitting(true);
+    try {
+      await requestPasswordReset(email.trim());
+      toast.success('If that account exists, a reset link has been sent.');
+    } catch (error) {
+      console.error('Password reset request error:', error);
+      toast.error('Failed to request password reset.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleSubmit = async () => {
+    if (isResetPasswordMode) {
+      if (!password.trim() || password !== confirmPassword) {
+        toast.error('Passwords do not match.');
+        return;
+      }
+      setIsSubmitting(true);
+      try {
+        await resetPasswordWithToken({ token: actionToken, password });
+        toast.success('Password updated. You can sign in now.');
+        navigate('/signup');
+      } catch (error) {
+        console.error('Reset password error:', error);
+        toast.error(error instanceof Error ? error.message : 'Password reset failed.');
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
     if (!email.trim() || !password.trim()) return;
     if (isSignupMode && (!selectedRole || !displayName.trim())) return;
     if (isSignupMode && password !== confirmPassword) {
@@ -43,6 +118,7 @@ export default function SignupPage() {
           role: selectedRole!,
           referredByCode: refCode,
         });
+        toast.success('Account created. Check your email to verify your address.');
         navigate(profile.role === 'host' ? '/host' : '/');
       } else {
         const profile = await signIn({
@@ -59,20 +135,46 @@ export default function SignupPage() {
     }
   };
 
+  if (isVerifyEmailMode) {
+    return (
+      <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
+        <Card className="max-w-lg w-full p-10 text-center space-y-6">
+          <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+            {isVerifyingEmail ? <Loader2 className="w-8 h-8 animate-spin text-primary" /> : <MailCheck className="w-8 h-8 text-primary" />}
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-3xl font-bold tracking-tight">{passwordActionTitle}</h1>
+            <p className="text-on-surface-variant">
+              {isVerifyingEmail
+                ? 'Confirming your email now.'
+                : verificationState === 'success'
+                  ? 'Your email is verified. You can sign in normally.'
+                  : 'That verification link is invalid or expired.'}
+            </p>
+          </div>
+          <Button onClick={() => navigate('/signup')} className="w-full h-12 rounded-2xl font-bold">
+            Back to sign in
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-[80vh] flex flex-col items-center justify-center px-4 py-12">
       <div className="max-w-2xl w-full space-y-8 text-center">
         <div className="space-y-2">
-          <h1 className="text-4xl font-bold tracking-tight text-on-surface">
-            {isSignupMode ? 'Join Ideal Stay' : 'Sign in to Ideal Stay'}
-          </h1>
+          <h1 className="text-4xl font-bold tracking-tight text-on-surface">{passwordActionTitle}</h1>
           <p className="text-on-surface-variant text-lg">
-            {isSignupMode
-              ? 'Create a real account with a password. No more caveman auth.'
-              : 'Use your email and password to get back into the platform.'}
+            {isResetPasswordMode
+              ? 'Choose a new password for your account.'
+              : isSignupMode
+                ? 'Create a real account with a password. No more caveman auth.'
+                : 'Use your email and password to get back into the platform.'}
           </p>
         </div>
 
+        {!isResetPasswordMode && (
         <div className="inline-flex rounded-2xl border border-outline-variant bg-surface-container-low p-1">
           <button
             type="button"
@@ -95,9 +197,10 @@ export default function SignupPage() {
             Sign in
           </button>
         </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 text-left">
-          {isSignupMode && (
+          {isSignupMode && !isResetPasswordMode && (
             <div className="space-y-2">
               <label className="text-sm font-semibold text-on-surface">Full name</label>
               <Input
@@ -124,11 +227,11 @@ export default function SignupPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder={isSignupMode ? 'Create a password' : 'Enter your password'}
-              autoComplete={isSignupMode ? 'new-password' : 'current-password'}
+              placeholder={isResetPasswordMode || isSignupMode ? 'Create a password' : 'Enter your password'}
+              autoComplete={isResetPasswordMode || isSignupMode ? 'new-password' : 'current-password'}
             />
           </div>
-          {isSignupMode && (
+          {(isSignupMode || isResetPasswordMode) && (
             <div className="space-y-2">
               <label className="text-sm font-semibold text-on-surface">Confirm password</label>
               <Input
@@ -142,7 +245,7 @@ export default function SignupPage() {
           )}
         </div>
 
-        {isSignupMode && (
+        {isSignupMode && !isResetPasswordMode && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-8">
           {/* Guest Option */}
           <Card 
@@ -205,9 +308,10 @@ export default function SignupPage() {
             size="lg" 
             className="w-full max-w-sm h-14 text-lg font-bold rounded-2xl shadow-xl shadow-primary/20"
             disabled={
-              !email.trim() ||
-              !password.trim() ||
+              ((isResetPasswordMode || isSignupMode) && !password.trim()) ||
+              (!isResetPasswordMode && !email.trim()) ||
               (isSignupMode && (!selectedRole || !displayName.trim() || !confirmPassword.trim())) ||
+              (isResetPasswordMode && !confirmPassword.trim()) ||
               isSubmitting
             }
             onClick={handleSubmit}
@@ -216,16 +320,31 @@ export default function SignupPage() {
               <Loader2 className="w-6 h-6 animate-spin mr-2" />
             ) : (
               <>
-                {isSignupMode ? 'Create account' : 'Sign in'}
+                {isResetPasswordMode ? 'Update password' : isSignupMode ? 'Create account' : 'Sign in'}
                 <ChevronRight className="w-5 h-5 ml-2" />
               </>
             )}
           </Button>
-          <p className="text-sm text-on-surface-variant">
-            {isSignupMode
-              ? 'Already have an account? Switch to sign in.'
-              : 'Need an account? Switch to create account.'}
-          </p>
+          {!isResetPasswordMode && (
+            <>
+              {mode === 'signin' ? (
+                <button
+                  type="button"
+                  className="text-sm text-primary font-medium inline-flex items-center gap-2"
+                  onClick={handlePasswordResetRequest}
+                  disabled={isSubmitting || !email.trim()}
+                >
+                  <KeyRound className="w-4 h-4" />
+                  Email me a password reset link
+                </button>
+              ) : null}
+              <p className="text-sm text-on-surface-variant">
+                {isSignupMode
+                  ? 'Already have an account? Switch to sign in.'
+                  : 'Need an account? Switch to create account.'}
+              </p>
+            </>
+          )}
         </div>
       </div>
     </div>

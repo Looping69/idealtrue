@@ -9,6 +9,7 @@ type EncoreReferralTier = 'bronze' | 'silver' | 'gold';
 interface EncoreUser {
   id: string;
   email: string;
+  emailVerified: boolean;
   displayName: string;
   photoUrl?: string | null;
   role: EncoreUserRole;
@@ -57,6 +58,7 @@ function mapEncoreUserToProfile(user: EncoreUser): UserProfile {
     uid: user.id,
     displayName: user.displayName,
     email: user.email,
+    emailVerified: user.emailVerified,
     photoURL: user.photoUrl || '',
     role: user.role,
     referralCode: user.referralCode || '',
@@ -107,6 +109,46 @@ export async function signInWithPassword(params: LoginParams) {
   );
 
   return storeSessionResponse(response);
+}
+
+export async function requestPasswordReset(email: string) {
+  return encoreRequest<{ ok: true }>(
+    '/auth/request-password-reset',
+    {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    },
+  );
+}
+
+export async function resetPasswordWithToken(params: { token: string; password: string }) {
+  return encoreRequest<{ ok: true }>(
+    '/auth/reset-password',
+    {
+      method: 'POST',
+      body: JSON.stringify(params),
+    },
+  );
+}
+
+export async function requestEmailVerification() {
+  return encoreRequest<{ ok: true }>(
+    '/auth/request-email-verification',
+    {
+      method: 'POST',
+    },
+    { auth: true },
+  );
+}
+
+export async function verifyEmailToken(token: string) {
+  return encoreRequest<{ ok: true }>(
+    '/auth/verify-email',
+    {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    },
+  );
 }
 
 export async function getEncoreSessionProfile() {

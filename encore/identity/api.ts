@@ -2,7 +2,9 @@ import { api, APIError } from "encore.dev/api";
 import { randomUUID } from "node:crypto";
 import { identityDB } from "./db";
 import { issueToken } from "./auth";
+import { sendAuthEmail } from "./email";
 import { hashPassword, verifyPassword } from "./passwords";
+import { createRawAuthToken, hashAuthToken } from "./tokens";
 import { requireAuth, requireRole } from "../shared/auth";
 import { profileMediaBucket } from "./storage";
 import { platformEvents } from "../analytics/events";
@@ -20,6 +22,19 @@ interface SignupParams {
 interface LoginParams {
   email: string;
   password: string;
+}
+
+interface RequestPasswordResetParams {
+  email: string;
+}
+
+interface ResetPasswordParams {
+  token: string;
+  password: string;
+}
+
+interface VerifyEmailParams {
+  token: string;
 }
 
 interface DevLoginParams {
@@ -74,6 +89,7 @@ interface AdminSetPasswordParams {
 type UserRow = {
   id: string;
   email: string;
+  email_verified: boolean;
   display_name: string;
   password_hash: string | null;
   photo_url: string | null;
@@ -93,10 +109,21 @@ type UserRow = {
   updated_at: string;
 };
 
+type AuthTokenRow = {
+  id: string;
+  user_id: string;
+  token_hash: string;
+  token_type: "verify_email" | "reset_password";
+  expires_at: string;
+  consumed_at: string | null;
+  created_at: string;
+};
+
 const USER_SELECT = `
   SELECT
     id,
     email,
+    email_verified,
     display_name,
     password_hash,
     photo_url,
@@ -117,6 +144,18 @@ const USER_SELECT = `
   FROM users
 `;
 
+const AUTH_TOKEN_SELECT = `
+  SELECT
+    id,
+    user_id,
+    token_hash,
+    token_type,
+    expires_at,
+    consumed_at,
+    created_at
+  FROM auth_tokens
+`;
+
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
@@ -131,6 +170,7 @@ function mapUser(row: UserRow): UserProfile {
   return {
     id: row.id,
     email: row.email,
+    emailVerified: row.email_verified,
     displayName: row.display_name,
     photoUrl: row.photo_url,
     role: row.role,
@@ -167,6 +207,54 @@ function issueSession(user: UserProfile): SessionResponse {
   };
 }
 
+async function issueAuthToken(userId: string, type: "verify_email" | "reset_password", ttlMinutes: number) {
+  const rawToken = createRawAuthToken();
+  const tokenHash = hashAuthToken(rawToken);
+  const id = randomUUID();
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + ttlMinutes * 60 * 1000).toISOString();
+
+  await identityDB.exec`
+    DELETE FROM auth_tokens
+    WHERE user_id = ${userId}
+      AND token_type = ${type}
+      AND consumed_at IS NULL
+  `;
+
+  await identityDB.exec`
+    INSERT INTO auth_tokens (id, user_id, token_hash, token_type, expires_at, created_at)
+    VALUES (${id}, ${userId}, ${tokenHash}, ${type}, ${expiresAt}, ${now.toISOString()})
+  `;
+
+  return rawToken;
+}
+
+async function consumeAuthToken(rawToken: string, type: "verify_email" | "reset_password") {
+  const tokenHash = hashAuthToken(rawToken);
+  const row = await identityDB.rawQueryRow<AuthTokenRow>(
+    `${AUTH_TOKEN_SELECT}
+     WHERE token_hash = $1
+       AND token_type = $2
+       AND consumed_at IS NULL
+       AND expires_at > NOW()
+     LIMIT 1`,
+    tokenHash,
+    type,
+  );
+  if (!row) {
+    throw APIError.failedPrecondition("This link is invalid or has expired.");
+  }
+
+  const now = new Date().toISOString();
+  await identityDB.exec`
+    UPDATE auth_tokens
+    SET consumed_at = ${now}
+    WHERE id = ${row.id}
+  `;
+
+  return row;
+}
+
 export const signup = api<SignupParams, SessionResponse>(
   { expose: true, method: "POST", path: "/auth/signup" },
   async (params) => {
@@ -195,16 +283,17 @@ export const signup = api<SignupParams, SessionResponse>(
 
     await identityDB.exec`
       INSERT INTO users (
-        id, email, display_name, password_hash, photo_url, role, host_plan, kyc_status, balance, referral_count, tier, referral_code, referred_by_code, last_login_at, created_at, updated_at
+        id, email, email_verified, display_name, password_hash, photo_url, role, host_plan, kyc_status, balance, referral_count, tier, referral_code, referred_by_code, last_login_at, created_at, updated_at
       )
       VALUES (
-        ${id}, ${email}, ${params.displayName}, ${passwordHash}, ${params.photoUrl ?? null}, ${role}, ${"free"}, ${"none"}, ${0}, ${0}, ${"bronze"}, ${referralCode}, ${params.referredByCode ?? null}, ${now}, ${now}, ${now}
+        ${id}, ${email}, ${false}, ${params.displayName}, ${passwordHash}, ${params.photoUrl ?? null}, ${role}, ${"free"}, ${"none"}, ${0}, ${0}, ${"bronze"}, ${referralCode}, ${params.referredByCode ?? null}, ${now}, ${now}, ${now}
       )
     `;
 
     const user: UserProfile = {
       id,
       email,
+      emailVerified: false,
       displayName: params.displayName,
       photoUrl: params.photoUrl ?? null,
       role,
@@ -225,6 +314,14 @@ export const signup = api<SignupParams, SessionResponse>(
       actorId: user.id,
       occurredAt: now,
       payload: JSON.stringify({ role: user.role, email: user.email }),
+    });
+
+    const verificationToken = await issueAuthToken(user.id, "verify_email", 60 * 24);
+    await sendAuthEmail({
+      to: user.email,
+      displayName: user.displayName,
+      kind: "verify_email",
+      token: verificationToken,
     });
 
     return issueSession(user);
@@ -282,6 +379,7 @@ export const devLogin = api<DevLoginParams, DevLoginResponse>(
         SET display_name = ${params.displayName},
             photo_url = ${params.photoUrl ?? existing.photo_url},
             role = ${role},
+            email_verified = ${true},
             referred_by_code = COALESCE(${params.referredByCode ?? null}, referred_by_code),
             payment_method = ${existing.payment_method},
             payment_instructions = ${existing.payment_instructions},
@@ -295,6 +393,7 @@ export const devLogin = api<DevLoginParams, DevLoginResponse>(
         display_name: params.displayName,
         photo_url: params.photoUrl ?? existing.photo_url,
         role,
+        email_verified: true,
         referred_by_code: params.referredByCode ?? existing.referred_by_code,
         updated_at: now,
       });
@@ -303,15 +402,16 @@ export const devLogin = api<DevLoginParams, DevLoginResponse>(
       const referralCode = `${makeReferralCode(email)}${Math.floor(Math.random() * 900 + 100)}`;
       await identityDB.exec`
         INSERT INTO users (
-          id, email, display_name, photo_url, role, host_plan, kyc_status, balance, referral_count, tier, referral_code, referred_by_code, created_at, updated_at
+          id, email, email_verified, display_name, photo_url, role, host_plan, kyc_status, balance, referral_count, tier, referral_code, referred_by_code, created_at, updated_at
         )
         VALUES (
-          ${id}, ${email}, ${params.displayName}, ${params.photoUrl ?? null}, ${role}, ${"free"}, ${"none"}, ${0}, ${0}, ${"bronze"}, ${referralCode}, ${params.referredByCode ?? null}, ${now}, ${now}
+          ${id}, ${email}, ${true}, ${params.displayName}, ${params.photoUrl ?? null}, ${role}, ${"free"}, ${"none"}, ${0}, ${0}, ${"bronze"}, ${referralCode}, ${params.referredByCode ?? null}, ${now}, ${now}
         )
       `;
       user = {
         id,
         email,
+        emailVerified: true,
         displayName: params.displayName,
         photoUrl: params.photoUrl ?? null,
         role,
@@ -335,6 +435,87 @@ export const devLogin = api<DevLoginParams, DevLoginResponse>(
     }
 
     return issueSession(user);
+  },
+);
+
+export const requestEmailVerification = api<void, { ok: true }>(
+  { expose: true, method: "POST", path: "/auth/request-email-verification", auth: true },
+  async () => {
+    const auth = requireAuth();
+    const existing = await identityDB.rawQueryRow<UserRow>(
+      `${USER_SELECT} WHERE id = $1`,
+      auth.userID,
+    );
+    if (!existing) throw APIError.notFound("User not found.");
+    if (existing.email_verified) {
+      return { ok: true };
+    }
+
+    const token = await issueAuthToken(existing.id, "verify_email", 60 * 24);
+    await sendAuthEmail({
+      to: existing.email,
+      displayName: existing.display_name,
+      kind: "verify_email",
+      token,
+    });
+
+    return { ok: true };
+  },
+);
+
+export const verifyEmail = api<VerifyEmailParams, { ok: true }>(
+  { expose: true, method: "POST", path: "/auth/verify-email" },
+  async ({ token }) => {
+    const authToken = await consumeAuthToken(token, "verify_email");
+    const now = new Date().toISOString();
+    await identityDB.exec`
+      UPDATE users
+      SET email_verified = ${true},
+          updated_at = ${now}
+      WHERE id = ${authToken.user_id}
+    `;
+    return { ok: true };
+  },
+);
+
+export const requestPasswordReset = api<RequestPasswordResetParams, { ok: true }>(
+  { expose: true, method: "POST", path: "/auth/request-password-reset" },
+  async ({ email }) => {
+    const normalizedEmail = normalizeEmail(email);
+    const existing = await identityDB.rawQueryRow<UserRow>(
+      `${USER_SELECT} WHERE email = $1`,
+      normalizedEmail,
+    );
+    if (!existing) {
+      return { ok: true };
+    }
+
+    const token = await issueAuthToken(existing.id, "reset_password", 60);
+    await sendAuthEmail({
+      to: existing.email,
+      displayName: existing.display_name,
+      kind: "reset_password",
+      token,
+    });
+
+    return { ok: true };
+  },
+);
+
+export const resetPassword = api<ResetPasswordParams, { ok: true }>(
+  { expose: true, method: "POST", path: "/auth/reset-password" },
+  async ({ token, password }) => {
+    validatePassword(password);
+    const authToken = await consumeAuthToken(token, "reset_password");
+    const passwordHash = await hashPassword(password);
+    const now = new Date().toISOString();
+    await identityDB.exec`
+      UPDATE users
+      SET password_hash = ${passwordHash},
+          updated_at = ${now}
+      WHERE id = ${authToken.user_id}
+    `;
+    return { ok: true };
   },
 );
 

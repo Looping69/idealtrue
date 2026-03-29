@@ -18,6 +18,7 @@ export type ReferralRewardStatus = "pending" | "earned" | "paid" | "rejected";
 export interface UserProfile {
   id: string;
   email: string;
+  emailVerified: boolean;
   displayName: string;
   photoUrl?: string | null;
   role: UserRole;

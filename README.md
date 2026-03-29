@@ -35,6 +35,8 @@ This is now an Encore-first repo, not a Firebase bridge with new paint.
 
 - session sync and profile resolution
 - local session bootstrap and account creation
+- password signup and password login
+- email verification and password reset flows
 - profile updates and role changes
 - public listing reads
 - host listing reads
@@ -96,6 +98,13 @@ If you explicitly want to run against a local Encore backend instead, override:
 
 ```bash
 VITE_ENCORE_API_URL=http://127.0.0.1:4000
+
+Backend auth email delivery is optional in local/dev but should be configured in any serious environment:
+
+- `RESEND_API_KEY`
+- `AUTH_EMAIL_FROM`
+- `AUTH_EMAIL_REPLY_TO`
+- `IDEAL_STAY_APP_URL`
 ```
 
 The Encore app typechecks cleanly, but there are two environment caveats in the current machine state:
