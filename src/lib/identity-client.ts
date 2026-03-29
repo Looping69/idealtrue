@@ -1,4 +1,4 @@
-import { encoreRequest, syncEncoreSession } from './encore-client';
+import { encoreRequest, setEncoreSessionToken, syncEncoreSession } from './encore-client';
 import type { UserProfile } from '@/types';
 
 type EncoreUserRole = 'guest' | 'host' | 'admin';
@@ -83,12 +83,15 @@ export async function ensureEncoreProfile(params: EnsureEncoreProfileParams) {
 }
 
 export async function getEncoreSessionProfile() {
-  const response = await encoreRequest<{ user: EncoreUser }>('/auth/session', {}, { auth: true });
+  const response = await encoreRequest<{ token?: string; user: EncoreUser }>('/auth/session', {}, { auth: true });
+  if (response.token) {
+    setEncoreSessionToken(response.token);
+  }
   return mapEncoreUserToProfile(response.user);
 }
 
 export async function updateEncoreProfile(params: UpdateEncoreProfileParams) {
-  const response = await encoreRequest<{ user: EncoreUser }>(
+  const response = await encoreRequest<{ token?: string; user: EncoreUser }>(
     '/users/me',
     {
       method: 'PUT',
@@ -96,6 +99,10 @@ export async function updateEncoreProfile(params: UpdateEncoreProfileParams) {
     },
     { auth: true },
   );
+
+  if (response.token) {
+    setEncoreSessionToken(response.token);
+  }
 
   return mapEncoreUserToProfile(response.user);
 }

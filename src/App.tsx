@@ -235,12 +235,23 @@ export default function App() {
                         <p className="text-sm font-semibold leading-none">{profile?.displayName}</p>
                         <p className="text-xs text-on-surface-variant capitalize">{profile?.role}</p>
                       </div>
-                      <img 
-                        src={user.photoURL || ''} 
-                        className="w-8 h-8 rounded-full border border-outline-variant cursor-pointer hover:ring-2 hover:ring-primary transition-all" 
-                        alt="Profile" 
-                        onClick={() => navigate('/account')}
-                      />
+                      {user.photoURL ? (
+                        <img 
+                          src={user.photoURL} 
+                          className="w-8 h-8 rounded-full border border-outline-variant cursor-pointer hover:ring-2 hover:ring-primary transition-all" 
+                          alt="Profile" 
+                          onClick={() => navigate('/account')}
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          className="w-8 h-8 rounded-full border border-outline-variant bg-surface-container text-xs font-semibold cursor-pointer hover:ring-2 hover:ring-primary transition-all"
+                          onClick={() => navigate('/account')}
+                          aria-label="Open account"
+                        >
+                          {profile?.displayName?.slice(0, 1)?.toUpperCase() || user.email.slice(0, 1).toUpperCase()}
+                        </button>
+                      )}
                       <Button variant="ghost" size="sm" onClick={logout} className="hidden sm:flex">
                         <LogOut className="w-4 h-4" />
                       </Button>

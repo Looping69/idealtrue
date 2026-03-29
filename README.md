@@ -90,7 +90,13 @@ The frontend runs at [http://localhost:3000](http://localhost:3000).
 
 ### Backend notes
 
-The frontend expects an Encore API at `http://127.0.0.1:4100` by default. Override with `VITE_ENCORE_API_URL` if needed.
+The frontend now targets Encore Cloud staging by default at `https://staging-ideal-stay-online-gh5i.encr.app`.
+
+If you explicitly want to run against a local Encore backend instead, override:
+
+```bash
+VITE_ENCORE_API_URL=http://127.0.0.1:4000
+```
 
 The Encore app typechecks cleanly, but there are two environment caveats in the current machine state:
 

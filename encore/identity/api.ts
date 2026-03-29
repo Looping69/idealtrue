@@ -15,6 +15,16 @@ interface DevLoginParams {
   referredByCode?: string | null;
 }
 
+interface DevLoginResponse {
+  token: string;
+  user: UserProfile;
+}
+
+interface SessionResponse {
+  token: string;
+  user: UserProfile;
+}
+
 interface UpsertProfileParams {
   displayName?: string;
   photoUrl?: string | null;
@@ -87,7 +97,7 @@ function makeReferralCode(email: string) {
   return email.split("@")[0].replace(/[^a-zA-Z0-9]/g, "").slice(0, 8).toUpperCase() || "IDEAL";
 }
 
-export const devLogin = api<DevLoginParams>(
+export const devLogin = api<DevLoginParams, DevLoginResponse>(
   { expose: true, method: "POST", path: "/auth/dev-login" },
   async (params) => {
     const existing = await identityDB.queryRow<UserRow>`
@@ -170,7 +180,7 @@ export const devLogin = api<DevLoginParams>(
   },
 );
 
-export const getSession = api<void, { user: UserProfile }>(
+export const getSession = api<void, SessionResponse>(
   { expose: true, method: "GET", path: "/auth/session", auth: true },
   async () => {
     const auth = requireAuth();
@@ -178,11 +188,22 @@ export const getSession = api<void, { user: UserProfile }>(
       SELECT * FROM users WHERE id = ${auth.userID}
     `;
     if (!user) throw APIError.notFound("User session could not be resolved.");
-    return { user: mapUser(user) };
+    const mappedUser = mapUser(user);
+    return {
+      token: issueToken({
+        userID: mappedUser.id,
+        email: mappedUser.email,
+        displayName: mappedUser.displayName,
+        role: mappedUser.role,
+        hostPlan: mappedUser.hostPlan,
+        kycStatus: mappedUser.kycStatus,
+      }),
+      user: mappedUser,
+    };
   },
 );
 
-export const upsertProfile = api<UpsertProfileParams, { user: UserProfile }>(
+export const upsertProfile = api<UpsertProfileParams, SessionResponse>(
   { expose: true, method: "PUT", path: "/users/me", auth: true },
   async (params) => {
     const auth = requireAuth();
@@ -217,20 +238,30 @@ export const upsertProfile = api<UpsertProfileParams, { user: UserProfile }>(
       WHERE id = ${auth.userID}
     `;
 
+    const user = mapUser({
+      ...existing,
+      display_name: nextDisplayName,
+      photo_url: nextPhoto,
+      role: nextRole,
+      host_plan: nextPlan,
+      kyc_status: nextKyc,
+      referred_by_code: nextReferredByCode,
+      payment_method: nextPaymentMethod,
+      payment_instructions: nextPaymentInstructions,
+      payment_reference_prefix: nextPaymentReferencePrefix,
+      updated_at: now,
+    });
+
     return {
-      user: mapUser({
-        ...existing,
-        display_name: nextDisplayName,
-        photo_url: nextPhoto,
-        role: nextRole,
-        host_plan: nextPlan,
-        kyc_status: nextKyc,
-        referred_by_code: nextReferredByCode,
-        payment_method: nextPaymentMethod,
-        payment_instructions: nextPaymentInstructions,
-        payment_reference_prefix: nextPaymentReferencePrefix,
-        updated_at: now,
+      token: issueToken({
+        userID: user.id,
+        email: user.email,
+        displayName: user.displayName,
+        role: user.role,
+        hostPlan: user.hostPlan,
+        kycStatus: user.kycStatus,
       }),
+      user,
     };
   },
 );
