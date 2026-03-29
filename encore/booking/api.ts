@@ -47,6 +47,15 @@ interface SubmitPaymentProofParams {
   paymentProofUrl?: string | null;
 }
 
+export interface BookingAccessRecord extends BookingRecord {
+  paymentMethod?: string | null;
+  paymentInstructions?: string | null;
+  paymentReference?: string | null;
+  paymentProofUrl?: string | null;
+  paymentSubmittedAt?: string | null;
+  paymentConfirmedAt?: string | null;
+}
+
 function mapBooking(row: BookingRow): BookingRecord {
   return {
     id: row.id,
@@ -68,6 +77,17 @@ function mapBooking(row: BookingRow): BookingRecord {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function mapBookingAccessRecord(row: BookingRow): BookingAccessRecord {
+  return mapBooking(row);
+}
+
+export async function getBookingById(id: string) {
+  const row = await bookingDB.queryRow<BookingRow>`
+    SELECT * FROM bookings WHERE id = ${id}
+  `;
+  return row ? mapBookingAccessRecord(row) : null;
 }
 
 export const createBooking = api<CreateBookingParams, { booking: BookingRecord }>(
@@ -172,6 +192,18 @@ export const updateBookingStatus = api<UpdateBookingStatusParams, { booking: Boo
       !["awaiting_guest_payment", "confirmed", "cancelled", "completed", "declined"].includes(nextStatus)
     ) {
       throw APIError.invalidArgument("Hosts can only move bookings through the payment and completion workflow.");
+    }
+    if (nextStatus === "awaiting_guest_payment" && existing.status !== "pending") {
+      throw APIError.failedPrecondition("Payment can only be requested for pending bookings.");
+    }
+    if (nextStatus === "confirmed" && !["awaiting_guest_payment", "payment_submitted"].includes(existing.status)) {
+      throw APIError.failedPrecondition("Bookings can only be confirmed after the payment step has started.");
+    }
+    if (nextStatus === "completed" && existing.status !== "confirmed") {
+      throw APIError.failedPrecondition("Only confirmed bookings can be completed.");
+    }
+    if (["cancelled", "declined"].includes(nextStatus) && ["completed", "cancelled", "declined"].includes(existing.status)) {
+      throw APIError.failedPrecondition("Closed bookings cannot be changed again.");
     }
 
     const now = new Date().toISOString();

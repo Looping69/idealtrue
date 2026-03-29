@@ -2,8 +2,10 @@ import { api } from "encore.dev/api";
 import { randomUUID } from "node:crypto";
 import { messagingDB } from "./db";
 import { chatAttachmentBucket } from "./storage";
+import { APIError } from "encore.dev/api";
 import { requireAuth } from "../shared/auth";
 import { platformEvents } from "../analytics/events";
+import { getBookingById } from "../booking/api";
 import type { MessageRecord } from "../shared/domain";
 
 type MessageRow = {
@@ -41,14 +43,25 @@ function mapMessage(row: MessageRow): MessageRecord {
   };
 }
 
+async function requireBookingParticipant(bookingId: string, userId: string) {
+  const booking = await getBookingById(bookingId);
+  if (!booking) {
+    throw APIError.notFound("Booking not found.");
+  }
+  if (booking.guestId !== userId && booking.hostId !== userId) {
+    throw APIError.permissionDenied("You are not part of this booking conversation.");
+  }
+  return booking;
+}
+
 export const listMessages = api<{ bookingId: string }, { messages: MessageRecord[] }>(
   { expose: true, method: "GET", path: "/messages/:bookingId", auth: true },
   async ({ bookingId }) => {
     const auth = requireAuth();
+    await requireBookingParticipant(bookingId, auth.userID);
     const rows = await messagingDB.queryAll<MessageRow>`
       SELECT * FROM messages
       WHERE booking_id = ${bookingId}
-        AND (sender_id = ${auth.userID} OR receiver_id = ${auth.userID})
       ORDER BY created_at ASC
     `;
     return { messages: rows.map(mapMessage) };
@@ -59,6 +72,11 @@ export const sendMessage = api<SendMessageParams, { message: MessageRecord }>(
   { expose: true, method: "POST", path: "/messages", auth: true },
   async (params) => {
     const auth = requireAuth();
+    const booking = await requireBookingParticipant(params.bookingId, auth.userID);
+    const expectedReceiverId = booking.guestId === auth.userID ? booking.hostId : booking.guestId;
+    if (params.receiverId !== expectedReceiverId) {
+      throw APIError.failedPrecondition("Messages can only be sent to the other booking participant.");
+    }
     const id = randomUUID();
     const now = new Date().toISOString();
 
@@ -98,6 +116,7 @@ export const requestAttachmentUpload = api<{ bookingId: string; filename: string
   { expose: true, method: "POST", path: "/messages/attachments/upload-url", auth: true },
   async ({ bookingId, filename }) => {
     const auth = requireAuth();
+    await requireBookingParticipant(bookingId, auth.userID);
     const objectKey = `${bookingId}/${auth.userID}/${Date.now()}-${filename}`;
     const signed = await chatAttachmentBucket.signedUploadUrl(objectKey, { ttl: 900 });
     return { objectKey, uploadUrl: signed.url };

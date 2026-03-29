@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { reviewsDB } from "./db";
 import { requireAuth, requireRole } from "../shared/auth";
 import { platformEvents } from "../analytics/events";
+import { getBookingById } from "../booking/api";
 import type { ReviewRecord, ReviewStatus } from "../shared/domain";
 
 type ReviewRow = {
@@ -67,6 +68,27 @@ export const createReview = api<CreateReviewParams, { review: ReviewRecord }>(
   { expose: true, method: "POST", path: "/reviews", auth: true },
   async (params) => {
     const auth = requireAuth();
+    const booking = await getBookingById(params.bookingId);
+    if (!booking) throw APIError.notFound("Booking not found.");
+    if (booking.guestId !== auth.userID) {
+      throw APIError.permissionDenied("Only the guest on the booking can leave a review.");
+    }
+    if (booking.hostId !== params.hostId || booking.listingId !== params.listingId) {
+      throw APIError.failedPrecondition("Review does not match the booking.");
+    }
+    if (booking.status !== "completed") {
+      throw APIError.failedPrecondition("Reviews can only be submitted after the stay is completed.");
+    }
+    const existing = await reviewsDB.queryRow<{ id: string }>`
+      SELECT id FROM reviews
+      WHERE booking_id = ${params.bookingId}
+        AND guest_id = ${auth.userID}
+      LIMIT 1
+    `;
+    if (existing) {
+      throw APIError.failedPrecondition("A review has already been submitted for this booking.");
+    }
+
     const id = randomUUID();
     const now = new Date().toISOString();
 
