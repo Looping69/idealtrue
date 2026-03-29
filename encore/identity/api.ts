@@ -97,8 +97,8 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
-function validatePassword(password: string) {
-  if (password.length < 8) {
+function validatePassword(password: string | null | undefined) {
+  if (!password || password.length < 8) {
     throw APIError.invalidArgument("Password must be at least 8 characters long.");
   }
 }
@@ -162,6 +162,9 @@ export const signup = api<SignupParams, SessionResponse>(
     const now = new Date().toISOString();
     const id = randomUUID();
     const role = params.role ?? "guest";
+    if (!["guest", "host"].includes(role)) {
+      throw APIError.invalidArgument("Public signup can only create guest or host accounts.");
+    }
     const referralCode = `${makeReferralCode(email)}${Math.floor(Math.random() * 900 + 100)}`;
     const passwordHash = await hashPassword(params.password);
 
@@ -223,7 +226,7 @@ export const login = api<LoginParams, SessionResponse>(
     await identityDB.exec`
       UPDATE users
       SET last_login_at = ${now},
-          updated_at = ${existing.updated_at}
+          updated_at = ${now}
       WHERE id = ${existing.id}
     `;
 
@@ -469,7 +472,7 @@ export const adminDeleteUser = api<{ userId: string }, { deleted: true }>(
 );
 
 export const adminSetPassword = api<AdminSetPasswordParams, { ok: true }>(
-  { expose: true, method: "POST", path: "/admin/users/:userId/password", auth: true },
+  { expose: true, method: "POST", path: "/admin/users/password", auth: true },
   async ({ userId, password }) => {
     requireRole("admin", "support");
     validatePassword(password);

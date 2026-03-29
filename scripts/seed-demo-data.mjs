@@ -145,7 +145,7 @@ async function ensureUser({ email, displayName, role }) {
 
 async function setPassword(adminToken, userId, password) {
   await apiRequest(
-    `/admin/users/${encodeURIComponent(userId)}/password`,
+    "/admin/users/password",
     {
       method: "POST",
       body: JSON.stringify({ userId, password }),
