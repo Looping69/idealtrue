@@ -79,6 +79,7 @@ interface ContentDraftRecord {
 type SubscriptionRow = {
   id: string;
   user_id: string;
+  checkout_session_id: string | null;
   plan: HostPlan;
   status: "active" | "expired" | "cancelled";
   amount: number;
@@ -155,6 +156,8 @@ type CheckoutSessionRow = {
 type WebhookEventRow = {
   id: string;
 };
+
+type QueryExecutor = Pick<typeof billingDB, "queryRow" | "queryAll" | "exec">;
 
 const CONTENT_LIMITS: Record<HostPlan, { includedDraftsPerMonth: number; canSchedule: boolean; contentStudioEnabled: boolean }> = {
   standard: { includedDraftsPerMonth: 20, canSchedule: false, contentStudioEnabled: true },
@@ -321,8 +324,8 @@ async function getCurrentUserPlan(userId: string) {
   return user;
 }
 
-async function ensureWallet(userId: string) {
-  const wallet = await billingDB.queryRow<WalletRow>`
+async function ensureWallet(db: QueryExecutor, userId: string) {
+  const wallet = await db.queryRow<WalletRow>`
     SELECT user_id, balance, updated_at
     FROM content_credit_wallets
     WHERE user_id = ${userId}
@@ -333,9 +336,10 @@ async function ensureWallet(userId: string) {
   }
 
   const now = new Date().toISOString();
-  await billingDB.exec`
+  await db.exec`
     INSERT INTO content_credit_wallets (user_id, balance, updated_at)
     VALUES (${userId}, 0, ${now})
+    ON CONFLICT (user_id) DO NOTHING
   `;
 
   return {
@@ -345,15 +349,15 @@ async function ensureWallet(userId: string) {
   };
 }
 
-async function getContentEntitlementsForUser(userId: string): Promise<ContentEntitlements> {
+async function getContentEntitlementsForUser(userId: string, db: QueryExecutor = billingDB): Promise<ContentEntitlements> {
   const user = await getCurrentUserPlan(userId);
-  const wallet = await ensureWallet(userId);
+  const wallet = await ensureWallet(db, userId);
   const limits = CONTENT_LIMITS[user.host_plan];
   const monthStart = new Date();
   monthStart.setUTCDate(1);
   monthStart.setUTCHours(0, 0, 0, 0);
 
-  const usage = await billingDB.queryRow<{ count: number }>`
+  const usage = await db.queryRow<{ count: number }>`
     SELECT COUNT(*)::int AS count
     FROM content_drafts
     WHERE user_id = ${userId}
@@ -373,7 +377,7 @@ async function getContentEntitlementsForUser(userId: string): Promise<ContentEnt
   };
 }
 
-async function debitOneContentUse(userId: string, entitlements: ContentEntitlements, referenceId: string) {
+async function debitOneContentUse(db: QueryExecutor, userId: string, entitlements: ContentEntitlements, referenceId: string) {
   if (!entitlements.contentStudioEnabled) {
     throw APIError.permissionDenied("Your current plan does not include the content studio.");
   }
@@ -387,14 +391,27 @@ async function debitOneContentUse(userId: string, entitlements: ContentEntitleme
   }
 
   const now = new Date().toISOString();
-  await billingDB.exec`
+  await ensureWallet(db, userId);
+
+  const wallet = await db.queryRow<WalletRow>`
+    SELECT user_id, balance, updated_at
+    FROM content_credit_wallets
+    WHERE user_id = ${userId}
+    FOR UPDATE
+  `;
+
+  if (!wallet || wallet.balance < 1) {
+    throw APIError.permissionDenied("You have used your included content drafts. Buy more credits or upgrade your plan.");
+  }
+
+  await db.exec`
     UPDATE content_credit_wallets
     SET balance = balance - 1,
         updated_at = ${now}
     WHERE user_id = ${userId}
   `;
 
-  await billingDB.exec`
+  await db.exec`
     INSERT INTO content_credit_ledger (id, user_id, delta, reason, reference_id, created_at)
     VALUES (${randomUUID()}, ${userId}, -1, ${"content_generation"}, ${referenceId}, ${now})
   `;
@@ -460,23 +477,33 @@ async function activatePlanFromCheckout(session: CheckoutSessionRow) {
     endsAt.setFullYear(endsAt.getFullYear() + 1);
   }
 
-  const subscriptionId = randomUUID();
-  await billingDB.exec`
-    UPDATE subscriptions
-    SET status = ${"cancelled"}
-    WHERE user_id = ${session.user_id}
-      AND status = ${"active"}
+  const existingSubscription = await billingDB.queryRow<{ id: string }>`
+    SELECT id
+    FROM subscriptions
+    WHERE checkout_session_id = ${session.id}
+    LIMIT 1
   `;
 
-  await billingDB.exec`
-    INSERT INTO subscriptions (
-      id, user_id, plan, status, amount, billing_interval, starts_at, ends_at, created_at
-    )
-    VALUES (
-      ${subscriptionId}, ${session.user_id}, ${session.host_plan}, ${"active"}, ${session.amount},
-      ${session.billing_interval}, ${now.toISOString()}, ${endsAt.toISOString()}, ${now.toISOString()}
-    )
-  `;
+  const subscriptionId = existingSubscription?.id ?? randomUUID();
+
+  if (!existingSubscription) {
+    await billingDB.exec`
+      UPDATE subscriptions
+      SET status = ${"cancelled"}
+      WHERE user_id = ${session.user_id}
+        AND status = ${"active"}
+    `;
+
+    await billingDB.exec`
+      INSERT INTO subscriptions (
+        id, user_id, checkout_session_id, plan, status, amount, billing_interval, starts_at, ends_at, created_at
+      )
+      VALUES (
+        ${subscriptionId}, ${session.user_id}, ${session.id}, ${session.host_plan}, ${"active"}, ${session.amount},
+        ${session.billing_interval}, ${now.toISOString()}, ${endsAt.toISOString()}, ${now.toISOString()}
+      )
+    `;
+  }
 
   await identityDB.exec`
     UPDATE users
@@ -485,13 +512,15 @@ async function activatePlanFromCheckout(session: CheckoutSessionRow) {
     WHERE id = ${session.user_id}
   `;
 
-  await platformEvents.publish({
-    type: "subscription.changed",
-    aggregateId: subscriptionId,
-    actorId: session.user_id,
-    occurredAt: now.toISOString(),
-    payload: JSON.stringify({ plan: session.host_plan }),
-  });
+  if (!existingSubscription) {
+    await platformEvents.publish({
+      type: "subscription.changed",
+      aggregateId: subscriptionId,
+      actorId: session.user_id,
+      occurredAt: now.toISOString(),
+      payload: JSON.stringify({ plan: session.host_plan }),
+    });
+  }
 
   await rewardSubscriptionReferralConversion({
     referredUserId: session.user_id,
@@ -505,21 +534,55 @@ async function creditWalletFromCheckout(session: CheckoutSessionRow) {
     throw APIError.internal("Credit checkout is missing quantity metadata.");
   }
 
-  const wallet = await ensureWallet(session.user_id);
   const now = new Date().toISOString();
-  const nextBalance = wallet.balance + credits;
+  const tx = await billingDB.begin();
 
-  await billingDB.exec`
-    UPDATE content_credit_wallets
-    SET balance = ${nextBalance},
-        updated_at = ${now}
-    WHERE user_id = ${session.user_id}
-  `;
+  try {
+    const existingCredit = await tx.queryRow<{ id: string }>`
+      SELECT id
+      FROM content_credit_ledger
+      WHERE reference_id = ${session.id}
+        AND reason = ${"credit_purchase"}
+      LIMIT 1
+    `;
 
-  await billingDB.exec`
-    INSERT INTO content_credit_ledger (id, user_id, delta, reason, reference_id, created_at)
-    VALUES (${randomUUID()}, ${session.user_id}, ${credits}, ${"credit_purchase"}, ${session.id}, ${now})
-  `;
+    if (existingCredit) {
+      await tx.rollback();
+      return;
+    }
+
+    await ensureWallet(tx, session.user_id);
+
+    const wallet = await tx.queryRow<WalletRow>`
+      SELECT user_id, balance, updated_at
+      FROM content_credit_wallets
+      WHERE user_id = ${session.user_id}
+      FOR UPDATE
+    `;
+
+    if (!wallet) {
+      throw APIError.internal("Content credit wallet could not be initialized.");
+    }
+
+    const nextBalance = wallet.balance + credits;
+
+    await tx.exec`
+      UPDATE content_credit_wallets
+      SET balance = ${nextBalance},
+          updated_at = ${now}
+      WHERE user_id = ${session.user_id}
+    `;
+
+    await tx.exec`
+      INSERT INTO content_credit_ledger (id, user_id, delta, reason, reference_id, created_at)
+      VALUES (${randomUUID()}, ${session.user_id}, ${credits}, ${"credit_purchase"}, ${session.id}, ${now})
+    `;
+
+    await tx.commit();
+  } catch (error) {
+    await tx.rollback();
+    throw error;
+  }
 }
 
 async function markCheckoutPaid(session: CheckoutSessionRow, providerPaymentId?: string | null) {
@@ -779,44 +842,52 @@ export const generateContentDraft = api<GenerateContentDraftParams, { draft: Con
   { expose: true, method: "POST", path: "/billing/content/drafts/generate", auth: true },
   async ({ listingId, platform, tone }) => {
     const auth = requireRole("host", "admin");
-    const entitlements = await getContentEntitlementsForUser(auth.userID);
     const draftId = randomUUID();
     const listing = await getOwnedListingSnapshot(listingId, auth.userID);
+    const tx = await billingDB.begin();
 
-    await debitOneContentUse(auth.userID, entitlements, draftId);
+    try {
+      const entitlements = await getContentEntitlementsForUser(auth.userID, tx);
+      await debitOneContentUse(tx, auth.userID, entitlements, draftId);
 
-    const now = new Date().toISOString();
-    const content = buildDraftContent(listing, platform, tone);
+      const now = new Date().toISOString();
+      const content = buildDraftContent(listing, platform, tone);
 
-    await billingDB.exec`
-      INSERT INTO content_drafts (
-        id, user_id, listing_id, listing_title, listing_location, platform, tone, status, content, created_at, updated_at
-      )
-      VALUES (
-        ${draftId}, ${auth.userID}, ${listing.id}, ${listing.title}, ${listing.location}, ${platform}, ${tone}, ${"draft"}, ${content}, ${now}, ${now}
-      )
-    `;
+      await tx.exec`
+        INSERT INTO content_drafts (
+          id, user_id, listing_id, listing_title, listing_location, platform, tone, status, content, created_at, updated_at
+        )
+        VALUES (
+          ${draftId}, ${auth.userID}, ${listing.id}, ${listing.title}, ${listing.location}, ${platform}, ${tone}, ${"draft"}, ${content}, ${now}, ${now}
+        )
+      `;
 
-    const refreshed = await getContentEntitlementsForUser(auth.userID);
+      await tx.commit();
 
-    return {
-      draft: {
-        id: draftId,
-        userId: auth.userID,
-        listingId: listing.id,
-        listingTitle: listing.title,
-        listingLocation: listing.location,
-        platform,
-        tone,
-        status: "draft",
-        content,
-        scheduledFor: null,
-        publishedAt: null,
-        createdAt: now,
-        updatedAt: now,
-      },
-      entitlements: refreshed,
-    };
+      const refreshed = await getContentEntitlementsForUser(auth.userID);
+
+      return {
+        draft: {
+          id: draftId,
+          userId: auth.userID,
+          listingId: listing.id,
+          listingTitle: listing.title,
+          listingLocation: listing.location,
+          platform,
+          tone,
+          status: "draft",
+          content,
+          scheduledFor: null,
+          publishedAt: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+        entitlements: refreshed,
+      };
+    } catch (error) {
+      await tx.rollback();
+      throw error;
+    }
   },
 );
 

@@ -38,6 +38,8 @@ type IdentityUserRow = {
   referred_by_code: string | null;
 };
 
+type IdentityExecutor = Pick<typeof identityDB, "queryRow" | "exec">;
+
 const HOST_SUBSCRIPTION_REWARD: Record<ReferralTier, number> = {
   bronze: 75,
   silver: 125,
@@ -93,18 +95,21 @@ async function getUserById(userId: string) {
   `;
 }
 
-async function creditReferrer(referrer: IdentityUserRow, rewardAmount: number) {
+async function creditReferrer(db: IdentityExecutor, referrer: IdentityUserRow, rewardAmount: number) {
+  const now = new Date().toISOString();
   const nextCount = referrer.referral_count + 1;
   const nextTier = getTierFromCount(nextCount);
 
-  await identityDB.exec`
+  await db.exec`
     UPDATE users
     SET balance = balance + ${rewardAmount},
         referral_count = ${nextCount},
         tier = ${nextTier},
-        updated_at = ${new Date().toISOString()}
+        updated_at = ${now}
     WHERE id = ${referrer.id}
   `;
+
+  return { nextCount, nextTier };
 }
 
 export async function rewardSubscriptionReferralConversion(params: {
@@ -121,54 +126,93 @@ export async function rewardSubscriptionReferralConversion(params: {
     return null;
   }
 
-  const duplicate = await referralsDB.queryRow<RewardRow>`
-    SELECT *
-    FROM referral_rewards
-    WHERE referred_user_id = ${referredUser.id}
-      AND trigger = ${"subscription"}
-      AND source_subscription_id = ${params.sourceSubscriptionId}
-    LIMIT 1
-  `;
+  const referralsTx = await referralsDB.begin();
+  const identityTx = await identityDB.begin();
 
-  if (duplicate) {
-    return mapReward(duplicate);
+  try {
+    const duplicate = await referralsTx.queryRow<RewardRow>`
+      SELECT *
+      FROM referral_rewards
+      WHERE referred_user_id = ${referredUser.id}
+        AND trigger = ${"subscription"}
+        AND source_subscription_id = ${params.sourceSubscriptionId}
+      LIMIT 1
+      FOR UPDATE
+    `;
+
+    if (duplicate) {
+      await identityTx.rollback();
+      await referralsTx.rollback();
+      return mapReward(duplicate);
+    }
+
+    const lockedReferrer = await identityTx.queryRow<IdentityUserRow>`
+      SELECT id, role, balance, referral_count, tier, referral_code, referred_by_code
+      FROM users
+      WHERE id = ${referrer.id}
+      FOR UPDATE
+    `;
+
+    if (!lockedReferrer) {
+      await identityTx.rollback();
+      await referralsTx.rollback();
+      return null;
+    }
+
+    const rewardAmount = getSubscriptionRewardAmount(lockedReferrer.role, lockedReferrer.tier);
+    const rewardId = randomUUID();
+    const now = new Date().toISOString();
+    const program: ReferralProgram = lockedReferrer.role === "host" ? "host" : "guest";
+
+    await referralsTx.exec`
+      INSERT INTO referral_rewards (
+        id, referrer_id, referred_user_id, trigger, program, amount, status, source_subscription_id, note, created_at
+      )
+      VALUES (
+        ${rewardId}, ${lockedReferrer.id}, ${referredUser.id}, ${"subscription"}, ${program}, ${rewardAmount},
+        ${"earned"}, ${params.sourceSubscriptionId}, ${"First paid subscription conversion"}, ${now}
+      )
+    `;
+
+    await creditReferrer(identityTx, lockedReferrer, rewardAmount);
+    await identityTx.commit();
+    try {
+      await referralsTx.commit();
+    } catch (error) {
+      await identityDB.exec`
+        UPDATE users
+        SET balance = ${lockedReferrer.balance},
+            referral_count = ${lockedReferrer.referral_count},
+            tier = ${lockedReferrer.tier},
+            updated_at = ${now}
+        WHERE id = ${lockedReferrer.id}
+      `;
+      throw error;
+    }
+
+    await platformEvents.publish({
+      type: "referral.reward_earned",
+      aggregateId: rewardId,
+      actorId: lockedReferrer.id,
+      occurredAt: now,
+      payload: JSON.stringify({ referrerId: lockedReferrer.id, referredUserId: referredUser.id, amount: rewardAmount }),
+    });
+
+    return {
+      id: rewardId,
+      referrerId: lockedReferrer.id,
+      referredUserId: referredUser.id,
+      trigger: "subscription" as const,
+      program,
+      amount: rewardAmount,
+      status: "earned" as const,
+      createdAt: now,
+    };
+  } catch (error) {
+    await identityTx.rollback().catch(() => undefined);
+    await referralsTx.rollback().catch(() => undefined);
+    throw error;
   }
-
-  const rewardAmount = getSubscriptionRewardAmount(referrer.role, referrer.tier);
-  const rewardId = randomUUID();
-  const now = new Date().toISOString();
-  const program: ReferralProgram = referrer.role === "host" ? "host" : "guest";
-
-  await referralsDB.exec`
-    INSERT INTO referral_rewards (
-      id, referrer_id, referred_user_id, trigger, program, amount, status, source_subscription_id, note, created_at
-    )
-    VALUES (
-      ${rewardId}, ${referrer.id}, ${referredUser.id}, ${"subscription"}, ${program}, ${rewardAmount},
-      ${"earned"}, ${params.sourceSubscriptionId}, ${"First paid subscription conversion"}, ${now}
-    )
-  `;
-
-  await creditReferrer(referrer, rewardAmount);
-
-  await platformEvents.publish({
-    type: "referral.reward_earned",
-    aggregateId: rewardId,
-    actorId: referrer.id,
-    occurredAt: now,
-    payload: JSON.stringify({ referrerId: referrer.id, referredUserId: referredUser.id, amount: rewardAmount }),
-  });
-
-  return {
-    id: rewardId,
-    referrerId: referrer.id,
-    referredUserId: referredUser.id,
-    trigger: "subscription" as const,
-    program,
-    amount: rewardAmount,
-    status: "earned" as const,
-    createdAt: now,
-  };
 }
 
 export const listMyReferralRewards = api<void, { rewards: ReferralRewardRecord[] }>(
@@ -188,7 +232,10 @@ export const listMyReferralRewards = api<void, { rewards: ReferralRewardRecord[]
 export const rewardReferral = api<RewardReferralParams, { rewardId: string }>(
   { expose: true, method: "POST", path: "/referrals/rewards", auth: true },
   async ({ referredUserId, trigger, amount, program, sourceSubscriptionId, note }) => {
-    const auth = requireAuth();
+    const auth = requireRole("admin", "support");
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw APIError.invalidArgument("Reward amount must be positive.");
+    }
     const rewardId = randomUUID();
     const now = new Date().toISOString();
 

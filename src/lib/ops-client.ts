@@ -38,11 +38,11 @@ export async function uploadKycAsset(file: File) {
     '/ops/kyc/upload-url',
     {
       method: 'POST',
-      body: JSON.stringify({ filename: file.name }),
+      body: JSON.stringify({ filename: file.name, contentType: file.type || 'image/jpeg' }),
     },
     { auth: true },
   );
-  await uploadSigned(signed.uploadUrl, file, file.type || 'application/octet-stream');
+  await uploadSigned(signed.uploadUrl, file, file.type || 'image/jpeg');
   return signed.objectKey;
 }
 
@@ -53,7 +53,7 @@ export async function uploadKycDataUrl(filename: string, dataUrl: string) {
     '/ops/kyc/upload-url',
     {
       method: 'POST',
-      body: JSON.stringify({ filename }),
+      body: JSON.stringify({ filename, contentType: blob.type || 'image/jpeg' }),
     },
     { auth: true },
   );

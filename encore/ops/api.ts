@@ -1,4 +1,4 @@
-import { api } from "encore.dev/api";
+import { api, APIError } from "encore.dev/api";
 import { randomUUID } from "node:crypto";
 import { opsDB } from "./db";
 import { kycDocumentsBucket } from "./storage";
@@ -70,6 +70,11 @@ interface KycSubmissionAssets {
   selfieImageUrl: string;
 }
 
+interface RequestKycUploadParams {
+  filename: string;
+  contentType: string;
+}
+
 type KycSubmissionRow = {
   id: string;
   user_id: string;
@@ -107,6 +112,13 @@ type PlatformSettingsRow = {
   maintenance_mode: boolean;
   updated_at: string;
 };
+
+const ALLOWED_KYC_CONTENT_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+]);
 
 function mapKycSubmission(row: KycSubmissionRow): KycSubmission {
   return {
@@ -152,11 +164,43 @@ function mapPlatformSettings(row: PlatformSettingsRow): PlatformSettingsRecord {
   };
 }
 
-export const requestKycUpload = api<{ filename: string }, { objectKey: string; uploadUrl: string }>(
+function sanitizeKycFilename(filename: string) {
+  const normalized = filename.trim().replace(/[^a-zA-Z0-9._-]/g, "_");
+  return normalized.slice(0, 120) || "kyc-upload.bin";
+}
+
+function validatePlatformSettings(settings: PlatformSettingsRecord) {
+  if (!Number.isFinite(settings.referralRewardAmount) || settings.referralRewardAmount < 0) {
+    throw APIError.invalidArgument("Referral reward amount must be zero or positive.");
+  }
+  if (!Number.isFinite(settings.commissionRate) || settings.commissionRate < 0 || settings.commissionRate > 100) {
+    throw APIError.invalidArgument("Commission rate must be between 0 and 100.");
+  }
+  if (!Number.isFinite(settings.minWithdrawalAmount) || settings.minWithdrawalAmount <= 0) {
+    throw APIError.invalidArgument("Minimum withdrawal amount must be positive.");
+  }
+  if (!settings.platformName.trim()) {
+    throw APIError.invalidArgument("Platform name cannot be empty.");
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(settings.supportEmail.trim())) {
+    throw APIError.invalidArgument("Support email must be valid.");
+  }
+  if (!Number.isInteger(settings.cancellationPolicyDays) || settings.cancellationPolicyDays < 0) {
+    throw APIError.invalidArgument("Cancellation policy days must be a whole number of zero or more.");
+  }
+  if (!Number.isInteger(settings.maxGuestsPerListing) || settings.maxGuestsPerListing < 1) {
+    throw APIError.invalidArgument("Maximum guests per listing must be at least one.");
+  }
+}
+
+export const requestKycUpload = api<RequestKycUploadParams, { objectKey: string; uploadUrl: string }>(
   { expose: true, method: "POST", path: "/ops/kyc/upload-url", auth: true },
-  async ({ filename }) => {
+  async ({ filename, contentType }) => {
     const auth = requireRole("host", "admin");
-    const objectKey = `${auth.userID}/${Date.now()}-${filename}`;
+    if (!ALLOWED_KYC_CONTENT_TYPES.has(contentType)) {
+      throw APIError.invalidArgument("Unsupported KYC upload content type.");
+    }
+    const objectKey = `${auth.userID}/${Date.now()}-${sanitizeKycFilename(filename)}`;
     const signed = await kycDocumentsBucket.signedUploadUrl(objectKey, { ttl: 900 });
     return { objectKey, uploadUrl: signed.url };
   },
@@ -443,6 +487,8 @@ export const updatePlatformSettings = api<UpdatePlatformSettingsParams, { settin
       id: "global",
       updatedAt: new Date().toISOString(),
     };
+
+    validatePlatformSettings(updated);
 
     await opsDB.exec`
       UPDATE platform_settings

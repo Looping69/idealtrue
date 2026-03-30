@@ -58,6 +58,7 @@ export const listListingReviews = api<{ listingId: string }, { reviews: ReviewRe
     const reviews = await reviewsDB.queryAll<ReviewRow>`
       SELECT * FROM reviews
       WHERE listing_id = ${listingId}
+        AND status = ${"approved"}
       ORDER BY created_at DESC
     `;
     return { reviews: reviews.map(mapReview) };
@@ -79,6 +80,17 @@ export const createReview = api<CreateReviewParams, { review: ReviewRecord }>(
     if (booking.status !== "completed") {
       throw APIError.failedPrecondition("Reviews can only be submitted after the stay is completed.");
     }
+    const scores = [params.cleanliness, params.accuracy, params.communication, params.location, params.value];
+    if (scores.some((score) => !Number.isInteger(score) || score < 1 || score > 5)) {
+      throw APIError.invalidArgument("Review scores must be integers between 1 and 5.");
+    }
+    const trimmedComment = params.comment.trim();
+    if (!trimmedComment) {
+      throw APIError.invalidArgument("Review comment cannot be empty.");
+    }
+    if (trimmedComment.length > 2000) {
+      throw APIError.invalidArgument("Review comment is too long.");
+    }
     const existing = await reviewsDB.queryRow<{ id: string }>`
       SELECT id FROM reviews
       WHERE booking_id = ${params.bookingId}
@@ -92,7 +104,7 @@ export const createReview = api<CreateReviewParams, { review: ReviewRecord }>(
     const id = randomUUID();
     const now = new Date().toISOString();
 
-    await reviewsDB.exec`
+    const inserted = await reviewsDB.queryRow<ReviewRow>`
       INSERT INTO reviews (
         id, listing_id, booking_id, guest_id, host_id, cleanliness, accuracy,
         communication, location, value, comment, status, created_at
@@ -100,9 +112,15 @@ export const createReview = api<CreateReviewParams, { review: ReviewRecord }>(
       VALUES (
         ${id}, ${params.listingId}, ${params.bookingId}, ${auth.userID}, ${params.hostId},
         ${params.cleanliness}, ${params.accuracy}, ${params.communication}, ${params.location},
-        ${params.value}, ${params.comment}, ${"pending"}, ${now}
+        ${params.value}, ${trimmedComment}, ${"pending"}, ${now}
       )
+      ON CONFLICT (booking_id) DO NOTHING
+      RETURNING *
     `;
+
+    if (!inserted) {
+      throw APIError.failedPrecondition("A review has already been submitted for this booking.");
+    }
 
     await platformEvents.publish({
       type: "review.submitted",
@@ -115,6 +133,7 @@ export const createReview = api<CreateReviewParams, { review: ReviewRecord }>(
     return {
       review: {
         ...params,
+        comment: trimmedComment,
         id,
         guestId: auth.userID,
         status: "pending",
@@ -144,6 +163,9 @@ export const updateReviewStatus = api<{ reviewId: string; status: ReviewStatus }
       SELECT * FROM reviews WHERE id = ${reviewId}
     `;
     if (!existing) throw APIError.notFound("Review not found.");
+    if (!["pending", "approved", "rejected"].includes(status)) {
+      throw APIError.invalidArgument("Invalid review status.");
+    }
 
     await reviewsDB.exec`
       UPDATE reviews
