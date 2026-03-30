@@ -1,5 +1,5 @@
 export type UserRole = "guest" | "host" | "admin" | "support";
-export type HostPlan = "free" | "standard" | "professional" | "premium";
+export type HostPlan = "standard" | "professional" | "premium";
 export type KycStatus = "none" | "pending" | "verified" | "rejected";
 export type ReferralTier = "bronze" | "silver" | "gold";
 export type ListingStatus = "draft" | "pending" | "active" | "inactive" | "rejected" | "archived";
@@ -188,13 +188,6 @@ export type DomainEvent =
     };
 
 export const HOST_PLANS: SubscriptionPlan[] = [
-  {
-    id: "free",
-    name: "Free",
-    monthlyAmount: 0,
-    annualAmount: 0,
-    features: ["1 active listing", "Basic enquiry flow", "Marketplace visibility"],
-  },
   {
     id: "standard",
     name: "Standard",

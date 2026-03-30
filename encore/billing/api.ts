@@ -157,7 +157,6 @@ type WebhookEventRow = {
 };
 
 const CONTENT_LIMITS: Record<HostPlan, { includedDraftsPerMonth: number; canSchedule: boolean; contentStudioEnabled: boolean }> = {
-  free: { includedDraftsPerMonth: 0, canSchedule: false, contentStudioEnabled: false },
   standard: { includedDraftsPerMonth: 20, canSchedule: false, contentStudioEnabled: true },
   professional: { includedDraftsPerMonth: 60, canSchedule: true, contentStudioEnabled: true },
   premium: { includedDraftsPerMonth: 120, canSchedule: true, contentStudioEnabled: true },
@@ -620,9 +619,6 @@ export const createSubscriptionCheckout = api<SubscriptionCheckoutParams, { chec
   { expose: true, method: "POST", path: "/billing/subscriptions/checkout", auth: true },
   async ({ plan, billingInterval }) => {
     const auth = requireRole("host", "admin");
-    if (plan === "free") {
-      throw APIError.invalidArgument("Free plan does not require checkout.");
-    }
 
     const amount = getPlanAmount(plan, billingInterval);
     const urls = buildBillingUrls("subscription", randomUUID());
@@ -664,38 +660,6 @@ export const createSubscriptionCheckout = api<SubscriptionCheckoutParams, { chec
 );
 
 export const upgradePlan = createSubscriptionCheckout;
-
-export const downgradeToFree = api<void, { downgraded: true }>(
-  { expose: true, method: "POST", path: "/billing/subscriptions/free", auth: true },
-  async () => {
-    const auth = requireRole("host", "admin");
-    const now = new Date().toISOString();
-
-    await billingDB.exec`
-      UPDATE subscriptions
-      SET status = ${"cancelled"}
-      WHERE user_id = ${auth.userID}
-        AND status = ${"active"}
-    `;
-
-    await identityDB.exec`
-      UPDATE users
-      SET host_plan = ${"free"},
-          updated_at = ${now}
-      WHERE id = ${auth.userID}
-    `;
-
-    await platformEvents.publish({
-      type: "subscription.changed",
-      aggregateId: auth.userID,
-      actorId: auth.userID,
-      occurredAt: now,
-      payload: JSON.stringify({ plan: "free" }),
-    });
-
-    return { downgraded: true };
-  },
-);
 
 export const listMySubscriptions = api<void, { subscriptions: SubscriptionRow[] }>(
   { expose: true, method: "GET", path: "/billing/subscriptions", auth: true },

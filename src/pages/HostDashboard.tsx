@@ -52,15 +52,15 @@ export default function HostDashboard({
   return (
     <div className="space-y-8">
       {/* Subscription Banner */}
-      {(!profile?.host_plan || profile.host_plan === 'free') && (
+      {profile?.host_plan === 'standard' && (
         <Card className="bg-gradient-to-r from-zinc-900 to-zinc-800 text-white p-8 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-surface/5 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none"></div>
           <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="space-y-2 text-center md:text-left">
               <h2 className="text-2xl font-bold flex items-center gap-2 justify-center md:justify-start">
-                <Sparkles className="w-6 h-6 text-amber-400" /> Professional Hosting
+                <Sparkles className="w-6 h-6 text-amber-400" /> Level Up Your Reach
               </h2>
-              <p className="text-outline-variant max-w-md">Upgrade to a paid plan to unlock the content studio, stronger search visibility, and verified host trust signals.</p>
+              <p className="text-outline-variant max-w-md">Standard gets you live. Professional and Premium add stronger promotion, multi-listing scale, and better support.</p>
             </div>
             <Button variant="secondary" className="rounded-full px-8" onClick={onUpgrade}>
               View Plans <ArrowRight className="w-4 h-4 ml-2" />
@@ -287,8 +287,8 @@ export default function HostDashboard({
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <h3 className="text-lg font-bold">Current Plan: <span className="capitalize">{profile?.host_plan || 'Free'}</span></h3>
-                {profile?.host_plan && profile.host_plan !== 'free' && (
+                <h3 className="text-lg font-bold">Current Plan: <span className="capitalize">{profile?.host_plan || 'Standard'}</span></h3>
+                {profile?.host_plan && (
                   <Badge variant="success" className="flex items-center gap-1">
                     <Crown className="w-3 h-3" /> Active
                   </Badge>
@@ -300,8 +300,8 @@ export default function HostDashboard({
                   : profile?.host_plan === 'professional'
                   ? 'You have access to the content studio and advanced listing features. Upgrade to Premium for priority support.'
                   : profile?.host_plan === 'standard'
-                  ? 'You have standard hosting capabilities. Upgrade for stronger promotional tools and better visibility.'
-                  : 'You are currently on the free plan. Upgrade to unlock the content studio, stronger ranking, and verified host status.'}
+                  ? 'You are on the entry paid tier. One live listing, content studio access, and a clean path to upgrade when you need more reach.'
+                  : 'Your plan details are syncing.'}
               </p>
             </div>
             <div className="flex gap-3">

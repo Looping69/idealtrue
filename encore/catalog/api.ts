@@ -41,7 +41,7 @@ type ListingRow = {
 
 type HostAccessRow = {
   id: string;
-  host_plan: "free" | "standard" | "professional" | "premium";
+  host_plan: "standard" | "professional" | "premium";
   kyc_status: "none" | "pending" | "verified" | "rejected";
 };
 
@@ -139,10 +139,6 @@ async function assertHostCanCreateListing(hostId: string) {
     throw APIError.permissionDenied("Hosts must complete KYC before creating listings.");
   }
 
-  if (host.host_plan !== "free") {
-    return;
-  }
-
   const existingListings = await catalogDB.queryRow<{ count: number }>`
     SELECT COUNT(*)::int AS count
     FROM listings
@@ -150,8 +146,8 @@ async function assertHostCanCreateListing(hostId: string) {
       AND status <> ${"archived"}
   `;
 
-  if ((existingListings?.count ?? 0) >= 1) {
-    throw APIError.permissionDenied("Free plan hosts can only keep one listing.");
+  if (host.host_plan === "standard" && (existingListings?.count ?? 0) >= 1) {
+    throw APIError.permissionDenied("Standard plan hosts can only keep one active listing.");
   }
 }
 

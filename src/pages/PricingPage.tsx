@@ -5,9 +5,9 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { ArrowRight, Check, Loader2, Megaphone, ShieldCheck, Sparkles, Smartphone, Video, BarChart4, Users, Share2, LineChart, BadgeCheck } from "lucide-react";
 import { toast } from 'sonner';
 import { useAuth } from "@/contexts/AuthContext";
-import { createSubscriptionCheckout, downgradeHostPlanToFree, getCheckoutStatus } from "@/lib/billing-client";
+import { createSubscriptionCheckout, getCheckoutStatus } from "@/lib/billing-client";
 
-type PlanTier = 'free' | 'standard' | 'professional' | 'premium';
+type PlanTier = 'standard' | 'professional' | 'premium';
 type BillingInterval = 'monthly' | 'annual';
 
 interface PlanFeature {
@@ -29,36 +29,16 @@ interface Plan {
 
 const plans: Plan[] = [
     {
-        id: 'free',
-        name: "Free Plan",
-        price: "R0",
-        description: "Remove all onboarding resistance. Start hosting today.",
-        color: "bg-slate-100",
-        cta: "Basic",
-        eyebrow: "Start",
-        features: [
-            { text: "1 Property Listing", included: true },
-            { text: "Basic Photos", included: true },
-            { text: "Basic Description + Amenities", included: true },
-            { text: "Listed in Search Results", included: true },
-            { text: "Direct Enquiries", included: true },
-            { text: "No Commission", included: true },
-            { text: "Showcase Video Slot", included: false },
-            { text: "Verified Host Badge", included: false },
-            { text: "Styled social content engine", included: false },
-        ]
-    },
-    {
         id: 'standard',
         name: "Standard",
         price: "R149",
-        description: "The sweet spot. Credibility, visibility, and volume.",
+        description: "The paid entry point. Get live, get verified, and run one serious listing properly.",
         highlight: "Most Popular",
         color: "bg-primary/10 border-blue-200",
-        cta: "Upgrade to Standard",
+        cta: "Start on Standard",
         eyebrow: "Growth",
         features: [
-            { text: "Everything in Free", included: true },
+            { text: "1 active listing", included: true },
             { text: "Higher Search Ranking", included: true },
             { text: "Full Photo Gallery", included: true },
             { text: "Showcase Video Slot", included: true },
@@ -118,20 +98,20 @@ const planStats = [
 ];
 
 const comparisonRows = [
-    { label: "Listings included", values: ["1", "1", "Multiple", "Multiple"] },
-    { label: "Verified badge", values: ["-", "Included", "Included", "Priority"] },
-    { label: "Video placement", values: ["-", "Included", "Optional", "Included"] },
-    { label: "Social promotion", values: ["-", "Monthly visibility", "2 promos", "Featured promo"] },
-    { label: "Content engine", values: ["-", "Any listing", "Any listing + multi-platform", "Any listing + campaign-ready"] },
-    { label: "Analytics", values: ["Basic", "Basic", "Advanced", "Advanced"] },
-    { label: "Support", values: ["Standard", "Standard", "Priority", "WhatsApp VIP"] },
+    { label: "Listings included", values: ["1", "Multiple", "Multiple"] },
+    { label: "Verified badge", values: ["Included", "Included", "Priority"] },
+    { label: "Video placement", values: ["Included", "Optional", "Included"] },
+    { label: "Social promotion", values: ["Monthly visibility", "2 promos", "Featured promo"] },
+    { label: "Content engine", values: ["Any listing", "Any listing + multi-platform", "Any listing + campaign-ready"] },
+    { label: "Analytics", values: ["Basic", "Advanced", "Advanced"] },
+    { label: "Support", values: ["Standard", "Priority", "WhatsApp VIP"] },
 ];
 
 export default function PricingPage({ onBack }: { onBack?: () => void }) {
     const { user, profile, refreshProfile } = useAuth();
     const [loadingPlan, setLoadingPlan] = useState<PlanTier | null>(null);
     const [fetchingPlan, setFetchingPlan] = useState(true);
-    const [currentPlan, setCurrentPlan] = useState<PlanTier>('free');
+    const [currentPlan, setCurrentPlan] = useState<PlanTier>('standard');
     const [billingInterval, setBillingInterval] = useState<BillingInterval>('monthly');
     const [searchParams] = useSearchParams();
     const sourceLabel = searchParams.get('source_label') || searchParams.get('region');
@@ -140,11 +120,11 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
 
     const fetchPlan = useCallback(async () => {
         if (!profile) {
-            setCurrentPlan('free');
+            setCurrentPlan('standard');
             setFetchingPlan(false);
             return;
         }
-        setCurrentPlan((profile.host_plan as PlanTier) || 'free');
+        setCurrentPlan((profile.host_plan as PlanTier) || 'standard');
         setFetchingPlan(false);
     }, [profile]);
 
@@ -207,20 +187,6 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
         const plan = plans.find(p => p.id === planId);
         if (!plan) return;
 
-        const priceAmount = parseInt(plan.price.replace('R', ''), 10);
-
-        if (priceAmount === 0) {
-            try {
-                await downgradeHostPlanToFree();
-                await refreshProfile();
-                setCurrentPlan('free');
-                toast.success("You are now on the Free plan.");
-            } catch (err) {
-                console.error(err);
-            }
-            return;
-        }
-
         setLoadingPlan(planId);
 
         try {
@@ -233,7 +199,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
         } finally {
             setLoadingPlan(null);
         }
-    }, [billingInterval, refreshProfile, user]);
+    }, [billingInterval, user]);
 
     const getPlanPrice = useCallback((plan: Plan) => {
         if (billingInterval === 'monthly') {
@@ -249,7 +215,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
         return {
             display: `R${annualAmount.toLocaleString()}`,
             suffix: 'per year',
-            helper: monthlyAmount > 0 ? '2 months free on annual billing' : null,
+            helper: monthlyAmount > 0 ? 'Annual billing includes a 2-month discount' : null,
         };
     }, [billingInterval]);
 
@@ -332,7 +298,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
                                 Annual
                             </button>
                             <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
-                                2 months free
+                                Annual discount
                             </span>
                         </div>
                     </div>
@@ -349,7 +315,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
                 </div>
             </section>
 
-            <section className={`grid grid-cols-1 ${plans.length === 4 ? 'md:grid-cols-2 xl:grid-cols-4' : 'md:grid-cols-3'} gap-6`}>
+            <section className="grid grid-cols-1 gap-6 md:grid-cols-3">
                 {plans.map((plan) => {
                     const isCurrent = currentPlan === plan.id;
                     const isLoading = loadingPlan === plan.id;
@@ -491,7 +457,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
                 </div>
 
                 <div className="overflow-hidden rounded-2xl border border-slate-200">
-                    <div className="grid grid-cols-5 bg-gradient-to-r from-slate-900 to-blue-600 text-white">
+                    <div className="grid grid-cols-4 bg-gradient-to-r from-slate-900 to-blue-600 text-white">
                         <div className="px-4 py-4 text-sm font-bold uppercase tracking-[0.2em] text-slate-300">Feature</div>
                         {plans.map((plan) => (
                             <div key={plan.id} className="px-4 py-4 text-center text-sm font-bold uppercase tracking-[0.2em]">
@@ -501,7 +467,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
                     </div>
 
                     {comparisonRows.map((row, rowIndex) => (
-                        <div key={row.label} className={`grid grid-cols-5 ${rowIndex % 2 === 0 ? 'bg-surface' : 'bg-slate-50'}`}>
+                        <div key={row.label} className={`grid grid-cols-4 ${rowIndex % 2 === 0 ? 'bg-surface' : 'bg-slate-50'}`}>
                             <div className="px-4 py-4 text-sm font-semibold text-slate-700">{row.label}</div>
                             {row.values.map((value, valueIndex) => (
                                 <div key={`${row.label}-${valueIndex}`} className="px-4 py-4 text-center text-sm text-slate-600">

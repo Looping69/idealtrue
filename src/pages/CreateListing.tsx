@@ -98,14 +98,14 @@ export default function CreateListing() {
     coordinates: { lat: -29.8587, lng: 31.0218 } as { lat: number; lng: number } | null
   });
 
-  const [plan, setPlan] = useState<'free' | 'standard' | 'professional' | 'premium'>('free');
+  const [plan, setPlan] = useState<'standard' | 'professional' | 'premium'>('standard');
   const [checkingLimit, setCheckingLimit] = useState(true);
   const [canCreate, setCanCreate] = useState(true);
   const [verificationStatus, setVerificationStatus] = useState<'none' | 'pending' | 'verified' | 'rejected' | null>(null);
 
   const checkLimits = useCallback(async () => {
     if (!profile || !user) return;
-    setPlan(profile.host_plan || 'free');
+    setPlan(profile.host_plan || 'standard');
     setVerificationStatus(profile.kycStatus);
     if (isEditMode) {
       setCanCreate(true);
@@ -115,7 +115,7 @@ export default function CreateListing() {
 
     const existingListings = await listHostListings(user.uid);
     const nonArchivedListings = existingListings.filter((listing) => listing.status !== 'archived');
-    setCanCreate((profile.host_plan || 'free') !== 'free' || nonArchivedListings.length < 1);
+    setCanCreate((profile.host_plan || 'standard') !== 'standard' || nonArchivedListings.length < 1);
     setCheckingLimit(false);
   }, [isEditMode, profile, user]);
 
@@ -336,8 +336,8 @@ export default function CreateListing() {
         </div>
         <h1 className="text-3xl font-bold text-on-surface">Listing Limit Reached</h1>
         <p className="text-on-surface-variant text-lg max-w-md mx-auto">
-          You are currently on the <strong>Free Plan</strong>, which allows only 1 property listing.
-          To publish more listings and unlock video features, please upgrade.
+          Your current <strong>Standard plan</strong> includes one active listing.
+          Upgrade to Professional or Premium if you need to publish more.
         </p>
         <div className="pt-6">
                       <Button onClick={() => navigate('/pricing?audience=host')} className="h-12 px-8 text-base bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
@@ -769,17 +769,15 @@ export default function CreateListing() {
                     />
                   </div>
 
-                  {plan !== 'free' && (
-                    <div className="space-y-3 pt-6 border-t border-outline-variant">
-                      <Label className="text-base">Showcase Video</Label>
-                      <VideoUpload
-                        value={formData.video_url}
-                        onChange={(url) => updateData("video_url", url)}
-                        listingId={id}
-                        maxSizeMB={100}
-                      />
-                    </div>
-                  )}
+                  <div className="space-y-3 pt-6 border-t border-outline-variant">
+                    <Label className="text-base">Showcase Video</Label>
+                    <VideoUpload
+                      value={formData.video_url}
+                      onChange={(url) => updateData("video_url", url)}
+                      listingId={id}
+                      maxSizeMB={100}
+                    />
+                  </div>
                 </div>
               </div>
             </div>

@@ -1,7 +1,7 @@
 import { encoreRequest } from './encore-client';
 import type { Listing } from '@/types';
 
-export type HostPlan = 'free' | 'standard' | 'professional' | 'premium';
+export type HostPlan = 'standard' | 'professional' | 'premium';
 export type BillingInterval = 'monthly' | 'annual';
 export type SocialPlatform = 'instagram' | 'facebook' | 'twitter' | 'linkedin';
 export type SocialTone = 'professional' | 'friendly' | 'adventurous' | 'luxurious' | 'urgent';
@@ -38,16 +38,6 @@ export async function createSubscriptionCheckout(plan: HostPlan, billingInterval
     {
       method: 'POST',
       body: JSON.stringify({ plan, billingInterval }),
-    },
-    { auth: true },
-  );
-}
-
-export async function downgradeHostPlanToFree() {
-  return encoreRequest<{ downgraded: true }>(
-    '/billing/subscriptions/free',
-    {
-      method: 'POST',
     },
     { auth: true },
   );

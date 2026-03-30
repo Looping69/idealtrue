@@ -286,7 +286,7 @@ export const signup = api<SignupParams, SessionResponse>(
         id, email, email_verified, display_name, password_hash, photo_url, role, host_plan, kyc_status, balance, referral_count, tier, referral_code, referred_by_code, last_login_at, created_at, updated_at
       )
       VALUES (
-        ${id}, ${email}, ${false}, ${params.displayName}, ${passwordHash}, ${params.photoUrl ?? null}, ${role}, ${"free"}, ${"none"}, ${0}, ${0}, ${"bronze"}, ${referralCode}, ${params.referredByCode ?? null}, ${now}, ${now}, ${now}
+        ${id}, ${email}, ${false}, ${params.displayName}, ${passwordHash}, ${params.photoUrl ?? null}, ${role}, ${"standard"}, ${"none"}, ${0}, ${0}, ${"bronze"}, ${referralCode}, ${params.referredByCode ?? null}, ${now}, ${now}, ${now}
       )
     `;
 
@@ -297,7 +297,7 @@ export const signup = api<SignupParams, SessionResponse>(
       displayName: params.displayName,
       photoUrl: params.photoUrl ?? null,
       role,
-      hostPlan: "free",
+      hostPlan: "standard",
       kycStatus: "none",
       balance: 0,
       referralCount: 0,
@@ -405,7 +405,7 @@ export const devLogin = api<DevLoginParams, DevLoginResponse>(
           id, email, email_verified, display_name, photo_url, role, host_plan, kyc_status, balance, referral_count, tier, referral_code, referred_by_code, created_at, updated_at
         )
         VALUES (
-          ${id}, ${email}, ${true}, ${params.displayName}, ${params.photoUrl ?? null}, ${role}, ${"free"}, ${"none"}, ${0}, ${0}, ${"bronze"}, ${referralCode}, ${params.referredByCode ?? null}, ${now}, ${now}
+        ${id}, ${email}, ${true}, ${params.displayName}, ${params.photoUrl ?? null}, ${role}, ${"standard"}, ${"none"}, ${0}, ${0}, ${"bronze"}, ${referralCode}, ${params.referredByCode ?? null}, ${now}, ${now}
         )
       `;
       user = {
@@ -415,7 +415,7 @@ export const devLogin = api<DevLoginParams, DevLoginResponse>(
         displayName: params.displayName,
         photoUrl: params.photoUrl ?? null,
         role,
-        hostPlan: "free",
+      hostPlan: "standard",
         kycStatus: "none",
         balance: 0,
         referralCount: 0,

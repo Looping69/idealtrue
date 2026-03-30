@@ -14,7 +14,7 @@ export interface UserProfile {
   balance: number;
   referralCount: number;
   tier: ReferralTier;
-  host_plan?: 'free' | 'standard' | 'professional' | 'premium';
+  host_plan?: 'standard' | 'professional' | 'premium';
   kycStatus: KYCStatus;
   paymentMethod?: string | null;
   paymentInstructions?: string | null;
@@ -147,7 +147,7 @@ export interface PlatformSettings {
 export interface Subscription {
   id: string;
   hostUid: string;
-  plan: 'free' | 'standard' | 'professional' | 'premium';
+  plan: 'standard' | 'professional' | 'premium';
   amount: number;
   status: 'active' | 'expired' | 'cancelled';
   startDate: string;

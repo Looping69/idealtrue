@@ -2,7 +2,7 @@ import { encoreRequest, setEncoreSessionToken } from './encore-client';
 import type { UserProfile } from '@/types';
 
 type EncoreUserRole = 'guest' | 'host' | 'admin';
-type EncoreHostPlan = 'free' | 'standard' | 'professional' | 'premium';
+type EncoreHostPlan = 'standard' | 'professional' | 'premium';
 type EncoreKycStatus = 'none' | 'pending' | 'verified' | 'rejected';
 type EncoreReferralTier = 'bronze' | 'silver' | 'gold';
 

@@ -278,7 +278,7 @@ export default function SocialDashboard({ listings }: { listings: Listing[] }) {
 
           {!contentEnabled && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-900">
-              Free hosts do not get the content engine. Upgrade your plan to unlock draft generation, or stay on free and keep your listing workflow simple.
+              Your current host tier does not include content studio access. Move onto an eligible paid plan to unlock draft generation.
             </div>
           )}
 

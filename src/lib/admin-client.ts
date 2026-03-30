@@ -2,7 +2,7 @@ import { encoreRequest } from './encore-client';
 import type { Booking, Listing, Notification, PlatformSettings, Referral, Review, Subscription, UserProfile } from '@/types';
 
 type EncoreUserRole = 'guest' | 'host' | 'admin';
-type EncoreHostPlan = 'free' | 'standard' | 'professional' | 'premium';
+type EncoreHostPlan = 'standard' | 'professional' | 'premium';
 type EncoreKycStatus = 'none' | 'pending' | 'verified' | 'rejected';
 type EncoreReferralTier = 'bronze' | 'silver' | 'gold';
 type EncoreReferralRewardStatus = 'pending' | 'earned' | 'paid' | 'rejected';
@@ -115,7 +115,7 @@ export interface AdminCheckout {
   status: 'pending' | 'paid' | 'failed' | 'cancelled';
   currency: string;
   amount: number;
-  host_plan?: 'free' | 'standard' | 'professional' | 'premium' | null;
+  host_plan?: 'standard' | 'professional' | 'premium' | null;
   billing_interval?: 'monthly' | 'annual' | null;
   credit_quantity?: number | null;
   provider_checkout_id?: string | null;
@@ -127,7 +127,7 @@ export interface AdminCheckout {
 interface EncoreSubscription {
   id: string;
   user_id: string;
-  plan: 'free' | 'standard' | 'professional' | 'premium';
+  plan: 'standard' | 'professional' | 'premium';
   status: 'active' | 'expired' | 'cancelled';
   amount: number;
   billing_interval: 'monthly' | 'annual';

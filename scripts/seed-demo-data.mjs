@@ -6,7 +6,7 @@ const hosts = [
     email: "thandi.mokoena@idealstay.demo",
     displayName: "Thandi Mokoena",
     role: "host",
-    hostPlan: "free",
+    hostPlan: "standard",
     kycStatus: "verified",
     listings: [
       {
