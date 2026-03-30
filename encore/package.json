@@ -1,8 +1,8 @@
 {
-  "name": "encore-ts-starter",
+  "name": "ideal-stay-encore",
   "private": true,
   "version": "0.0.1",
-  "description": "Encore Typescript Starter",
+  "description": "Ideal Stay Encore backend",
   "license": "MPL-2.0",
   "type": "module",
   "devDependencies": {

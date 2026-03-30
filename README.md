@@ -120,7 +120,6 @@ Backend auth email delivery is optional in local/dev but should be configured in
 - `AUTH_EMAIL_FROM`
 - `AUTH_EMAIL_REPLY_TO`
 - `IDEAL_STAY_APP_URL`
-```
 
 The Encore app typechecks cleanly, but there are two environment caveats in the current machine state:
 
