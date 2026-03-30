@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence, useScroll, useMotionValueEvent, useReducedMotion, Transition } from "framer-motion";
 import { ChevronRight, Home, SlidersHorizontal } from "lucide-react";
@@ -6,17 +6,33 @@ import { CATEGORIES } from "@/constants/categories";
 import { CATEGORY_ICONS } from "@/components/icons/CategoryIcons";
 
 interface FilterBarProps {
+  activeCategory: string;
   onFilterChange: (category: string) => void;
   onOpenFilters: () => void;
   activeFiltersCount: number;
 }
 
-export default function FilterBar({ onFilterChange, onOpenFilters, activeFiltersCount }: FilterBarProps) {
-  const [activeCategory, setActiveCategory] = useState("all");
+export default function FilterBar({ activeCategory, onFilterChange, onOpenFilters, activeFiltersCount }: FilterBarProps) {
+  const [selectedCategory, setSelectedCategory] = useState("all");
   const [activeSubCategory, setActiveSubCategory] = useState<string | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { scrollY } = useScroll();
   const prefersReducedMotion = useReducedMotion();
+
+  useEffect(() => {
+    const nextMainCategory = CATEGORIES.find((category) => category.id === activeCategory)
+      ?? CATEGORIES.find((category) => category.subcategories.some((sub) => sub.id === activeCategory))
+      ?? null;
+
+    setSelectedCategory(nextMainCategory?.id ?? "all");
+    setActiveSubCategory(
+      nextMainCategory && nextMainCategory.id !== activeCategory ? activeCategory : null,
+    );
+
+    if (activeCategory === "all" || !nextMainCategory) {
+      setActiveSubCategory(null);
+    }
+  }, [activeCategory]);
 
   useMotionValueEvent(scrollY, "change", (latest) => {
     setIsCollapsed(latest > 80);
@@ -26,13 +42,13 @@ export default function FilterBar({ onFilterChange, onOpenFilters, activeFilters
     if (isCollapsed) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-    if (activeCategory === id) {
+    if (selectedCategory === id) {
       // Toggle off if clicking the same category
-      setActiveCategory("all");
+      setSelectedCategory("all");
       setActiveSubCategory(null);
       onFilterChange("all");
     } else {
-      setActiveCategory(id);
+      setSelectedCategory(id);
       setActiveSubCategory(null);
       onFilterChange(id);
     }
@@ -47,7 +63,7 @@ export default function FilterBar({ onFilterChange, onOpenFilters, activeFilters
     ? { duration: 0 }
     : { type: "spring", stiffness: 300, damping: 30 };
 
-  const currentCategory = CATEGORIES.find(c => c.id === activeCategory);
+  const currentCategory = CATEGORIES.find(c => c.id === selectedCategory);
 
   return (
     <div
@@ -91,14 +107,14 @@ export default function FilterBar({ onFilterChange, onOpenFilters, activeFilters
           )}
 
           <button
-            onClick={() => { setActiveCategory("all"); setActiveSubCategory(null); onFilterChange("all"); }}
+            onClick={() => { setSelectedCategory("all"); setActiveSubCategory(null); onFilterChange("all"); }}
             className={cn(
               "flex flex-col items-center cursor-pointer rounded-full relative shrink-0 transition-all duration-150",
               isCollapsed ? "min-w-[35px] p-1" : "min-w-[50px] md:min-w-[64px] p-1 md:p-2 gap-0.5 md:gap-2",
-              activeCategory === "all" ? "text-primary" : "text-on-surface-variant hover:text-on-surface"
-            )}
-          >
-            {activeCategory === "all" && (
+            selectedCategory === "all" ? "text-primary" : "text-on-surface-variant hover:text-on-surface"
+          )}
+        >
+            {selectedCategory === "all" && (
               <motion.div
                 layoutId="activeFilter"
                 className={cn(
@@ -123,12 +139,12 @@ export default function FilterBar({ onFilterChange, onOpenFilters, activeFilters
                 className={cn(
                   "flex flex-col items-center cursor-pointer rounded-full relative shrink-0 transition-all duration-200 group",
                   isCollapsed ? "min-w-[35px] p-1" : "min-w-[50px] md:min-w-[72px] p-1 md:p-2 gap-0.5 md:gap-2",
-                  activeCategory === category.id
+                selectedCategory === category.id
                     ? "text-primary"
                     : "text-on-surface-variant hover:text-on-surface"
                 )}
               >
-                {activeCategory === category.id && (
+                {selectedCategory === category.id && (
                   <motion.div
                     layoutId="activeFilter"
                     className={cn(

@@ -1,32 +1,33 @@
 import React, { useState, useMemo } from 'react';
 import { Listing } from '@/types';
-import SearchFilterBar from '@/components/SearchFilterBar';
+import SearchFilterBar, { SearchFilterState } from '@/components/SearchFilterBar';
 import FilterBar from '@/components/FilterBar';
-import FiltersModal from '@/components/FiltersModal';
+import FiltersModal, { ListingFilters } from '@/components/FiltersModal';
 import FeaturedCarousel from '@/components/FeaturedCarousel';
 import PropertyGrid from '@/components/PropertyGrid';
 import PropertyCard from '@/components/PropertyCard';
 import PropertyMap from '@/components/PropertyMap';
-import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { eachDayOfInterval, format, startOfDay } from 'date-fns';
+
+const DEFAULT_LISTING_FILTERS: ListingFilters = {
+  minPrice: "",
+  maxPrice: "",
+  adults: 0,
+  children: 0,
+  amenities: [],
+  facilities: [],
+  province: "all",
+  category: "all",
+};
 
 export default function ExploreView({ listings, onBook }: { listings: Listing[], onBook: (l: Listing) => void }) {
   const navigate = useNavigate();
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchFilters, setSearchFilters] = useState<SearchFilterState>({ query: "", guests: 1 });
   const [viewMode, setViewMode] = useState<'grid' | 'map'>('grid');
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
-  const [filters, setFilters] = useState({
-    minPrice: "",
-    maxPrice: "",
-    adults: 0,
-    children: 0,
-    amenities: [] as string[],
-    facilities: [] as string[],
-    province: "all",
-    category: "all"
-  });
+  const [filters, setFilters] = useState<ListingFilters>(DEFAULT_LISTING_FILTERS);
 
   const activeFiltersCount = useMemo(() => {
     let count = 0;
@@ -37,44 +38,53 @@ export default function ExploreView({ listings, onBook }: { listings: Listing[],
     if (filters.amenities.length > 0) count++;
     if (filters.facilities.length > 0) count++;
     if (filters.province !== "all") count++;
+    if (filters.category !== "all") count++;
     return count;
   }, [filters]);
 
   const filteredListings = useMemo(() => {
-    return listings.filter(listing => {
-      // Category / Subcategory filter
-      const matchesCategory = categoryFilter === "all" || 
-                             listing.category === categoryFilter || 
-                             listing.type === categoryFilter;
-      
-      // Search query filter
-      const matchesSearch = 
-        listing.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        listing.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        listing.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        listing.area?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        listing.province?.toLowerCase().includes(searchQuery.toLowerCase());
+    const query = searchFilters.query.trim().toLowerCase();
+    const selectedFrom = searchFilters.date?.from ? startOfDay(searchFilters.date.from) : null;
+    const selectedTo = searchFilters.date?.to ? startOfDay(searchFilters.date.to) : null;
 
-      // Price filter
+    return listings.filter(listing => {
+      const matchesCategory = filters.category === "all" ||
+        listing.category === filters.category ||
+        listing.type === filters.category;
+      
+      const matchesSearch =
+        !query ||
+        listing.title.toLowerCase().includes(query) ||
+        listing.location.toLowerCase().includes(query) ||
+        listing.description.toLowerCase().includes(query) ||
+        listing.area?.toLowerCase().includes(query) ||
+        listing.province?.toLowerCase().includes(query);
+
       const minP = filters.minPrice ? parseInt(filters.minPrice) : 0;
       const maxP = filters.maxPrice ? parseInt(filters.maxPrice) : Infinity;
       const matchesPrice = listing.pricePerNight >= minP && listing.pricePerNight <= maxP;
 
-      // Guests filter
-      const matchesGuests = (listing.adults >= filters.adults) && (listing.children >= filters.children);
+      const requestedGuests = searchFilters.guests || 0;
+      const matchesGuests = requestedGuests <= 1 || (listing.adults + listing.children) >= requestedGuests;
 
-      // Amenities filter
+      const matchesDateRange = !selectedFrom || !selectedTo || selectedTo < selectedFrom
+        ? true
+        : (() => {
+            const blockedDates = new Set((listing.blockedDates || []).map((date) => date.slice(0, 10)));
+            return eachDayOfInterval({ start: selectedFrom, end: selectedTo })
+              .map((date) => format(date, 'yyyy-MM-dd'))
+              .every((dateKey) => !blockedDates.has(dateKey));
+          })();
+
       const matchesAmenities = filters.amenities.every(a => listing.amenities?.includes(a));
 
-      // Facilities filter
       const matchesFacilities = filters.facilities.every(f => listing.facilities?.includes(f));
 
-      // Province filter
       const matchesProvince = filters.province === "all" || listing.province === filters.province;
 
-      return matchesCategory && matchesSearch && matchesPrice && matchesGuests && matchesAmenities && matchesFacilities && matchesProvince;
+      return matchesCategory && matchesSearch && matchesPrice && matchesGuests && matchesDateRange && matchesAmenities && matchesFacilities && matchesProvince;
     });
-  }, [listings, categoryFilter, searchQuery, filters]);
+  }, [listings, filters, searchFilters]);
 
   const recentlyAddedListings = useMemo(() => {
     return [...listings].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 4);
@@ -107,7 +117,7 @@ export default function ExploreView({ listings, onBook }: { listings: Listing[],
           <div className="flex-1">
             <SearchFilterBar 
               listings={listings}
-              onChange={(state) => setSearchQuery(state.query)} 
+              onChange={setSearchFilters} 
               onSendMessage={(msg) => navigate(`/planner?q=${encodeURIComponent(msg)}`)}
             />
           </div>
@@ -115,7 +125,8 @@ export default function ExploreView({ listings, onBook }: { listings: Listing[],
       </div>
 
       <FilterBar 
-        onFilterChange={(category) => setCategoryFilter(category)} 
+        activeCategory={filters.category}
+        onFilterChange={(category) => setFilters((current) => ({ ...current, category }))} 
         onOpenFilters={() => setIsFiltersOpen(true)}
         activeFiltersCount={activeFiltersCount}
       />

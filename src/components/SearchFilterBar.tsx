@@ -2,8 +2,17 @@ import { useState, useRef, useEffect } from "react";
 import { Send, Sparkles, Plus, Minus, MapPin, Search, TrendingUp, Building, Home, Palmtree, LucideIcon } from "lucide-react";
 import type { Listing } from "@/types";
 
+export type SearchFilterState = {
+  query: string;
+  guests: number;
+  date?: {
+    from?: Date;
+    to?: Date;
+  };
+};
+
 type Props = {
-  onChange: (state: { query: string; guests: number; date?: { from?: Date; to?: Date } }) => void;
+  onChange: (state: SearchFilterState) => void;
   onModeChange?: (mode: 'chat' | 'search') => void;
   onSendMessage?: (message: string) => void;
   mode?: 'chat' | 'search';

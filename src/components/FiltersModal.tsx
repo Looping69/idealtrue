@@ -1,21 +1,49 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X, Check, Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CATEGORIES, AMENITIES, FACILITIES, PROVINCES } from "@/constants/categories";
+import { AMENITIES, FACILITIES, PROVINCES } from "@/constants/categories";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
+
+export type ListingFilters = {
+  minPrice: string;
+  maxPrice: string;
+  adults: number;
+  children: number;
+  amenities: string[];
+  facilities: string[];
+  province: string;
+  category: string;
+};
+
+const DEFAULT_FILTERS: ListingFilters = {
+  minPrice: "",
+  maxPrice: "",
+  adults: 0,
+  children: 0,
+  amenities: [],
+  facilities: [],
+  province: "all",
+  category: "all",
+};
 
 interface FiltersModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onApply: (filters: any) => void;
-  initialFilters: any;
+  onApply: (filters: ListingFilters) => void;
+  initialFilters: ListingFilters;
 }
 
 export default function FiltersModal({ isOpen, onClose, onApply, initialFilters }: FiltersModalProps) {
-  const [filters, setFilters] = useState(initialFilters);
+  const [filters, setFilters] = useState<ListingFilters>(initialFilters);
+
+  useEffect(() => {
+    if (isOpen) {
+      setFilters(initialFilters);
+    }
+  }, [initialFilters, isOpen]);
 
   if (!isOpen) return null;
 
@@ -24,15 +52,26 @@ export default function FiltersModal({ isOpen, onClose, onApply, initialFilters 
     onClose();
   };
 
-  const toggleItem = (list: string[], item: string, field: string) => {
-    const newList = list.includes(item)
-      ? list.filter(i => i !== item)
-      : [...list, item];
-    setFilters({ ...filters, [field]: newList });
+  const handleClearAll = () => {
+    setFilters(DEFAULT_FILTERS);
+    onApply(DEFAULT_FILTERS);
   };
 
-  const updateCount = (field: string, delta: number) => {
-    setFilters({ ...filters, [field]: Math.max(0, (filters[field] || 0) + delta) });
+  const toggleItem = (field: "amenities" | "facilities", item: string) => {
+    setFilters((current) => {
+      const list = current[field];
+      const nextList = list.includes(item)
+        ? list.filter((value) => value !== item)
+        : [...list, item];
+      return { ...current, [field]: nextList };
+    });
+  };
+
+  const updateCount = (field: "adults" | "children", delta: number) => {
+    setFilters((current) => ({
+      ...current,
+      [field]: Math.max(0, current[field] + delta),
+    }));
   };
 
   return (
@@ -49,19 +88,7 @@ export default function FiltersModal({ isOpen, onClose, onApply, initialFilters 
             <X className="w-5 h-5" />
           </button>
           <h2 className="text-lg font-bold">Filters</h2>
-          <button 
-            onClick={() => setFilters({
-              minPrice: "",
-              maxPrice: "",
-              adults: 0,
-              children: 0,
-              amenities: [],
-              facilities: [],
-              province: "all",
-              category: "all"
-            })}
-            className="text-sm font-semibold underline hover:text-on-surface-variant"
-          >
+          <button onClick={handleClearAll} className="text-sm font-semibold underline hover:text-on-surface-variant">
             Clear all
           </button>
         </div>
@@ -189,7 +216,7 @@ export default function FiltersModal({ isOpen, onClose, onApply, initialFilters 
               {AMENITIES.map((amenity) => (
                 <button
                   key={amenity}
-                  onClick={() => toggleItem(filters.amenities, amenity, "amenities")}
+                  onClick={() => toggleItem("amenities", amenity)}
                   className="flex items-center gap-3 group"
                 >
                   <div className={cn(
@@ -211,7 +238,7 @@ export default function FiltersModal({ isOpen, onClose, onApply, initialFilters 
               {FACILITIES.filter(f => f !== "Other").map((facility) => (
                 <button
                   key={facility}
-                  onClick={() => toggleItem(filters.facilities, facility, "facilities")}
+                  onClick={() => toggleItem("facilities", facility)}
                   className="flex items-center gap-3 group"
                 >
                   <div className={cn(
@@ -229,19 +256,7 @@ export default function FiltersModal({ isOpen, onClose, onApply, initialFilters 
 
         {/* Footer */}
         <div className="p-6 border-t flex items-center justify-between bg-surface sticky bottom-0 z-10">
-          <button 
-            onClick={() => setFilters({
-              minPrice: "",
-              maxPrice: "",
-              adults: 0,
-              children: 0,
-              amenities: [],
-              facilities: [],
-              province: "all",
-              category: "all"
-            })}
-            className="text-sm font-bold underline"
-          >
+          <button onClick={handleClearAll} className="text-sm font-bold underline">
             Clear all
           </button>
           <Button onClick={handleApply} className="rounded-xl px-8 py-6 text-base font-bold">
