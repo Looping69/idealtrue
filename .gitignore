@@ -12,3 +12,5 @@ backend/
 .runlogs/
 encore/**/*.js.map
 **/.git/
+
+.vercel
