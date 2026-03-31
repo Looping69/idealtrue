@@ -75,12 +75,6 @@ interface RequestKycUploadParams {
   contentType: string;
 }
 
-interface UploadKycAssetParams {
-  filename: string;
-  contentType: string;
-  dataBase64: string;
-}
-
 type KycSubmissionRow = {
   id: string;
   user_id: string;
@@ -229,36 +223,55 @@ export const requestKycUpload = api<RequestKycUploadParams, { objectKey: string;
   },
 );
 
-export const uploadKycAsset = api<UploadKycAssetParams, { objectKey: string }>(
-  { expose: true, method: "POST", path: "/ops/kyc/upload", auth: true },
-  async ({ filename, contentType, dataBase64 }) => {
-    const auth = requireRole("host", "admin");
-    if (!ALLOWED_KYC_CONTENT_TYPES.has(contentType)) {
-      throw APIError.invalidArgument("Unsupported KYC upload content type.");
-    }
-
-    const data = decodeBase64Payload(dataBase64);
-    const maxBytes = 7 * 1024 * 1024;
-    if (data.byteLength > maxBytes) {
-      throw APIError.invalidArgument("KYC upload exceeds the 7MB limit.");
-    }
-
-    const objectKey = `${auth.userID}/${Date.now()}-${sanitizeKycFilename(filename)}`;
-    await kycDocumentsBucket.upload(objectKey, data, { contentType });
-    return { objectKey };
-  },
-);
-
 export const submitKyc = api<{
   idType: "id_card" | "passport" | "drivers_license";
   idNumber: string;
-  idImageKey: string;
-  selfieImageKey: string;
+  idImageKey?: string;
+  selfieImageKey?: string;
+  idImageFilename?: string;
+  idImageContentType?: string;
+  idImageDataBase64?: string;
+  selfieImageFilename?: string;
+  selfieImageContentType?: string;
+  selfieImageDataBase64?: string;
 }, { submission: KycSubmission }>(
   { expose: true, method: "POST", path: "/ops/kyc/submissions", auth: true },
   async (params) => {
     const auth = requireRole("host", "admin");
     const now = new Date().toISOString();
+    let idImageKey = params.idImageKey;
+    let selfieImageKey = params.selfieImageKey;
+
+    if (!idImageKey) {
+      if (!params.idImageFilename || !params.idImageContentType || !params.idImageDataBase64) {
+        throw APIError.invalidArgument("Missing ID document upload payload.");
+      }
+      if (!ALLOWED_KYC_CONTENT_TYPES.has(params.idImageContentType)) {
+        throw APIError.invalidArgument("Unsupported ID document content type.");
+      }
+      const idImageData = decodeBase64Payload(params.idImageDataBase64);
+      if (idImageData.byteLength > 7 * 1024 * 1024) {
+        throw APIError.invalidArgument("ID document exceeds the 7MB limit.");
+      }
+      idImageKey = `${auth.userID}/${Date.now()}-${sanitizeKycFilename(params.idImageFilename)}`;
+      await kycDocumentsBucket.upload(idImageKey, idImageData, { contentType: params.idImageContentType });
+    }
+
+    if (!selfieImageKey) {
+      if (!params.selfieImageFilename || !params.selfieImageContentType || !params.selfieImageDataBase64) {
+        throw APIError.invalidArgument("Missing selfie upload payload.");
+      }
+      if (!ALLOWED_KYC_CONTENT_TYPES.has(params.selfieImageContentType)) {
+        throw APIError.invalidArgument("Unsupported selfie content type.");
+      }
+      const selfieImageData = decodeBase64Payload(params.selfieImageDataBase64);
+      if (selfieImageData.byteLength > 7 * 1024 * 1024) {
+        throw APIError.invalidArgument("Selfie exceeds the 7MB limit.");
+      }
+      selfieImageKey = `${auth.userID}/${Date.now()}-${sanitizeKycFilename(params.selfieImageFilename)}`;
+      await kycDocumentsBucket.upload(selfieImageKey, selfieImageData, { contentType: params.selfieImageContentType });
+    }
+
     const existing = await opsDB.queryRow<KycSubmissionRow>`
       SELECT * FROM kyc_submissions WHERE user_id = ${auth.userID}
     `;
@@ -268,8 +281,8 @@ export const submitKyc = api<{
         UPDATE kyc_submissions
         SET id_type = ${params.idType},
             id_number = ${params.idNumber},
-            id_image_key = ${params.idImageKey},
-            selfie_image_key = ${params.selfieImageKey},
+            id_image_key = ${idImageKey},
+            selfie_image_key = ${selfieImageKey},
             status = ${"pending"},
             rejection_reason = ${null},
             submitted_at = ${now},
@@ -283,8 +296,8 @@ export const submitKyc = api<{
           ...mapKycSubmission(existing),
           idType: params.idType,
           idNumber: params.idNumber,
-          idImageKey: params.idImageKey,
-          selfieImageKey: params.selfieImageKey,
+          idImageKey,
+          selfieImageKey,
           status: "pending",
           rejectionReason: null,
           submittedAt: now,
@@ -300,7 +313,7 @@ export const submitKyc = api<{
         id, user_id, id_type, id_number, id_image_key, selfie_image_key, status, submitted_at
       )
       VALUES (
-        ${id}, ${auth.userID}, ${params.idType}, ${params.idNumber}, ${params.idImageKey}, ${params.selfieImageKey}, ${"pending"}, ${now}
+        ${id}, ${auth.userID}, ${params.idType}, ${params.idNumber}, ${idImageKey}, ${selfieImageKey}, ${"pending"}, ${now}
       )
     `;
 
@@ -310,8 +323,8 @@ export const submitKyc = api<{
         userId: auth.userID,
         idType: params.idType,
         idNumber: params.idNumber,
-        idImageKey: params.idImageKey,
-        selfieImageKey: params.selfieImageKey,
+        idImageKey,
+        selfieImageKey,
         status: "pending",
         rejectionReason: null,
         submittedAt: now,

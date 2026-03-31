@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Loader2, ShieldCheck, Camera, IdCard, CheckCircle2, AlertCircle, Clock, X, RefreshCw } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
-import { submitKyc, uploadKycAsset, uploadKycDataUrl } from '@/lib/ops-client';
+import { serializeKycAsset, serializeKycDataUrl, submitKyc } from '@/lib/ops-client';
 import { useEffectiveKycStatus } from '@/hooks/use-effective-kyc-status';
 
 interface KYCModalProps {
@@ -184,16 +184,20 @@ export default function KYCModal({ isOpen, onClose }: KYCModalProps) {
       if (!idFile) {
         throw new Error('Missing ID document file.');
       }
-      const [idImageKey, selfieImageKey] = await Promise.all([
-        uploadKycAsset(idFile),
-        uploadKycDataUrl(`selfie-${Date.now()}.jpg`, formData.selfieImage),
+      const [idImageAsset, selfieImageAsset] = await Promise.all([
+        serializeKycAsset(idFile),
+        serializeKycDataUrl(`selfie-${Date.now()}.jpg`, formData.selfieImage),
       ]);
 
       await submitKyc({
         idType: formData.idType,
         idNumber: formData.idNumber,
-        idImageKey,
-        selfieImageKey,
+        idImageFilename: idImageAsset.filename,
+        idImageContentType: idImageAsset.contentType,
+        idImageDataBase64: idImageAsset.dataBase64,
+        selfieImageFilename: selfieImageAsset.filename,
+        selfieImageContentType: selfieImageAsset.contentType,
+        selfieImageDataBase64: selfieImageAsset.dataBase64,
       });
       setShowSubmissionForm(false);
       await refreshKycStatus();

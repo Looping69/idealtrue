@@ -33,47 +33,35 @@ async function blobToBase64(blob: Blob) {
   return btoa(binary);
 }
 
-export async function uploadKycAsset(file: File) {
-  const dataBase64 = await blobToBase64(file);
-  const uploaded = await encoreRequest<{ objectKey: string }>(
-    '/ops/kyc/upload',
-    {
-      method: 'POST',
-      body: JSON.stringify({
-        filename: file.name,
-        contentType: file.type || 'image/jpeg',
-        dataBase64,
-      }),
-    },
-    { auth: true },
-  );
-  return uploaded.objectKey;
+export async function serializeKycAsset(file: File) {
+  return {
+    filename: file.name,
+    contentType: file.type || 'image/jpeg',
+    dataBase64: await blobToBase64(file),
+  };
 }
 
-export async function uploadKycDataUrl(filename: string, dataUrl: string) {
+export async function serializeKycDataUrl(filename: string, dataUrl: string) {
   const response = await fetch(dataUrl);
   const blob = await response.blob();
-  const dataBase64 = await blobToBase64(blob);
-  const uploaded = await encoreRequest<{ objectKey: string }>(
-    '/ops/kyc/upload',
-    {
-      method: 'POST',
-      body: JSON.stringify({
-        filename,
-        contentType: blob.type || 'image/jpeg',
-        dataBase64,
-      }),
-    },
-    { auth: true },
-  );
-  return uploaded.objectKey;
+  return {
+    filename,
+    contentType: blob.type || 'image/jpeg',
+    dataBase64: await blobToBase64(blob),
+  };
 }
 
 export async function submitKyc(params: {
   idType: 'id_card' | 'passport' | 'drivers_license';
   idNumber: string;
-  idImageKey: string;
-  selfieImageKey: string;
+  idImageKey?: string;
+  selfieImageKey?: string;
+  idImageFilename?: string;
+  idImageContentType?: string;
+  idImageDataBase64?: string;
+  selfieImageFilename?: string;
+  selfieImageContentType?: string;
+  selfieImageDataBase64?: string;
 }) {
   const response = await encoreRequest<{ submission: KycSubmission }>(
     '/ops/kyc/submissions',
