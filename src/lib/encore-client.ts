@@ -2,7 +2,18 @@ export const DEFAULT_ENCORE_API_URL = "http://127.0.0.1:4000";
 export const TOKEN_STORAGE_KEY = "idealstay.encore.token";
 
 export function getEncoreApiUrl() {
-  return (import.meta as any).env?.VITE_ENCORE_API_URL || DEFAULT_ENCORE_API_URL;
+  const configuredUrl = (import.meta as any).env?.VITE_ENCORE_API_URL?.trim();
+
+  if (typeof window !== "undefined") {
+    const { hostname } = window.location;
+    const isLocalHost = hostname === "localhost" || hostname === "127.0.0.1";
+
+    if (!isLocalHost) {
+      return "/encore";
+    }
+  }
+
+  return configuredUrl || DEFAULT_ENCORE_API_URL;
 }
 
 function getStorage() {
