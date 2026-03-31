@@ -25,7 +25,7 @@ function mapNotification(notification: EncoreNotification): Notification {
 
 export async function listMyNotifications() {
   const response = await encoreRequest<{ notifications: EncoreNotification[] }>(
-    '/ops/notifications',
+    '/ops/my-notifications',
     {},
     { auth: true },
   );

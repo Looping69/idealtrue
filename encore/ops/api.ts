@@ -471,7 +471,7 @@ export const listAdminNotifications = api<void, { notifications: NotificationRec
 );
 
 export const listMyNotifications = api<void, { notifications: NotificationRecord[] }>(
-  { expose: true, method: "GET", path: "/ops/notifications", auth: true },
+  { expose: true, method: "GET", path: "/ops/my-notifications", auth: true },
   async () => {
     const auth = requireAuth();
     const audience = ["all", auth.userID];
