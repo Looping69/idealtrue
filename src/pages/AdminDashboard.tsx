@@ -716,18 +716,26 @@ export default function AdminDashboard() {
                 <p className="text-2xl font-bold">{pendingKycCount}</p>
                 <p className="text-sm text-slate-300">KYC submissions waiting on human review</p>
               </div>
+              <div className="space-y-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-300">Frontend telemetry</p>
+                <p className="text-sm text-emerald-100">
+                  Vercel Web Analytics is now wired into the frontend. Traffic and pageview telemetry live in the
+                  Vercel dashboard instead of being guessed at from UI behavior.
+                </p>
+              </div>
               <div className="space-y-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-amber-300">Missing instrumentation</p>
+                <p className="text-xs uppercase tracking-[0.2em] text-amber-300">Backend observability gap</p>
                 <p className="text-sm text-amber-100">
-                  Uptime, latency, database load, and error-rate metrics are not wired into this repo yet. Treat infra health as unknown until observability is connected.
+                  Uptime, latency, database load, and error-rate metrics are still not wired into this repo. Infra
+                  health is still unknown until real backend observability is connected.
                 </p>
               </div>
             </div>
 
             <div className="pt-4 border-t border-slate-800">
               <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-amber-400" />
-                <span className="text-xs font-medium text-slate-300">Operational telemetry still needs real observability wiring.</span>
+                <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                <span className="text-xs font-medium text-slate-300">Frontend analytics are live. Backend observability still needs real wiring.</span>
               </div>
             </div>
           </Card>
