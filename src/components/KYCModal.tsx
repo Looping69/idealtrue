@@ -33,6 +33,7 @@ export default function KYCModal({ isOpen, onClose }: KYCModalProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const selfieFileInputRef = useRef<HTMLInputElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
 
   // Cleanup camera stream on unmount or when camera is deactivated
@@ -122,6 +123,28 @@ export default function KYCModal({ isOpen, onClose }: KYCModalProps) {
       const reader = new FileReader();
       reader.onloadend = () => {
         setFormData(prev => ({ ...prev, idImage: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+      (e.target as HTMLInputElement).dataset.objectUrl = URL.createObjectURL(file);
+    }
+  };
+
+  const handleSelfieFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: "Please upload an image smaller than 5MB.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      stopCamera();
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData(prev => ({ ...prev, selfieImage: reader.result as string }));
       };
       reader.readAsDataURL(file);
       (e.target as HTMLInputElement).dataset.objectUrl = URL.createObjectURL(file);
@@ -329,8 +352,19 @@ export default function KYCModal({ isOpen, onClose }: KYCModalProps) {
                 </div>
                 <div className="space-y-2">
                   <Label>Selfie</Label>
+                  <input
+                    type="file"
+                    ref={selfieFileInputRef}
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleSelfieFileChange}
+                  />
                   <div 
-                    onClick={() => !formData.selfieImage && !isCameraActive && startCamera()}
+                    onClick={() => {
+                      if (!formData.selfieImage && !isCameraActive) {
+                        startCamera();
+                      }
+                    }}
                     className={cn(
                       "aspect-[4/3] bg-surface-container-low rounded-xl border-2 border-dashed border-outline-variant flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-surface-container transition-colors overflow-hidden relative group",
                       (formData.selfieImage || isCameraActive) && "border-primary border-solid"
@@ -362,22 +396,61 @@ export default function KYCModal({ isOpen, onClose }: KYCModalProps) {
                           >
                             <X className="w-4 h-4" />
                           </Button>
+                          <Button
+                            size="icon"
+                            variant="secondary"
+                            className="rounded-full h-8 w-8 bg-white/90 hover:bg-white"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              stopCamera();
+                              selfieFileInputRef.current?.click();
+                            }}
+                          >
+                            <IdCard className="w-4 h-4 text-primary" />
+                          </Button>
                         </div>
                       </div>
                     ) : formData.selfieImage ? (
                       <>
                         <img src={formData.selfieImage} alt="Selfie" className="w-full h-full object-cover" />
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                          <RefreshCw className="w-6 h-6 text-white" onClick={(e) => { e.stopPropagation(); startCamera(); }} />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-3 transition-opacity">
+                          <button
+                            type="button"
+                            className="rounded-full bg-white/90 p-2 hover:bg-white"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startCamera();
+                            }}
+                          >
+                            <Camera className="w-5 h-5 text-primary" />
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-full bg-white/90 p-2 hover:bg-white"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              selfieFileInputRef.current?.click();
+                            }}
+                          >
+                            <RefreshCw className="w-5 h-5 text-primary" />
+                          </button>
                         </div>
                       </>
                     ) : (
                       <>
                         <Camera className="w-6 h-6 text-outline-variant" />
-                        <span className="text-[10px] text-on-surface-variant font-medium">Take Selfie</span>
+                        <span className="text-[10px] text-on-surface-variant font-medium">Take or Upload</span>
                       </>
                     )}
                   </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full rounded-xl"
+                    onClick={() => selfieFileInputRef.current?.click()}
+                  >
+                    Upload Selfie Instead
+                  </Button>
                   <canvas ref={canvasRef} className="hidden" />
                 </div>
               </div>
