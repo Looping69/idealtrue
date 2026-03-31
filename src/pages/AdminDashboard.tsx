@@ -40,7 +40,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
-  Eye
+  Eye,
+  ArrowUpDown
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Listing, Booking, UserProfile, Referral, Review, Subscription, Notification, PlatformSettings } from '@/types';
@@ -91,6 +92,16 @@ type KycReviewState = KycSubmission & {
   idImageUrl?: string;
   selfieImageUrl?: string;
 };
+
+type DateSortDirection = 'asc' | 'desc';
+type DateSortTable =
+  | 'users'
+  | 'listings'
+  | 'enquiries'
+  | 'referrals'
+  | 'subscriptions'
+  | 'checkouts'
+  | 'kyc';
 
 function toListingPayload(listing: Listing, status = listing.status) {
   return {
@@ -155,6 +166,15 @@ export default function AdminDashboard() {
   const [editingListing, setEditingListing] = useState<Listing | null>(null);
   const [kycSubmissions, setKycSubmissions] = useState<KycSubmission[]>([]);
   const [kycFilter, setKycFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>('pending');
+  const [dateSorts, setDateSorts] = useState<Record<DateSortTable, DateSortDirection>>({
+    users: 'desc',
+    listings: 'desc',
+    enquiries: 'desc',
+    referrals: 'desc',
+    subscriptions: 'desc',
+    checkouts: 'desc',
+    kyc: 'desc',
+  });
   const [viewingKYCSubmission, setViewingKYCSubmission] = useState<KycReviewState | null>(null);
   const [kycAssetsLoading, setKycAssetsLoading] = useState(false);
   const [rejectingKycSubmission, setRejectingKycSubmission] = useState<KycReviewState | null>(null);
@@ -163,6 +183,33 @@ export default function AdminDashboard() {
   const pendingKycCount = useMemo(
     () => kycSubmissions.filter((submission) => submission.status === 'pending').length,
     [kycSubmissions],
+  );
+
+  const toggleDateSort = (table: DateSortTable) => {
+    setDateSorts((current) => ({
+      ...current,
+      [table]: current[table] === 'desc' ? 'asc' : 'desc',
+    }));
+  };
+
+  const sortByDate = <T,>(items: T[], getDateValue: (item: T) => string | null | undefined, direction: DateSortDirection) => {
+    return [...items].sort((left, right) => {
+      const leftTime = getDateValue(left) ? new Date(getDateValue(left) as string).getTime() : 0;
+      const rightTime = getDateValue(right) ? new Date(getDateValue(right) as string).getTime() : 0;
+      return direction === 'desc' ? rightTime - leftTime : leftTime - rightTime;
+    });
+  };
+
+  const renderDateSortHeader = (table: DateSortTable, label: string) => (
+    <button
+      type="button"
+      className="inline-flex items-center gap-1 font-bold uppercase tracking-wider text-slate-500 hover:text-slate-700"
+      onClick={() => toggleDateSort(table)}
+    >
+      <span>{label}</span>
+      <ArrowUpDown className="w-3 h-3" />
+      <span className="text-[9px]">{dateSorts[table] === 'desc' ? 'Newest' : 'Oldest'}</span>
+    </button>
   );
 
   useEffect(() => {
@@ -737,9 +784,13 @@ export default function AdminDashboard() {
   };
 
   const renderUsers = () => {
-    const filteredUsers = allUsers.filter(u => 
-      u.displayName.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      u.email.toLowerCase().includes(searchQuery.toLowerCase())
+    const filteredUsers = sortByDate(
+      allUsers.filter(u => 
+        u.displayName.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        u.email.toLowerCase().includes(searchQuery.toLowerCase())
+      ),
+      (user) => user.createdAt,
+      dateSorts.users,
     );
 
     return (
@@ -768,8 +819,11 @@ export default function AdminDashboard() {
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">User</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Role</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">KYC Status</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Stats</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+                    <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Stats</th>
+                    <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      {renderDateSortHeader('users', 'Created')}
+                    </th>
+                    <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -808,13 +862,16 @@ export default function AdminDashboard() {
                         {user.kycStatus}
                       </Badge>
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="text-xs space-y-1">
-                        <p><span className="text-slate-400">Referrals:</span> {user.referralCount}</p>
-                    <p><span className="text-slate-400">Balance:</span> {formatRand(user.balance)}</p>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
+                      <td className="px-6 py-4">
+                        <div className="text-xs space-y-1">
+                          <p><span className="text-slate-400">Referrals:</span> {user.referralCount}</p>
+                          <p><span className="text-slate-400">Balance:</span> {formatRand(user.balance)}</p>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <p className="text-xs text-slate-500">{new Date(user.createdAt).toLocaleDateString()}</p>
+                      </td>
+                      <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
                       {user.kycStatus === 'pending' && (
                         <Button 
                           variant="outline" 
@@ -875,9 +932,13 @@ export default function AdminDashboard() {
   };
 
   const renderListings = () => {
-    const filteredListings = allListings.filter(l => 
-      l.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      l.location.toLowerCase().includes(searchQuery.toLowerCase())
+    const filteredListings = sortByDate(
+      allListings.filter(l => 
+        l.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        l.location.toLowerCase().includes(searchQuery.toLowerCase())
+      ),
+      (listing) => listing.createdAt,
+      dateSorts.listings,
     );
 
     return (
@@ -906,8 +967,11 @@ export default function AdminDashboard() {
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Property</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Host</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Price</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+                    <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      {renderDateSortHeader('listings', 'Created')}
+                    </th>
+                    <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -931,12 +995,15 @@ export default function AdminDashboard() {
                       <td className="px-6 py-4">
                           <p className="text-sm font-bold">{formatRand(listing.pricePerNight)}</p>
                       </td>
-                      <td className="px-6 py-4">
-                        <Badge variant={listing.status === 'active' ? 'success' : 'neutral'} className="text-[10px] uppercase">
-                          {listing.status}
-                        </Badge>
-                      </td>
-                      <td className="px-6 py-4 text-right">
+                        <td className="px-6 py-4">
+                          <Badge variant={listing.status === 'active' ? 'success' : 'neutral'} className="text-[10px] uppercase">
+                            {listing.status}
+                          </Badge>
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="text-xs text-slate-500">{new Date(listing.createdAt).toLocaleDateString()}</p>
+                        </td>
+                        <td className="px-6 py-4 text-right">
                         <div className="flex justify-end gap-2">
                           <Button 
                             variant="ghost" 
@@ -986,14 +1053,18 @@ export default function AdminDashboard() {
   };
 
   const renderEnquiries = () => {
-    const filteredBookings = allBookings.filter(b => {
-      const listing = allListings.find(l => l.id === b.listingId);
-      const guest = allUsers.find(u => u.uid === b.guestUid);
-      return (
-        listing?.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        guest?.displayName.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    });
+    const filteredBookings = sortByDate(
+      allBookings.filter(b => {
+        const listing = allListings.find(l => l.id === b.listingId);
+        const guest = allUsers.find(u => u.uid === b.guestUid);
+        return (
+          listing?.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          guest?.displayName.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+      }),
+      (booking) => booking.createdAt,
+      dateSorts.enquiries,
+    );
 
     return (
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -1022,6 +1093,9 @@ export default function AdminDashboard() {
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Property</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Guest</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Dates</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    {renderDateSortHeader('enquiries', 'Created')}
+                  </th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Amount</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Status</th>
                 </tr>
@@ -1047,7 +1121,10 @@ export default function AdminDashboard() {
                         </p>
                       </td>
                       <td className="px-6 py-4">
-                    <p className="text-sm font-bold">{formatRand(booking.totalPrice)}</p>
+                        <p className="text-xs text-slate-500">{new Date(booking.createdAt).toLocaleString()}</p>
+                      </td>
+                      <td className="px-6 py-4">
+                        <p className="text-sm font-bold">{formatRand(booking.totalPrice)}</p>
                       </td>
                       <td className="px-6 py-4 text-right">
                         <Badge variant={
@@ -1142,21 +1219,25 @@ export default function AdminDashboard() {
   };
 
   const renderReferrals = () => {
-    const filteredReferrals = allReferrals.filter(ref => {
-      const referrer = allUsers.find(u => u.uid === ref.referrerUid);
-      const referred = allUsers.find(u => u.uid === ref.referredUid);
-      
-      const matchesSearch = 
-        referrer?.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        referred?.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        referrer?.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        referred?.email.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      const matchesTab = referralTab === 'guest' ? ref.type === 'signup' : ref.type === 'booking';
-      const matchesFilter = referralFilter === 'all' || ref.status === referralFilter;
+    const filteredReferrals = sortByDate(
+      allReferrals.filter(ref => {
+        const referrer = allUsers.find(u => u.uid === ref.referrerUid);
+        const referred = allUsers.find(u => u.uid === ref.referredUid);
+        
+        const matchesSearch = 
+          referrer?.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          referred?.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          referrer?.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          referred?.email.toLowerCase().includes(searchQuery.toLowerCase());
+        
+        const matchesTab = referralTab === 'guest' ? ref.type === 'signup' : ref.type === 'booking';
+        const matchesFilter = referralFilter === 'all' || ref.status === referralFilter;
 
-      return matchesSearch && matchesTab && matchesFilter;
-    });
+        return matchesSearch && matchesTab && matchesFilter;
+      }),
+      (referral) => referral.createdAt,
+      dateSorts.referrals,
+    );
 
     const counts = {
       all: allReferrals.filter(r => (referralTab === 'guest' ? r.type === 'signup' : r.type === 'booking')).length,
@@ -1245,7 +1326,9 @@ export default function AdminDashboard() {
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Referrer</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Referee</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Date</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    {renderDateSortHeader('referrals', 'Date')}
+                  </th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
                 </tr>
               </thead>
@@ -1474,6 +1557,8 @@ export default function AdminDashboard() {
     const totalRevenue = allSubscriptions.reduce((acc, curr) => acc + curr.amount, 0);
     const paidCheckouts = allCheckouts.filter((checkout) => checkout.status === 'paid');
     const pendingCheckouts = allCheckouts.filter((checkout) => checkout.status === 'pending');
+    const sortedSubscriptions = sortByDate(allSubscriptions, (subscription) => subscription.endDate, dateSorts.subscriptions);
+    const sortedCheckouts = sortByDate(allCheckouts, (checkout) => checkout.created_at, dateSorts.checkouts);
 
     return (
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -1514,11 +1599,13 @@ export default function AdminDashboard() {
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Plan</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Amount</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Expiry</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    {renderDateSortHeader('subscriptions', 'Expiry')}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {allSubscriptions.map((sub) => {
+                  {sortedSubscriptions.map((sub) => {
                   const host = allUsers.find(u => u.uid === sub.hostUid);
                   return (
                     <tr key={sub.id} className="hover:bg-slate-50 transition-colors">
@@ -1570,11 +1657,13 @@ export default function AdminDashboard() {
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Amount</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Provider Ref</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Created</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    {renderDateSortHeader('checkouts', 'Created')}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {allCheckouts.map((checkout) => {
+                  {sortedCheckouts.map((checkout) => {
                   const user = allUsers.find((candidate) => candidate.uid === checkout.user_id);
                   const detail = checkout.checkout_type === 'subscription'
                     ? `${checkout.host_plan || 'unknown'} • ${checkout.billing_interval || 'n/a'}`
@@ -1889,9 +1978,13 @@ export default function AdminDashboard() {
   };
 
   const renderKYC = () => {
-    const filteredKycSubmissions = kycFilter === 'all'
-      ? kycSubmissions
-      : kycSubmissions.filter((submission) => submission.status === kycFilter);
+    const filteredKycSubmissions = sortByDate(
+      kycFilter === 'all'
+        ? kycSubmissions
+        : kycSubmissions.filter((submission) => submission.status === kycFilter),
+      (submission) => submission.submittedAt,
+      dateSorts.kyc,
+    );
     const kycCounts = {
       all: kycSubmissions.length,
       pending: kycSubmissions.filter((submission) => submission.status === 'pending').length,
@@ -1940,7 +2033,9 @@ export default function AdminDashboard() {
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">ID Type</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">ID Number</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Submitted</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    {renderDateSortHeader('kyc', 'Submitted')}
+                  </th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
                 </tr>
               </thead>
