@@ -87,8 +87,10 @@ export default function ExploreView({ listings, onBook }: { listings: Listing[],
   }, [listings, filters, searchFilters]);
 
   const recentlyAddedListings = useMemo(() => {
-    return [...listings].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 4);
-  }, [listings]);
+    return [...filteredListings]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 8);
+  }, [filteredListings]);
 
   return (
     <div className="space-y-6">
@@ -150,12 +152,13 @@ export default function ExploreView({ listings, onBook }: { listings: Listing[],
                 <h2 className="text-2xl font-bold tracking-tight">Recently Added</h2>
                 <p className="text-on-surface-variant">Check out the newest properties on Ideal Stay.</p>
               </header>
-              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-4 sm:gap-x-6 gap-y-8 sm:gap-y-10">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-x-3 sm:gap-x-4 gap-y-5 sm:gap-y-6">
                 {recentlyAddedListings.map((listing) => (
                   <PropertyCard
                     key={listing.id}
                     listing={listing}
                     onClick={onBook}
+                    compact
                   />
                 ))}
               </div>
