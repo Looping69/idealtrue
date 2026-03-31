@@ -3,6 +3,10 @@
   "framework": "vite",
   "rewrites": [
     {
+      "source": "/encore/:path*",
+      "destination": "https://staging-ideal-stay-online-gh5i.encr.app/:path*"
+    },
+    {
       "source": "/((?!assets/|favicon\\.ico|robots\\.txt|sitemap\\.xml).*)",
       "destination": "/index.html"
     }
