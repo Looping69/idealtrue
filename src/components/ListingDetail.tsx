@@ -174,6 +174,23 @@ export default function ListingDetail({
               </div>
               <hr className="border-outline-variant" />
               <p className="text-on-surface-variant leading-relaxed text-lg">{listing.description}</p>
+              {listing.amenities.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="text-sm font-bold uppercase tracking-[0.18em] text-on-surface-variant">
+                    Amenities
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {listing.amenities.map((amenity) => (
+                      <span
+                        key={amenity}
+                        className="rounded-full border border-outline-variant bg-surface-container-low px-3 py-1.5 text-sm font-medium text-on-surface"
+                      >
+                        {amenity}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Ratings Breakdown */}
