@@ -1,5 +1,6 @@
 import { encoreRequest, setEncoreSessionToken } from './encore-client';
 import type { UserProfile } from '@/types';
+import { serializeImageFile } from './media-client';
 
 type EncoreUserRole = 'guest' | 'host' | 'admin';
 type EncoreHostPlan = 'standard' | 'professional' | 'premium';
@@ -226,4 +227,23 @@ export async function requestProfilePhotoUpload(filename: string) {
     },
     { auth: true },
   );
+}
+
+export async function uploadProfilePhoto(file: File) {
+  const serialized = await serializeImageFile(file, {
+    maxDimension: 1200,
+    maxBytes: 450 * 1024,
+    fallbackName: 'profile-photo',
+  });
+
+  const response = await encoreRequest<{ photoUrl: string }>(
+    '/users/me/photo',
+    {
+      method: 'POST',
+      body: JSON.stringify(serialized),
+    },
+    { auth: true },
+  );
+
+  return response.photoUrl;
 }

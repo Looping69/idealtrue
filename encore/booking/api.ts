@@ -1,6 +1,7 @@
 import { api, APIError } from "encore.dev/api";
 import { randomUUID } from "node:crypto";
 import { bookingDB } from "./db";
+import { bookingEvidenceBucket } from "./storage";
 import { requireAuth, requireRole } from "../shared/auth";
 import { platformEvents } from "../analytics/events";
 import { getListing } from "../catalog/api";
@@ -20,6 +21,7 @@ type BookingRow = {
   payment_method: string | null;
   payment_instructions: string | null;
   payment_reference: string | null;
+  payment_proof_key: string | null;
   payment_proof_url: string | null;
   payment_submitted_at: string | null;
   payment_confirmed_at: string | null;
@@ -45,6 +47,9 @@ interface UpdateBookingStatusParams {
 interface SubmitPaymentProofParams {
   id: string;
   paymentReference?: string | null;
+  paymentProofFilename?: string | null;
+  paymentProofContentType?: string | null;
+  paymentProofDataBase64?: string | null;
   paymentProofUrl?: string | null;
 }
 
@@ -72,6 +77,7 @@ function mapBooking(row: BookingRow): BookingRecord {
     paymentMethod: row.payment_method,
     paymentInstructions: row.payment_instructions,
     paymentReference: row.payment_reference,
+    paymentProofKey: row.payment_proof_key,
     paymentProofUrl: row.payment_proof_url,
     paymentSubmittedAt: row.payment_submitted_at,
     paymentConfirmedAt: row.payment_confirmed_at,
@@ -80,8 +86,48 @@ function mapBooking(row: BookingRow): BookingRecord {
   };
 }
 
-function mapBookingAccessRecord(row: BookingRow): BookingAccessRecord {
-  return mapBooking(row);
+const ALLOWED_PAYMENT_PROOF_CONTENT_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+
+function sanitizePaymentProofFilename(filename: string) {
+  const normalized = filename.trim().replace(/[^a-zA-Z0-9._-]/g, "_");
+  return normalized.slice(0, 120) || "payment-proof.jpg";
+}
+
+function decodeBase64Payload(dataBase64: string) {
+  const normalized = dataBase64.trim().replace(/^data:[^;]+;base64,/, "");
+  let buffer: Buffer;
+
+  try {
+    buffer = Buffer.from(normalized, "base64");
+  } catch {
+    throw APIError.invalidArgument("Invalid base64 upload payload.");
+  }
+
+  if (!buffer.length) {
+    throw APIError.invalidArgument("Upload payload was empty.");
+  }
+
+  return buffer;
+}
+
+async function resolvePaymentProofUrl(row: BookingRow) {
+  if (row.payment_proof_key) {
+    const signed = await bookingEvidenceBucket.signedDownloadUrl(row.payment_proof_key, { ttl: 900 });
+    return signed.url;
+  }
+
+  return row.payment_proof_url;
+}
+
+async function mapBookingAccessRecord(row: BookingRow): Promise<BookingAccessRecord> {
+  return {
+    ...mapBooking(row),
+    paymentProofUrl: await resolvePaymentProofUrl(row),
+  };
 }
 
 const CLEANING_FEE = 45;
@@ -211,7 +257,7 @@ export const listMyBookings = api<void, { bookings: BookingRecord[] }>(
       `,
       auth.userID,
     );
-    return { bookings: rows.map(mapBooking) };
+    return { bookings: await Promise.all(rows.map(mapBookingAccessRecord)) };
   },
 );
 
@@ -225,7 +271,7 @@ export const listAdminBookings = api<void, { bookings: BookingRecord[] }>(
       ORDER BY created_at DESC
       `,
     );
-    return { bookings: rows.map(mapBooking) };
+    return { bookings: await Promise.all(rows.map(mapBookingAccessRecord)) };
   },
 );
 
@@ -286,7 +332,7 @@ export const updateBookingStatus = api<UpdateBookingStatusParams, { booking: Boo
     }
 
     return {
-      booking: mapBooking({
+      booking: await mapBookingAccessRecord({
         ...existing,
         status: nextStatus,
         payment_confirmed_at: paymentConfirmedAt,
@@ -311,23 +357,51 @@ export const submitPaymentProof = api<SubmitPaymentProofParams, { booking: Booki
       throw APIError.failedPrecondition("Payment proof can only be submitted after the host requests payment.");
     }
 
+    let paymentProofKey = existing.payment_proof_key;
+    let paymentProofUrl = existing.payment_proof_url;
+
+    if (params.paymentProofDataBase64) {
+      if (!params.paymentProofFilename || !params.paymentProofContentType) {
+        throw APIError.invalidArgument("Payment proof filename and content type are required when uploading a file.");
+      }
+      if (!ALLOWED_PAYMENT_PROOF_CONTENT_TYPES.has(params.paymentProofContentType)) {
+        throw APIError.invalidArgument("Only JPG, PNG, and WEBP payment proof images are supported.");
+      }
+
+      const buffer = decodeBase64Payload(params.paymentProofDataBase64);
+      if (buffer.byteLength > 700 * 1024) {
+        throw APIError.invalidArgument("Payment proof image is too large. Please upload a smaller screenshot.");
+      }
+
+      const objectKey = `${existing.host_id}/${existing.id}/${Date.now()}-${sanitizePaymentProofFilename(params.paymentProofFilename)}`;
+      await bookingEvidenceBucket.upload(objectKey, buffer, {
+        contentType: params.paymentProofContentType,
+      });
+      paymentProofKey = objectKey;
+      paymentProofUrl = null;
+    } else if (params.paymentProofUrl !== undefined) {
+      paymentProofUrl = params.paymentProofUrl ?? null;
+    }
+
     const now = new Date().toISOString();
     await bookingDB.exec`
       UPDATE bookings
       SET status = ${"payment_submitted"},
           payment_reference = ${params.paymentReference ?? existing.payment_reference},
-          payment_proof_url = ${params.paymentProofUrl ?? existing.payment_proof_url},
+          payment_proof_key = ${paymentProofKey},
+          payment_proof_url = ${paymentProofUrl},
           payment_submitted_at = ${now},
           updated_at = ${now}
       WHERE id = ${params.id}
     `;
 
     return {
-      booking: mapBooking({
+      booking: await mapBookingAccessRecord({
         ...existing,
         status: "payment_submitted",
         payment_reference: params.paymentReference ?? existing.payment_reference,
-        payment_proof_url: params.paymentProofUrl ?? existing.payment_proof_url,
+        payment_proof_key: paymentProofKey,
+        payment_proof_url: paymentProofUrl,
         payment_submitted_at: now,
         updated_at: now,
       }),

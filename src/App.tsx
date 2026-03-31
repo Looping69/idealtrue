@@ -361,11 +361,12 @@ function AppContent() {
           listing={bookingForPaymentProof ? listings.find((listing) => listing.id === bookingForPaymentProof.listingId) ?? null : null}
           open={!!bookingForPaymentProof}
           onClose={() => setBookingForPaymentProof(null)}
-          onSubmit={async ({ id, paymentReference, paymentProofUrl }) => {
+          onSubmit={async ({ id, paymentReference, paymentProof, paymentProofUrl }) => {
             try {
               const updatedBooking = await submitPaymentProof({
                 id,
                 paymentReference,
+                paymentProof,
                 paymentProofUrl,
               });
               syncUpdatedBooking(updatedBooking);

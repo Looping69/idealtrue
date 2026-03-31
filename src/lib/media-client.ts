@@ -1,5 +1,11 @@
 import { encoreRequest } from './encore-client';
 
+export interface SerializedImageAsset {
+  filename: string;
+  contentType: 'image/jpeg';
+  dataBase64: string;
+}
+
 async function blobToBase64(blob: Blob) {
   const buffer = await blob.arrayBuffer();
   let binary = '';
@@ -36,10 +42,26 @@ function loadImage(src: string) {
 }
 
 async function compressImage(file: File) {
+  return compressImageFile(file, {
+    maxDimension: 1800,
+    maxBytes: Math.round(1.6 * 1024 * 1024),
+  });
+}
+
+async function compressImageFile(
+  file: File,
+  {
+    maxDimension,
+    maxBytes,
+  }: {
+    maxDimension: number;
+    maxBytes: number;
+  },
+) {
   const objectUrl = URL.createObjectURL(file);
   try {
     const image = await loadImage(objectUrl);
-    const scale = Math.min(1, 1800 / image.naturalWidth, 1800 / image.naturalHeight);
+    const scale = Math.min(1, maxDimension / image.naturalWidth, maxDimension / image.naturalHeight);
     const width = Math.max(1, Math.round(image.naturalWidth * scale));
     const height = Math.max(1, Math.round(image.naturalHeight * scale));
     const canvas = document.createElement('canvas');
@@ -59,12 +81,12 @@ async function compressImage(file: File) {
     for (const quality of [0.9, 0.82, 0.74, 0.66, 0.58, 0.5]) {
       const candidate = await canvasToBlob(canvas, quality);
       bestBlob = candidate;
-      if (candidate.size <= 1.6 * 1024 * 1024) {
+      if (candidate.size <= maxBytes) {
         return candidate;
       }
     }
 
-    if (!bestBlob || bestBlob.size > 1.6 * 1024 * 1024) {
+    if (!bestBlob || bestBlob.size > maxBytes) {
       throw new Error('Image is too large. Please use a smaller or less detailed photo.');
     }
 
@@ -72,6 +94,27 @@ async function compressImage(file: File) {
   } finally {
     URL.revokeObjectURL(objectUrl);
   }
+}
+
+export async function serializeImageFile(
+  file: File,
+  {
+    maxDimension = 1600,
+    maxBytes = 450 * 1024,
+    fallbackName = 'image-upload',
+  }: {
+    maxDimension?: number;
+    maxBytes?: number;
+    fallbackName?: string;
+  } = {},
+): Promise<SerializedImageAsset> {
+  const compressed = await compressImageFile(file, { maxDimension, maxBytes });
+  const safeFilename = file.name.replace(/\.[^.]+$/, '') || fallbackName;
+  return {
+    filename: `${safeFilename}.jpg`,
+    contentType: 'image/jpeg',
+    dataBase64: await blobToBase64(compressed),
+  };
 }
 
 async function uploadToSignedUrl(uploadUrl: string, file: File) {
@@ -89,17 +132,20 @@ async function uploadToSignedUrl(uploadUrl: string, file: File) {
 }
 
 export async function uploadListingImage(params: { listingId?: string; file: File }) {
-  const compressed = await compressImage(params.file);
-  const safeFilename = params.file.name.replace(/\.[^.]+$/, '') || 'listing-photo';
+  const serialized = await serializeImageFile(params.file, {
+    maxDimension: 1800,
+    maxBytes: Math.round(1.6 * 1024 * 1024),
+    fallbackName: 'listing-photo',
+  });
   const response = await encoreRequest<{ objectKey: string; publicUrl: string }>(
     '/host/listings/media/images',
     {
       method: 'POST',
       body: JSON.stringify({
         listingId: params.listingId,
-        filename: `${safeFilename}.jpg`,
-        contentType: 'image/jpeg',
-        dataBase64: await blobToBase64(compressed),
+        filename: serialized.filename,
+        contentType: serialized.contentType,
+        dataBase64: serialized.dataBase64,
       }),
     },
     { auth: true },
@@ -114,7 +160,7 @@ export async function uploadListingMedia(params: { listingId?: string; file: Fil
     {
       method: 'POST',
       body: JSON.stringify({
-        listingId: params.listingId,
+        listingId: params.listingId ?? '',
         filename: params.file.name,
         contentType: params.file.type || 'application/octet-stream',
       }),

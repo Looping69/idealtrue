@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Button } from './button';
 import { toast } from 'sonner';
 import { Input } from './input';
-import { X, Video, Plus, Upload, Loader2 } from 'lucide-react';
+import { X, Video, Plus, Upload, Loader2, Film } from 'lucide-react';
 import { uploadListingMedia } from '@/lib/media-client';
 
 interface VideoUploadProps {
@@ -15,6 +15,7 @@ interface VideoUploadProps {
 export default function VideoUpload({ value, onChange, listingId, maxSizeMB = 50 }: VideoUploadProps) {
   const [url, setUrl] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [isDragActive, setIsDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const addVideo = () => {
@@ -24,19 +25,13 @@ export default function VideoUpload({ value, onChange, listingId, maxSizeMB = 50
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    const file = files[0];
-    
-    // Check file size
+  const uploadVideoFile = async (file: File) => {
     if (file.size > maxSizeMB * 1024 * 1024) {
       toast.error(`Video size must be less than ${maxSizeMB}MB.`);
       return;
     }
-    if (!listingId) {
-      toast.error('Save the listing first so media can be attached to it.');
+    if (!file.type.startsWith('video/')) {
+      toast.error('Please choose a valid video file.');
       return;
     }
 
@@ -56,6 +51,12 @@ export default function VideoUpload({ value, onChange, listingId, maxSizeMB = 50
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    await uploadVideoFile(files[0]);
   };
 
   return (
@@ -91,6 +92,40 @@ export default function VideoUpload({ value, onChange, listingId, maxSizeMB = 50
         </div>
       </div>
 
+      <div
+        className={`rounded-xl border-2 border-dashed p-6 transition-colors ${
+          isDragActive
+            ? 'border-primary bg-primary/5'
+            : 'border-outline-variant bg-surface-container-low'
+        }`}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setIsDragActive(true);
+        }}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          setIsDragActive(false);
+        }}
+        onDrop={async (event) => {
+          event.preventDefault();
+          setIsDragActive(false);
+          const file = event.dataTransfer.files?.[0];
+          if (file) {
+            await uploadVideoFile(file);
+          }
+        }}
+      >
+        <div className="flex flex-col items-center justify-center text-center">
+          <Film className="mb-3 h-10 w-10 text-outline-variant" />
+          <p className="text-sm font-medium text-on-surface">
+            Drop a showcase video here or use Upload
+          </p>
+          <p className="mt-1 text-xs text-on-surface-variant">
+            MP4, WEBM, or MOV. You can add this before the listing is saved.
+          </p>
+        </div>
+      </div>
+
       {value ? (
         <div className="relative aspect-video rounded-xl overflow-hidden border border-outline-variant group">
           <div className="w-full h-full bg-surface-container-low flex items-center justify-center">
@@ -105,9 +140,9 @@ export default function VideoUpload({ value, onChange, listingId, maxSizeMB = 50
           </button>
         </div>
       ) : (
-        <div className="aspect-video border-2 border-dashed border-outline-variant rounded-xl flex flex-col items-center justify-center text-outline-variant">
+        <div className="aspect-video border-2 border-dashed border-outline-variant rounded-xl flex flex-col items-center justify-center text-outline-variant bg-surface-container-low">
           <Video className="w-12 h-12 mb-2" />
-          <p className="text-sm">No video added yet</p>
+          <p className="text-sm">No showcase video added yet</p>
         </div>
       )}
     </div>

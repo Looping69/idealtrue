@@ -255,30 +255,42 @@ export default function HostDashboard({
                           </button>
                         </div>
                       ) : booking.status === 'payment_submitted' ? (
-                        <button
-                          onClick={async () => {
-                            try {
-                              const updatedBooking = await updateBookingStatus(booking.id, 'confirmed');
-                              setLocalBookings((current) => current.map((item) => item.id === booking.id ? updatedBooking : item));
-                              onBookingUpdated(updatedBooking);
-                              socket?.emit('booking:confirmed', {
-                                hostUid: booking.hostUid,
-                                guestUid: booking.guestUid,
-                                listingId: booking.listingId,
-                                bookingId: booking.id,
-                                status: 'confirmed',
-                                message: `Payment confirmed for ${listing?.title || 'your stay'}.`,
-                              });
-                              toast.success('Payment marked as received.');
-                            } catch (error) {
-                              console.error('Failed to confirm payment:', error);
-                              toast.error('Failed to confirm payment.');
-                            }
-                          }}
-                          className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-                        >
-                          Mark Paid
-                        </button>
+                        <div className="flex gap-2">
+                          {booking.paymentProofUrl && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-[10px]"
+                              onClick={() => window.open(booking.paymentProofUrl || undefined, '_blank', 'noopener,noreferrer')}
+                            >
+                              View Proof
+                            </Button>
+                          )}
+                          <button
+                            onClick={async () => {
+                              try {
+                                const updatedBooking = await updateBookingStatus(booking.id, 'confirmed');
+                                setLocalBookings((current) => current.map((item) => item.id === booking.id ? updatedBooking : item));
+                                onBookingUpdated(updatedBooking);
+                                socket?.emit('booking:confirmed', {
+                                  hostUid: booking.hostUid,
+                                  guestUid: booking.guestUid,
+                                  listingId: booking.listingId,
+                                  bookingId: booking.id,
+                                  status: 'confirmed',
+                                  message: `Payment confirmed for ${listing?.title || 'your stay'}.`,
+                                });
+                                toast.success('Payment marked as received.');
+                              } catch (error) {
+                                console.error('Failed to confirm payment:', error);
+                                toast.error('Failed to confirm payment.');
+                              }
+                            }}
+                            className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                          >
+                            Mark Paid
+                          </button>
+                        </div>
                       ) : (
                         <Button size="sm" variant="ghost" onClick={() => navigate('/host/enquiries')}>Details</Button>
                       )}

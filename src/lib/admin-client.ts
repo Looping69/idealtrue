@@ -320,6 +320,11 @@ function mapNotification(notification: EncoreNotification): Notification {
   };
 }
 
+function isAdminObservabilityEnabled() {
+  const env = (import.meta as any).env ?? {};
+  return env.DEV || env.VITE_ENABLE_ADMIN_OBSERVABILITY === 'true';
+}
+
 export async function listAdminUsers() {
   const response = await encoreRequest<{ users: EncoreUser[] }>('/admin/users', {}, { auth: true });
   return response.users.map(mapUser);
@@ -436,6 +441,10 @@ export async function listAdminNotifications() {
 }
 
 export async function getAdminObservability(): Promise<AdminObservabilitySnapshot | null> {
+  if (!isAdminObservabilityEnabled()) {
+    return null;
+  }
+
   try {
     const response = await encoreRequest<{ snapshot: AdminObservabilitySnapshot }>(
       '/ops/admin/observability',

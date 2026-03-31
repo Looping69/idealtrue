@@ -79,6 +79,12 @@ interface RequestProfilePhotoUploadParams {
   filename: string;
 }
 
+interface UploadProfilePhotoParams {
+  filename: string;
+  contentType: string;
+  dataBase64: string;
+}
+
 interface AdminUpdateUserParams {
   userId: string;
   displayName?: string;
@@ -174,6 +180,34 @@ function validatePassword(password: string | null | undefined) {
   if (!password || password.length < 8) {
     throw APIError.invalidArgument("Password must be at least 8 characters long.");
   }
+}
+
+const ALLOWED_PROFILE_PHOTO_CONTENT_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+
+function sanitizeUploadFilename(filename: string) {
+  const normalized = filename.trim().replace(/[^a-zA-Z0-9._-]/g, "_");
+  return normalized.slice(0, 120) || "upload.jpg";
+}
+
+function decodeBase64Payload(dataBase64: string) {
+  const normalized = dataBase64.trim().replace(/^data:[^;]+;base64,/, "");
+  let buffer: Buffer;
+
+  try {
+    buffer = Buffer.from(normalized, "base64");
+  } catch {
+    throw APIError.invalidArgument("Invalid base64 upload payload.");
+  }
+
+  if (!buffer.length) {
+    throw APIError.invalidArgument("Upload payload was empty.");
+  }
+
+  return buffer;
 }
 
 function resolveSelfServiceRole(existingRole: UserRole, isAdmin: boolean, requestedRole?: UserRole) {
@@ -680,6 +714,29 @@ export const requestProfilePhotoUpload = api<RequestProfilePhotoUploadParams, { 
       objectKey,
       uploadUrl: signed.url,
       publicUrl: profileMediaBucket.publicUrl(objectKey),
+    };
+  },
+);
+
+export const uploadProfilePhoto = api<UploadProfilePhotoParams, { photoUrl: string }>(
+  { expose: true, method: "POST", path: "/users/me/photo", auth: true },
+  async ({ filename, contentType, dataBase64 }) => {
+    const auth = requireAuth();
+    if (!ALLOWED_PROFILE_PHOTO_CONTENT_TYPES.has(contentType)) {
+      throw APIError.invalidArgument("Only JPG, PNG, and WEBP profile photos are supported.");
+    }
+
+    const buffer = decodeBase64Payload(dataBase64);
+    if (buffer.byteLength > 700 * 1024) {
+      throw APIError.invalidArgument("Profile photo is too large. Please upload a smaller image.");
+    }
+
+    const safeFilename = sanitizeUploadFilename(filename);
+    const objectKey = `${auth.userID}/${Date.now()}-${safeFilename}`;
+    await profileMediaBucket.upload(objectKey, buffer, { contentType });
+
+    return {
+      photoUrl: profileMediaBucket.publicUrl(objectKey),
     };
   },
 );

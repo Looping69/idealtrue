@@ -1,4 +1,5 @@
 import { encoreRequest } from './encore-client';
+import type { SerializedImageAsset } from './media-client';
 import type { Booking, Listing, Referral, Review } from '@/types';
 
 interface EncoreListing {
@@ -239,13 +240,21 @@ export async function updateBookingStatus(id: string, status: 'awaiting_guest_pa
 export async function submitPaymentProof(params: {
   id: string;
   paymentReference?: string | null;
+  paymentProof?: SerializedImageAsset | null;
   paymentProofUrl?: string | null;
 }) {
   const response = await encoreRequest<{ booking: EncoreBooking }>(
     `/bookings/${params.id}/payment-proof`,
     {
       method: 'POST',
-      body: JSON.stringify(params),
+      body: JSON.stringify({
+        id: params.id,
+        paymentReference: params.paymentReference,
+        paymentProofUrl: params.paymentProofUrl,
+        paymentProofFilename: params.paymentProof?.filename ?? null,
+        paymentProofContentType: params.paymentProof?.contentType ?? null,
+        paymentProofDataBase64: params.paymentProof?.dataBase64 ?? null,
+      }),
     },
     { auth: true },
   );

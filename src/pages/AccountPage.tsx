@@ -10,7 +10,7 @@ import { Loader2, Camera, User as UserIcon, Mail, Shield, Calendar, ShieldCheck,
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import KYCModal from '@/components/KYCModal';
-import { requestEmailVerification, requestProfilePhotoUpload, updateEncoreProfile } from '@/lib/identity-client';
+import { requestEmailVerification, updateEncoreProfile, uploadProfilePhoto } from '@/lib/identity-client';
 import { useEffectiveKycStatus } from '@/hooks/use-effective-kyc-status';
 
 export default function AccountPage() {
@@ -106,21 +106,10 @@ export default function AccountPage() {
 
     setIsUploading(true);
     try {
-      const signed = await requestProfilePhotoUpload(file.name);
-      const uploadResponse = await fetch(signed.uploadUrl, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': file.type || 'application/octet-stream',
-        },
-        body: file,
-      });
-
-      if (!uploadResponse.ok) {
-        throw new Error(`Upload failed with status ${uploadResponse.status}`);
-      }
+      const photoUrl = await uploadProfilePhoto(file);
 
       await updateEncoreProfile({
-        photoUrl: signed.publicUrl,
+        photoUrl,
       });
       await refreshProfile();
       toast({
@@ -272,7 +261,7 @@ export default function AccountPage() {
                       disabled
                       className="bg-surface-container-low"
                     />
-                    <p className="text-[10px] text-on-surface-variant italic">Email cannot be changed as it is linked to your Google account.</p>
+                    <p className="text-[10px] text-on-surface-variant italic">Email cannot be changed from account settings yet.</p>
                     {!profile.emailVerified && (
                       <Button
                         type="button"
