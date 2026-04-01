@@ -349,15 +349,15 @@ async function ensureWallet(db: QueryExecutor, userId: string) {
   };
 }
 
-async function getContentEntitlementsForUser(userId: string, db: QueryExecutor = billingDB): Promise<ContentEntitlements> {
+async function getContentEntitlementsForUserWithExecutor(userId: string, executor: QueryExecutor): Promise<ContentEntitlements> {
   const user = await getCurrentUserPlan(userId);
-  const wallet = await ensureWallet(db, userId);
+  const wallet = await ensureWallet(executor, userId);
   const limits = CONTENT_LIMITS[user.host_plan];
   const monthStart = new Date();
   monthStart.setUTCDate(1);
   monthStart.setUTCHours(0, 0, 0, 0);
 
-  const usage = await db.queryRow<{ count: number }>`
+  const usage = await executor.queryRow<{ count: number }>`
     SELECT COUNT(*)::int AS count
     FROM content_drafts
     WHERE user_id = ${userId}
@@ -375,6 +375,10 @@ async function getContentEntitlementsForUser(userId: string, db: QueryExecutor =
     creditBalance: wallet.balance,
     canSchedule: limits.canSchedule,
   };
+}
+
+async function getContentEntitlementsForUser(userId: string): Promise<ContentEntitlements> {
+  return getContentEntitlementsForUserWithExecutor(userId, billingDB);
 }
 
 async function debitOneContentUse(db: QueryExecutor, userId: string, entitlements: ContentEntitlements, referenceId: string) {
@@ -847,7 +851,7 @@ export const generateContentDraft = api<GenerateContentDraftParams, { draft: Con
     const tx = await billingDB.begin();
 
     try {
-      const entitlements = await getContentEntitlementsForUser(auth.userID, tx);
+      const entitlements = await getContentEntitlementsForUserWithExecutor(auth.userID, tx);
       await debitOneContentUse(tx, auth.userID, entitlements, draftId);
 
       const now = new Date().toISOString();

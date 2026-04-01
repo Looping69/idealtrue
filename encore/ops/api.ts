@@ -151,11 +151,11 @@ const ALLOWED_KYC_CONTENT_TYPES = new Set([
 ]);
 
 const backendStartedAt = new Date();
-const observabilityChecks = new Counter("admin_observability_checks_total");
-const observabilityFailures = new Counter("admin_observability_check_failures_total");
-const observabilityDbPing = new GaugeGroup<{ database: string }>("admin_observability_db_ping_ms");
-const observabilityDbHealthy = new GaugeGroup<{ database: string }>("admin_observability_db_healthy");
-const observabilityUptime = new Gauge("admin_observability_uptime_seconds");
+export const observabilityChecks = new Counter("admin_observability_checks_total");
+export const observabilityFailures = new Counter("admin_observability_check_failures_total");
+export const observabilityDbPing = new GaugeGroup<{ database: string }>("admin_observability_db_ping_ms");
+export const observabilityDbHealthy = new GaugeGroup<{ database: string }>("admin_observability_db_healthy");
+export const observabilityUptime = new Gauge("admin_observability_uptime_seconds");
 
 function mapKycSubmission(row: KycSubmissionRow): KycSubmission {
   return {
