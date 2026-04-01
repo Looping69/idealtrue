@@ -56,16 +56,21 @@ export default function HostDashboard({
     <div className="space-y-8">
       {/* Subscription Banner */}
       {profile?.host_plan === 'standard' && (
-        <Card className="bg-gradient-to-r from-zinc-900 to-zinc-800 text-white p-8 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-surface/5 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none"></div>
+        <Card className="bg-gradient-to-r from-blue-700 via-blue-600 to-cyan-500 text-white p-8 relative overflow-hidden border-0 shadow-xl shadow-blue-900/20">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none"></div>
           <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="space-y-2 text-center md:text-left">
               <h2 className="text-2xl font-bold flex items-center gap-2 justify-center md:justify-start">
-                <Sparkles className="w-6 h-6 text-amber-400" /> Level Up Your Reach
+                <Sparkles className="w-6 h-6 text-amber-300" /> Level Up Your Reach
               </h2>
-              <p className="text-outline-variant max-w-md">Standard gets you live. Professional and Premium add stronger promotion, multi-listing scale, and better support.</p>
+              <p className="max-w-md text-sm leading-6 text-blue-50/95">
+                Standard gets you live. Professional and Premium add stronger promotion, multi-listing scale, and better support.
+              </p>
             </div>
-            <Button variant="secondary" className="rounded-full px-8" onClick={onUpgrade}>
+            <Button
+              className="rounded-full px-8 bg-white text-blue-700 hover:bg-blue-50 border border-white/70 shadow-sm"
+              onClick={onUpgrade}
+            >
               View Plans <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
           </div>
