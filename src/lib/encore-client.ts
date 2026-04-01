@@ -49,8 +49,35 @@ export async function encoreRequest<T>(
   init: RequestInit = {},
   opts: { auth?: boolean } = {},
 ): Promise<T> {
+  const response = await encoreFetch(path, init, opts);
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `Encore request failed with status ${response.status}`);
+  }
+
+  return response.json() as Promise<T>;
+}
+
+export async function encoreFetch(
+  path: string,
+  init: RequestInit = {},
+  opts: { auth?: boolean } = {},
+): Promise<Response> {
   const headers = new Headers(init.headers || {});
-  headers.set("Content-Type", "application/json");
+  const body = init.body;
+
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+  const isBlob = typeof Blob !== "undefined" && body instanceof Blob;
+  const isBinaryBody =
+    isFormData ||
+    isBlob ||
+    body instanceof ArrayBuffer ||
+    ArrayBuffer.isView(body as ArrayBufferView | null);
+
+  if (body && !headers.has("Content-Type") && !isBinaryBody) {
+    headers.set("Content-Type", "application/json");
+  }
 
   if (opts.auth) {
     const token = getStoredToken();
@@ -60,15 +87,8 @@ export async function encoreRequest<T>(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch(`${getEncoreApiUrl()}${path}`, {
+  return fetch(`${getEncoreApiUrl()}${path}`, {
     ...init,
     headers,
   });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(body || `Encore request failed with status ${response.status}`);
-  }
-
-  return response.json() as Promise<T>;
 }

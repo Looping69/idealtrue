@@ -1,4 +1,4 @@
-import { encoreRequest } from './encore-client';
+import { encoreFetch, encoreRequest } from './encore-client';
 
 export interface SerializedImageAsset {
   filename: string;
@@ -155,21 +155,28 @@ export async function uploadListingImage(params: { listingId?: string; file: Fil
 }
 
 export async function uploadListingMedia(params: { listingId?: string; file: File }) {
-  const signed = await encoreRequest<{ objectKey: string; uploadUrl: string; publicUrl: string }>(
-    '/host/listings/media/upload-url',
-    {
-      method: 'POST',
-      body: JSON.stringify({
-        listingId: params.listingId ?? '',
-        filename: params.file.name,
-        contentType: params.file.type || 'application/octet-stream',
-      }),
-    },
-    { auth: true },
-  );
+  const query = new URLSearchParams({
+    listingId: params.listingId ?? '',
+    filename: params.file.name,
+    contentType: params.file.type || 'application/octet-stream',
+  });
 
-  await uploadToSignedUrl(signed.uploadUrl, params.file);
-  return signed.publicUrl;
+  const response = await encoreFetch(`/host/listings/media/videos?${query.toString()}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': params.file.type || 'application/octet-stream',
+      'X-Upload-Filename': params.file.name,
+    },
+    body: params.file,
+  }, { auth: true });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `Video upload failed with status ${response.status}`);
+  }
+
+  const payload = await response.json() as { objectKey: string; publicUrl: string };
+  return payload.publicUrl;
 }
 
 export async function uploadChatAttachment(params: { bookingId: string; file: File }) {

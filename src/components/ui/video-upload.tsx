@@ -16,6 +16,7 @@ export default function VideoUpload({ value, onChange, listingId, maxSizeMB = 50
   const [url, setUrl] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
+  const [uploadLabel, setUploadLabel] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const addVideo = () => {
@@ -37,19 +38,22 @@ export default function VideoUpload({ value, onChange, listingId, maxSizeMB = 50
 
     setIsUploading(true);
     try {
+      setUploadLabel(`Uploading ${file.name}...`);
       const publicUrl = await uploadListingMedia({
         listingId,
         file,
       });
       onChange(publicUrl);
+      toast.success('Video uploaded.');
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
     } catch (error) {
       console.error('Upload error:', error);
-      toast.error('Failed to upload video. Please try again.');
+      toast.error(error instanceof Error ? error.message : 'Failed to upload video. Please try again.');
     } finally {
       setIsUploading(false);
+      setUploadLabel(null);
     }
   };
 
@@ -121,8 +125,9 @@ export default function VideoUpload({ value, onChange, listingId, maxSizeMB = 50
             Drop a showcase video here or use Upload
           </p>
           <p className="mt-1 text-xs text-on-surface-variant">
-            MP4, WEBM, or MOV. You can add this before the listing is saved.
+            MP4, WEBM, or MOV up to {maxSizeMB}MB. You can add this before the listing is saved.
           </p>
+          {uploadLabel && <p className="mt-2 text-xs text-on-surface-variant">{uploadLabel}</p>}
         </div>
       </div>
 

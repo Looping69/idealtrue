@@ -1,6 +1,7 @@
 import { api, APIError } from "encore.dev/api";
 import { getAuthData } from "encore.dev/internal/codegen/auth";
 import { randomUUID } from "node:crypto";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { catalogDB } from "./db";
 import { listingMediaBucket } from "./storage";
 import { requireRole, type AuthData } from "../shared/auth";
@@ -109,6 +110,12 @@ const ALLOWED_LISTING_IMAGE_CONTENT_TYPES = new Set([
   "image/webp",
 ]);
 
+const ALLOWED_LISTING_VIDEO_CONTENT_TYPES = new Set([
+  "video/mp4",
+  "video/webm",
+  "video/quicktime",
+]);
+
 function getMaxImagesForPlan(plan: HostAccessRow["host_plan"]) {
   return plan === "standard" ? 5 : 20;
 }
@@ -155,6 +162,52 @@ function decodeBase64Payload(dataBase64: string) {
   }
 
   return buffer;
+}
+
+async function readRawBuffer(req: IncomingMessage, maxBytes: number) {
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+
+  for await (const chunk of req) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalBytes += buffer.length;
+    if (totalBytes > maxBytes) {
+      throw APIError.invalidArgument("Upload is too large.");
+    }
+    chunks.push(buffer);
+  }
+
+  const payload = Buffer.concat(chunks);
+  if (!payload.length) {
+    throw APIError.invalidArgument("Upload payload cannot be empty.");
+  }
+
+  return payload;
+}
+
+async function assertCanUploadMedia(auth: AuthData, listingId?: string) {
+  if (!listingId) {
+    return;
+  }
+
+  const listing = await catalogDB.queryRow<ListingRow>`
+    SELECT * FROM listings WHERE id = ${listingId}
+  `;
+  if (!listing) throw APIError.notFound("Listing not found.");
+  if (listing.host_id !== auth.userID && auth.role !== "admin") {
+    throw APIError.permissionDenied("You cannot upload media for another host's listing.");
+  }
+}
+
+function buildListingMediaObjectKey(params: {
+  auth: AuthData;
+  listingId?: string;
+  filename: string;
+}) {
+  const safeFilename = sanitizeObjectFilename(params.filename);
+  return params.listingId
+    ? `${params.listingId}/${Date.now()}-${safeFilename}`
+    : `drafts/${params.auth.userID}/${Date.now()}-${safeFilename}`;
 }
 
 function canReadUnpublishedListing(auth: AuthData | null, listingHostId: string) {
@@ -465,20 +518,8 @@ export const requestListingMediaUpload = api<UploadUrlParams, { objectKey: strin
     if (!ALLOWED_LISTING_MEDIA_CONTENT_TYPES.has(contentType)) {
       throw APIError.invalidArgument("Unsupported listing media content type.");
     }
-    const safeFilename = sanitizeObjectFilename(filename);
-    if (listingId) {
-      const listing = await catalogDB.queryRow<ListingRow>`
-        SELECT * FROM listings WHERE id = ${listingId}
-      `;
-      if (!listing) throw APIError.notFound("Listing not found.");
-      if (listing.host_id !== auth.userID && auth.role !== "admin") {
-        throw APIError.permissionDenied("You cannot upload media for another host's listing.");
-      }
-    }
-
-    const objectKey = listingId
-      ? `${listingId}/${Date.now()}-${safeFilename}`
-      : `drafts/${auth.userID}/${Date.now()}-${safeFilename}`;
+    await assertCanUploadMedia(auth, listingId);
+    const objectKey = buildListingMediaObjectKey({ auth, listingId, filename });
     const signed = await listingMediaBucket.signedUploadUrl(objectKey, {
       ttl: 60 * 15,
     });
@@ -499,15 +540,7 @@ export const uploadListingImage = api<UploadListingImageParams, { objectKey: str
       throw APIError.invalidArgument("Unsupported image type. Please upload JPG, PNG, or WEBP.");
     }
 
-    if (listingId) {
-      const listing = await catalogDB.queryRow<ListingRow>`
-        SELECT * FROM listings WHERE id = ${listingId}
-      `;
-      if (!listing) throw APIError.notFound("Listing not found.");
-      if (listing.host_id !== auth.userID && auth.role !== "admin") {
-        throw APIError.permissionDenied("You cannot upload media for another host's listing.");
-      }
-    }
+    await assertCanUploadMedia(auth, listingId);
 
     const imageData = decodeBase64Payload(dataBase64);
     if (imageData.byteLength > 2 * 1024 * 1024) {
@@ -515,9 +548,11 @@ export const uploadListingImage = api<UploadListingImageParams, { objectKey: str
     }
 
     const safeFilename = sanitizeObjectFilename(filename).replace(/\.[^.]+$/, "") || "listing-image";
-    const objectKey = listingId
-      ? `${listingId}/${Date.now()}-${safeFilename}.jpg`
-      : `drafts/${auth.userID}/${Date.now()}-${safeFilename}.jpg`;
+    const objectKey = buildListingMediaObjectKey({
+      auth,
+      listingId,
+      filename: `${safeFilename}.jpg`,
+    });
 
     await listingMediaBucket.upload(objectKey, imageData, {
       contentType,
@@ -527,5 +562,60 @@ export const uploadListingImage = api<UploadListingImageParams, { objectKey: str
       objectKey,
       publicUrl: listingMediaBucket.publicUrl(objectKey),
     };
+  },
+);
+
+export const uploadListingVideo = api.raw(
+  {
+    expose: true,
+    method: "POST",
+    path: "/host/listings/media/videos",
+    auth: true,
+    bodyLimit: 120 * 1024 * 1024,
+    sensitive: true,
+  },
+  async (req: IncomingMessage, resp: ServerResponse) => {
+    try {
+      const auth = requireRole("host", "admin");
+      const requestUrl = new URL(req.url || "/", "http://encore.local");
+      const listingId = requestUrl.searchParams.get("listingId") || undefined;
+      const filename = requestUrl.searchParams.get("filename") || req.headers["x-upload-filename"]?.toString() || "listing-video";
+      const contentType = requestUrl.searchParams.get("contentType") || req.headers["content-type"]?.toString() || "application/octet-stream";
+
+      if (!ALLOWED_LISTING_VIDEO_CONTENT_TYPES.has(contentType)) {
+        throw APIError.invalidArgument("Unsupported video type. Please upload MP4, WEBM, or MOV.");
+      }
+
+      await assertCanUploadMedia(auth, listingId);
+      const videoData = await readRawBuffer(req, 100 * 1024 * 1024);
+      const objectKey = buildListingMediaObjectKey({ auth, listingId, filename });
+
+      await listingMediaBucket.upload(objectKey, videoData, {
+        contentType,
+      });
+
+      resp.statusCode = 200;
+      resp.setHeader("Content-Type", "application/json");
+      resp.end(JSON.stringify({
+        objectKey,
+        publicUrl: listingMediaBucket.publicUrl(objectKey),
+      }));
+    } catch (error) {
+      const statusCode = error instanceof APIError
+        ? error.code === "invalid_argument"
+          ? 400
+          : error.code === "permission_denied"
+            ? 403
+            : error.code === "unauthenticated"
+              ? 401
+              : error.code === "not_found"
+                ? 404
+                : 500
+        : 500;
+      const message = error instanceof Error ? error.message : "Video upload failed.";
+      resp.statusCode = statusCode;
+      resp.setHeader("Content-Type", "application/json");
+      resp.end(JSON.stringify({ error: message }));
+    }
   },
 );
