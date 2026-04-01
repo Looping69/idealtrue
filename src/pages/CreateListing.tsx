@@ -70,6 +70,7 @@ export default function CreateListing() {
   const { effectiveKycStatus } = useEffectiveKycStatus(profile);
   const { id } = useParams();
   const isEditMode = !!id;
+  const [workingListingId, setWorkingListingId] = useState<string | undefined>(id);
   const [step, setStep] = useState(1);
   const totalSteps = 6;
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -175,6 +176,10 @@ export default function CreateListing() {
   }, [id, user, navigate, toast]);
 
   useEffect(() => {
+    setWorkingListingId(id);
+  }, [id]);
+
+  useEffect(() => {
     if (isEditMode) {
       fetchListingData();
     }
@@ -267,8 +272,9 @@ export default function CreateListing() {
         coordinates
       };
 
+      const targetListingId = workingListingId || (isEditMode ? id : undefined);
       await getClient.hospitality.saveListing({
-        id: isEditMode ? id : undefined,
+        id: targetListingId,
         ...propertyPayload
       });
 
@@ -290,7 +296,70 @@ export default function CreateListing() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [user, formData, isEditMode, id, navigate, toast]);
+  }, [user, formData, isEditMode, id, navigate, toast, workingListingId]);
+
+  const ensureListingId = useCallback(async () => {
+    if (!user) {
+      throw new Error('You must be logged in to upload media.');
+    }
+
+    if (workingListingId) {
+      return workingListingId;
+    }
+
+    let coordinates = formData.coordinates;
+
+    if (!coordinates && formData.location) {
+      const addressToGeocode = formData.location + (formData.province ? `, ${formData.province}` : "");
+      const resolvedCoordinates = await geocodeAddress(addressToGeocode);
+      if (resolvedCoordinates) {
+        coordinates = resolvedCoordinates;
+      }
+    }
+
+    const propertyPayload = {
+      title: formData.title,
+      description: formData.description,
+      location: formData.location,
+      area: formData.area,
+      province: formData.province || "",
+      pricePerNight: Number(formData.pricePerNight),
+      discount: Number(formData.discount),
+      type: formData.category,
+      amenities: formData.amenities,
+      facilities: formData.facilities,
+      other_facility: formData.other_facility,
+      adults: formData.adults,
+      children: formData.children,
+      bedrooms: formData.bedrooms,
+      bathrooms: formData.bathrooms,
+      is_self_catering: formData.is_self_catering,
+      has_restaurant: formData.has_restaurant,
+      restaurant_offers: formData.restaurant_offers,
+      images: formData.images,
+      video_url: formData.video_url,
+      is_occupied: formData.is_occupied,
+      hostUid: user.uid,
+      status: 'pending' as const,
+      category: parentCategory || "",
+      rating: 0,
+      reviews: 0,
+      coordinates
+    };
+
+    const result = await getClient.hospitality.saveListing({
+      ...propertyPayload,
+    }) as { listing?: { id?: string } };
+
+    const createdId = result?.listing?.id;
+    if (!createdId) {
+      throw new Error('Could not create the listing before media upload.');
+    }
+
+    setWorkingListingId(createdId);
+    navigate(`/host/edit-listing/${createdId}`, { replace: true });
+    return createdId;
+  }, [user, workingListingId, formData, parentCategory, navigate]);
 
   if (checkingLimit) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>;
 
@@ -764,7 +833,8 @@ export default function CreateListing() {
                       value={formData.images}
                       onChange={(urls) => updateData("images", urls)}
                       onRemove={(url) => updateData("images", formData.images.filter(i => i !== url))}
-                      listingId={id}
+                      listingId={workingListingId}
+                      ensureListingId={ensureListingId}
                       maxFiles={maxImagesForPlan}
                     />
                   </div>
@@ -774,7 +844,8 @@ export default function CreateListing() {
                     <VideoUpload
                       value={formData.video_url}
                       onChange={(url) => updateData("video_url", url)}
-                      listingId={id}
+                      listingId={workingListingId}
+                      ensureListingId={ensureListingId}
                       maxSizeMB={100}
                     />
                   </div>

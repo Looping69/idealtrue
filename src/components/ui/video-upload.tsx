@@ -11,10 +11,11 @@ interface VideoUploadProps {
   value: string | null;
   onChange: (url: string | null) => void;
   listingId?: string;
+  ensureListingId?: () => Promise<string | undefined>;
   maxSizeMB?: number;
 }
 
-export default function VideoUpload({ value, onChange, listingId, maxSizeMB = 50 }: VideoUploadProps) {
+export default function VideoUpload({ value, onChange, listingId, ensureListingId, maxSizeMB = 50 }: VideoUploadProps) {
   const [url, setUrl] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
@@ -40,9 +41,13 @@ export default function VideoUpload({ value, onChange, listingId, maxSizeMB = 50
 
     setIsUploading(true);
     try {
+      let resolvedListingId = listingId;
+      if (!resolvedListingId && ensureListingId) {
+        resolvedListingId = await ensureListingId();
+      }
       setUploadLabel(`Uploading ${file.name}...`);
       const publicUrl = await uploadListingMedia({
-        listingId,
+        listingId: resolvedListingId,
         file,
       });
       onChange(publicUrl);

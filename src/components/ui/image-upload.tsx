@@ -12,10 +12,11 @@ interface ImageUploadProps {
   onChange: (urls: string[]) => void;
   onRemove: (url: string) => void;
   listingId?: string;
+  ensureListingId?: () => Promise<string | undefined>;
   maxFiles?: number;
 }
 
-export default function ImageUpload({ value, onChange, onRemove, listingId, maxFiles = 5 }: ImageUploadProps) {
+export default function ImageUpload({ value, onChange, onRemove, listingId, ensureListingId, maxFiles = 5 }: ImageUploadProps) {
   const [url, setUrl] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -56,6 +57,10 @@ export default function ImageUpload({ value, onChange, onRemove, listingId, maxF
       }
 
       const uploadedUrls: string[] = [];
+      let resolvedListingId = listingId;
+      if (!resolvedListingId && ensureListingId) {
+        resolvedListingId = await ensureListingId();
+      }
       for (let index = 0; index < uploadQueue.length; index += 1) {
         const file = uploadQueue[index];
         if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
@@ -65,7 +70,7 @@ export default function ImageUpload({ value, onChange, onRemove, listingId, maxF
 
         setUploadLabel(`Uploading ${index + 1} of ${uploadQueue.length}: ${file.name}`);
         const publicUrl = await uploadListingImage({
-          listingId,
+          listingId: resolvedListingId,
           file,
         });
         uploadedUrls.push(publicUrl);
