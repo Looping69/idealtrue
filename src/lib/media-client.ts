@@ -1,4 +1,4 @@
-import { encoreFetch, encoreRequest } from './encore-client';
+import { encoreFetch, encoreRequest, TOKEN_STORAGE_KEY } from './encore-client';
 
 export interface SerializedImageAsset {
   filename: string;
@@ -167,6 +167,24 @@ function useSameOriginUploadProxy() {
   return hostname !== 'localhost' && hostname !== '127.0.0.1';
 }
 
+async function uploadViaAppProxy(path: string, fileBody: Blob | File, authToken: string) {
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${authToken}`,
+      'Content-Type': fileBody.type || 'application/octet-stream',
+    },
+    body: fileBody,
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `Upload failed with status ${response.status}`);
+  }
+
+  return response.json() as Promise<{ objectKey: string; publicUrl: string }>;
+}
+
 export async function uploadListingImage(params: { listingId?: string; file: File }) {
   const prepared = await prepareImageUpload(params.file, {
     maxDimension: 1800,
@@ -175,27 +193,20 @@ export async function uploadListingImage(params: { listingId?: string; file: Fil
   });
 
   if (useSameOriginUploadProxy()) {
+    const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+    if (!token) {
+      throw new Error('Missing Encore session token.');
+    }
     const query = new URLSearchParams({
       listingId: params.listingId ?? '',
       filename: prepared.filename,
       contentType: prepared.contentType,
     });
-
-    const response = await encoreFetch(`/api/listing-image-upload?${query.toString()}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': prepared.contentType,
-        'X-Upload-Filename': prepared.filename,
-      },
-      body: prepared.blob,
-    }, { auth: true });
-
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(body || `Image upload failed with status ${response.status}`);
-    }
-
-    const payload = await response.json() as { objectKey: string; publicUrl: string };
+    const payload = await uploadViaAppProxy(
+      `/api/listing-image-upload?${query.toString()}`,
+      prepared.blob,
+      token,
+    );
     return payload.publicUrl;
   }
 
@@ -218,27 +229,20 @@ export async function uploadListingImage(params: { listingId?: string; file: Fil
 
 export async function uploadListingMedia(params: { listingId?: string; file: File }) {
   if (useSameOriginUploadProxy()) {
+    const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+    if (!token) {
+      throw new Error('Missing Encore session token.');
+    }
     const query = new URLSearchParams({
       listingId: params.listingId ?? '',
       filename: params.file.name,
       contentType: params.file.type || 'application/octet-stream',
     });
-
-    const response = await encoreFetch(`/api/listing-media-upload?${query.toString()}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': params.file.type || 'application/octet-stream',
-        'X-Upload-Filename': params.file.name,
-      },
-      body: params.file,
-    }, { auth: true });
-
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(body || `Video upload failed with status ${response.status}`);
-    }
-
-    const payload = await response.json() as { objectKey: string; publicUrl: string };
+    const payload = await uploadViaAppProxy(
+      `/api/listing-media-upload?${query.toString()}`,
+      params.file,
+      token,
+    );
     return payload.publicUrl;
   }
 
