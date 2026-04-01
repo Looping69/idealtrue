@@ -1,4 +1,4 @@
-import { encoreRequest, setEncoreSessionToken } from './encore-client';
+import { encoreRequest } from './encore-client';
 import type { UserProfile } from '@/types';
 import { serializeImageFile } from './media-client';
 
@@ -95,7 +95,6 @@ function mapEncoreUserToProfile(user: EncoreUser): UserProfile {
 }
 
 async function storeSessionResponse(response: { token: string; user: EncoreUser }) {
-  setEncoreSessionToken(response.token);
   return mapEncoreUserToProfile(response.user);
 }
 
@@ -171,15 +170,12 @@ export async function verifyEmailToken(token: string) {
 }
 
 export async function getEncoreSessionProfile() {
-  const response = await encoreRequest<{ token?: string; user: EncoreUser }>('/auth/session', {}, { auth: true });
-  if (response.token) {
-    setEncoreSessionToken(response.token);
-  }
+  const response = await encoreRequest<{ user: EncoreUser }>('/auth/session', {}, { auth: true });
   return mapEncoreUserToProfile(response.user);
 }
 
 export async function updateEncoreProfile(params: UpdateEncoreProfileParams) {
-  const response = await encoreRequest<{ token?: string; user: EncoreUser }>(
+  const response = await encoreRequest<{ user: EncoreUser }>(
     '/users/me',
     {
       method: 'PUT',
@@ -187,10 +183,6 @@ export async function updateEncoreProfile(params: UpdateEncoreProfileParams) {
     },
     { auth: true },
   );
-
-  if (response.token) {
-    setEncoreSessionToken(response.token);
-  }
 
   return mapEncoreUserToProfile(response.user);
 }

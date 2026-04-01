@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { catalogDB } from "./db";
 import { listingMediaBucket } from "./storage";
+import { computeHostListingQuota, type HostListingQuota } from "./quota";
 import { requireRole, type AuthData } from "../shared/auth";
 import { identityDB } from "../identity/db";
 import { platformEvents } from "../analytics/events";
@@ -132,6 +133,19 @@ async function getHostAccess(hostId: string) {
   }
 
   return host;
+}
+
+async function getHostListingQuota(hostId: string): Promise<HostListingQuota> {
+  const host = await getHostAccess(hostId);
+  const existingListings = await catalogDB.queryRow<{ count: number }>`
+    SELECT COUNT(*)::int AS count
+    FROM listings
+    WHERE host_id = ${hostId}
+      AND status <> ${"archived"}
+      AND status <> ${"draft"}
+  `;
+
+  return computeHostListingQuota(host.host_plan, existingListings?.count ?? 0);
 }
 
 function assertListingImageCount(images: string[], plan: HostAccessRow["host_plan"]) {
@@ -278,16 +292,9 @@ async function assertHostCanCreateListing(hostId: string) {
     throw APIError.permissionDenied("Hosts must complete KYC before creating listings.");
   }
 
-  const existingListings = await catalogDB.queryRow<{ count: number }>`
-    SELECT COUNT(*)::int AS count
-    FROM listings
-    WHERE host_id = ${hostId}
-      AND status <> ${"archived"}
-      AND status <> ${"draft"}
-  `;
-
-  if (host.host_plan === "standard" && (existingListings?.count ?? 0) >= 1) {
-    throw APIError.permissionDenied("Standard plan hosts can only keep one active listing.");
+  const quota = await getHostListingQuota(hostId);
+  if (!quota.canCreate) {
+    throw APIError.permissionDenied("Standard plan hosts can only keep one non-archived listing.");
   }
 }
 
@@ -362,6 +369,14 @@ export const getListing = api<{ id: string }, { listing: ListingRecord }>(
     }
 
     return { listing: mapListing(row) };
+  },
+);
+
+export const getMyListingQuota = api<void, { quota: HostListingQuota }>(
+  { expose: true, method: "GET", path: "/host/listings/quota", auth: true },
+  async () => {
+    const auth = requireRole("host", "admin");
+    return { quota: await getHostListingQuota(auth.userID) };
   },
 );
 

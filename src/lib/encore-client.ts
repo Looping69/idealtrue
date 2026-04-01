@@ -1,55 +1,26 @@
-export const DEFAULT_ENCORE_API_URL = "http://127.0.0.1:4000";
-export const TOKEN_STORAGE_KEY = "idealstay.encore.token";
+export const DEFAULT_ENCORE_API_URL = "/api/encore";
 
 export function getEncoreApiUrl() {
-  const configuredUrl = (import.meta as any).env?.VITE_ENCORE_API_URL?.trim();
-
-  if (typeof window !== "undefined") {
-    const { hostname } = window.location;
-    const isLocalHost = hostname === "localhost" || hostname === "127.0.0.1";
-
-    if (!isLocalHost) {
-      return "/encore";
-    }
-  }
-
-  return configuredUrl || DEFAULT_ENCORE_API_URL;
-}
-
-function getStorage() {
-  if (typeof window === "undefined") {
-    throw new Error("Encore session storage is unavailable outside the browser.");
-  }
-
-  return window.localStorage;
-}
-
-function getStoredToken() {
-  return getStorage().getItem(TOKEN_STORAGE_KEY);
-}
-
-export function getEncoreSessionToken() {
-  return getStoredToken();
-}
-
-export function hasEncoreSessionToken() {
-  return !!getStoredToken();
+  return DEFAULT_ENCORE_API_URL;
 }
 
 export function clearEncoreSession() {
-  getStorage().removeItem(TOKEN_STORAGE_KEY);
-}
+  if (typeof window === "undefined") {
+    return Promise.resolve();
+  }
 
-export function setEncoreSessionToken(token: string) {
-  getStorage().setItem(TOKEN_STORAGE_KEY, token);
+  return fetch("/api/auth/logout", {
+    method: "POST",
+    credentials: "same-origin",
+  }).catch(() => undefined);
 }
 
 export async function encoreRequest<T>(
   path: string,
   init: RequestInit = {},
-  opts: { auth?: boolean } = {},
+  _opts: { auth?: boolean } = {},
 ): Promise<T> {
-  const response = await encoreFetch(path, init, opts);
+  const response = await encoreFetch(path, init);
 
   if (!response.ok) {
     const body = await response.text();
@@ -62,7 +33,7 @@ export async function encoreRequest<T>(
 export async function encoreFetch(
   path: string,
   init: RequestInit = {},
-  opts: { auth?: boolean } = {},
+  _opts: { auth?: boolean } = {},
 ): Promise<Response> {
   const headers = new Headers(init.headers || {});
   const body = init.body;
@@ -79,16 +50,9 @@ export async function encoreFetch(
     headers.set("Content-Type", "application/json");
   }
 
-  if (opts.auth) {
-    const token = getStoredToken();
-    if (!token) {
-      throw new Error("Missing Encore session token.");
-    }
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-
   return fetch(`${getEncoreApiUrl()}${path}`, {
     ...init,
     headers,
+    credentials: "same-origin",
   });
 }

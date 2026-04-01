@@ -2,6 +2,7 @@ import { api, APIError } from "encore.dev/api";
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { billingDB } from "./db";
+import { classifyYocoWebhookOutcome } from "./webhook-classification";
 import { catalogDB } from "../catalog/db";
 import { identityDB } from "../identity/db";
 import { requireAuth, requireRole } from "../shared/auth";
@@ -155,6 +156,11 @@ type CheckoutSessionRow = {
 
 type WebhookEventRow = {
   id: string;
+};
+
+type StoredWebhookEventRow = {
+  event_type: string;
+  payload_json: string;
 };
 
 type QueryExecutor = Pick<typeof billingDB, "queryRow" | "queryAll" | "exec">;
@@ -677,6 +683,52 @@ async function findCheckoutForWebhook(event: YocoWebhookEvent) {
   return null;
 }
 
+async function getCheckoutSessionById(checkoutId: string) {
+  return billingDB.queryRow<CheckoutSessionRow>`
+    SELECT *
+    FROM billing_checkout_sessions
+    WHERE id = ${checkoutId}
+  `;
+}
+
+async function findSuccessfulWebhookForCheckout(session: CheckoutSessionRow): Promise<YocoWebhookEvent | null> {
+  const matchingEvents = await billingDB.queryAll<StoredWebhookEventRow>`
+    SELECT event_type, payload::text AS payload_json
+    FROM billing_webhook_events
+    WHERE provider = ${"yoco"}
+      AND (
+        payload #>> '{payload,metadata,checkoutId}' = ${session.id}
+        OR (${session.provider_checkout_id ?? null} IS NOT NULL AND payload #>> '{payload,id}' = ${session.provider_checkout_id ?? null})
+      )
+    ORDER BY received_at DESC
+    LIMIT 20
+  `;
+
+  for (const row of matchingEvents) {
+    const payload = JSON.parse(row.payload_json) as YocoWebhookEvent;
+    const eventType = row.event_type || payload.type;
+    if (classifyYocoWebhookOutcome(eventType, payload.payload?.status) === "paid") {
+      return payload;
+    }
+  }
+
+  return null;
+}
+
+async function reconcilePendingCheckout(session: CheckoutSessionRow) {
+  if (session.status !== "pending") {
+    return session;
+  }
+
+  const successfulWebhook = await findSuccessfulWebhookForCheckout(session);
+  if (!successfulWebhook) {
+    return session;
+  }
+
+  await fulfilSuccessfulCheckout(session, successfulWebhook.payload?.paymentId ?? null);
+  return (await getCheckoutSessionById(session.id)) ?? session;
+}
+
 export const listPlans = api<void, { plans: SubscriptionPlan[] }>(
   { expose: true, method: "GET", path: "/billing/plans" },
   async () => ({ plans: HOST_PLANS }),
@@ -825,11 +877,7 @@ export const getCheckoutStatus = api<{ checkoutId: string }, { status: CheckoutS
   { expose: true, method: "GET", path: "/billing/checkouts/:checkoutId", auth: true },
   async ({ checkoutId }) => {
     const auth = requireAuth();
-    const checkout = await billingDB.queryRow<CheckoutSessionRow>`
-      SELECT *
-      FROM billing_checkout_sessions
-      WHERE id = ${checkoutId}
-    `;
+    const checkout = await getCheckoutSessionById(checkoutId);
 
     if (!checkout) {
       throw APIError.notFound("Checkout session not found.");
@@ -838,7 +886,8 @@ export const getCheckoutStatus = api<{ checkoutId: string }, { status: CheckoutS
       throw APIError.permissionDenied("You do not have access to this checkout.");
     }
 
-    return { status: checkout.status, checkoutType: checkout.checkout_type };
+    const resolvedCheckout = await reconcilePendingCheckout(checkout);
+    return { status: resolvedCheckout.status, checkoutType: resolvedCheckout.checkout_type };
   },
 );
 
@@ -1008,14 +1057,13 @@ export const yocoWebhook = api.raw(
       }
 
       const providerPaymentId = event.payload?.paymentId ?? null;
-      const payloadStatus = event.payload?.status?.toLowerCase() ?? "";
-      const normalizedEventType = eventType.toLowerCase();
+      const outcome = classifyYocoWebhookOutcome(eventType, event.payload?.status);
 
-      if (normalizedEventType.includes("success") || payloadStatus === "successful" || payloadStatus === "paid") {
+      if (outcome === "paid") {
         await fulfilSuccessfulCheckout(session, providerPaymentId);
-      } else if (normalizedEventType.includes("failed") || payloadStatus === "failed") {
+      } else if (outcome === "failed") {
         await markCheckoutStatus(session.id, "failed");
-      } else if (normalizedEventType.includes("cancel") || payloadStatus === "cancelled") {
+      } else if (outcome === "cancelled") {
         await markCheckoutStatus(session.id, "cancelled");
       }
 

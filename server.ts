@@ -1,145 +1,102 @@
 import express from "express";
 import { createServer } from "http";
-import { Server } from "socket.io";
 import { createServer as createViteServer } from "vite";
 import path from "path";
+import {
+  copyRequestHeaders,
+  getSessionTokenFromCookieHeader,
+  isJsonResponse,
+  readRawRequestBody,
+  resolveEncoreApiUrl,
+  sanitizeSessionPayload,
+  serializeClearedSessionCookie,
+  serializeSessionCookie,
+  shouldPersistSessionToken,
+} from "./lib/server/session-cookie.js";
 
-const ENCORE_API_URL =
-  process.env.ENCORE_API_URL ||
-  process.env.VITE_ENCORE_API_URL ||
-  "http://127.0.0.1:4000";
-
-function getAllowedOrigins() {
-  const raw = process.env.SOCKET_IO_ORIGINS || process.env.CLIENT_ORIGIN || "http://localhost:3000";
-  return raw
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean);
+function getEncoreProxyPath(req: express.Request) {
+  const originalUrl = req.originalUrl || req.url;
+  const [pathname, search = ""] = originalUrl.split("?");
+  const proxyPrefix = "/api/encore";
+  const encorePath = pathname.startsWith(proxyPrefix) ? pathname.slice(proxyPrefix.length) || "/" : "/";
+  return `${encorePath}${search ? `?${search}` : ""}`;
 }
 
-async function resolveSocketUserId(socket: any) {
-  const authToken = typeof socket.handshake.auth?.token === "string"
-    ? socket.handshake.auth.token
-    : undefined;
-  const headerToken = typeof socket.handshake.headers?.authorization === "string"
-    ? socket.handshake.headers.authorization
-    : undefined;
-  const rawToken = authToken || headerToken;
-  if (!rawToken) return null;
+async function proxyEncoreRequest(req: express.Request, res: express.Response) {
+  try {
+    const encoreApiUrl = resolveEncoreApiUrl(process.env, { allowLocalDefault: true });
+    const proxyPath = getEncoreProxyPath(req);
+    const targetUrl = new URL(proxyPath, `${encoreApiUrl}/`);
+    const headers = copyRequestHeaders(req.headers);
+    const sessionToken = getSessionTokenFromCookieHeader(req.headers.cookie);
 
-  const token = rawToken.replace(/^Bearer\s+/i, "").trim();
-  if (!token) return null;
+    if (sessionToken && !headers.has("authorization")) {
+      headers.set("authorization", `Bearer ${sessionToken}`);
+    }
 
-  const response = await fetch(`${ENCORE_API_URL}/auth/session`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+    let body: Buffer | undefined;
+    if (!["GET", "HEAD"].includes(req.method)) {
+      body = await readRawRequestBody(req);
+    }
 
-  if (!response.ok) return null;
-  const body = await response.json() as { user?: { id?: string } };
-  return body.user?.id ?? null;
+    const upstream = await fetch(targetUrl, {
+      method: req.method,
+      headers,
+      body,
+      redirect: "manual",
+    });
+
+    const contentType = upstream.headers.get("content-type");
+    res.status(upstream.status);
+
+    const pathname = targetUrl.pathname;
+    if (isJsonResponse(contentType)) {
+      const payload = await upstream.json();
+      if (shouldPersistSessionToken(pathname, payload)) {
+        res.setHeader("Set-Cookie", serializeSessionCookie(payload.token, false));
+      }
+      res.type("application/json");
+      res.send(JSON.stringify(sanitizeSessionPayload(pathname, payload)));
+      return;
+    }
+
+    if (contentType) {
+      res.setHeader("Content-Type", contentType);
+    }
+
+    const location = upstream.headers.get("location");
+    if (location) {
+      res.setHeader("Location", location);
+    }
+
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+    res.send(buffer);
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Encore proxy request failed.",
+    });
+  }
 }
 
 async function startServer() {
   const app = express();
   const httpServer = createServer(app);
-  const allowedOrigins = getAllowedOrigins();
-  const io = new Server(httpServer, {
-    cors: {
-      origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) {
-          callback(null, true);
-          return;
-        }
-        callback(new Error("Socket origin is not allowed."));
-      },
-      methods: ["GET", "POST"],
-      credentials: true,
-    },
-  });
-  const PORT = 3000;
+  const port = 3000;
 
-  io.use(async (socket, next) => {
-    try {
-      const userID = await resolveSocketUserId(socket);
-      if (!userID) {
-        next(new Error("Unauthenticated socket."));
-        return;
-      }
-      socket.data.userID = userID;
-      socket.join(userID);
-      next();
-    } catch (error) {
-      next(new Error("Socket authentication failed."));
-    }
+  app.post("/api/auth/logout", (_req, res) => {
+    res.status(204);
+    res.setHeader("Set-Cookie", serializeClearedSessionCookie(false));
+    res.end();
   });
 
-  // Socket.io connection
-  io.on("connection", (socket) => {
-    const userID = socket.data.userID as string;
-    console.log("User connected:", socket.id, "user:", userID);
-
-    socket.on("join", (userId) => {
-      if (typeof userId === "string" && userId === userID) {
-        socket.join(userID);
-      }
-    });
-
-    socket.on("booking:request", (data) => {
-      if (!data || data.guestUid !== userID || typeof data.hostUid !== "string") return;
-      console.log("Booking request received:", data);
-      io.to(data.hostUid).emit("notification", {
-        type: "booking_request",
-        message: "New booking request!",
-        data
-      });
-    });
-
-    socket.on("booking:update", (data) => {
-      if (!data || data.hostUid !== userID || typeof data.guestUid !== "string") return;
-      console.log("Booking update received:", data);
-      io.to(data.guestUid).emit("notification", {
-        type: "booking_update",
-        message: `Booking ${data.status}!`,
-        data
-      });
-    });
-
-    socket.on("booking:confirmed", (data) => {
-      if (!data || data.hostUid !== userID || typeof data.guestUid !== "string") return;
-      console.log("Booking confirmed received:", data);
-      io.to(data.guestUid).emit("booking:confirmed", data);
-      // Also emit a generic notification for the UI to pick up if it doesn't listen for booking:confirmed
-      io.to(data.guestUid).emit("notification", {
-        type: "booking_confirmed",
-        message: "Your booking has been confirmed!",
-        data
-      });
-    });
-
-    socket.on("chat:message", (data) => {
-      if (!data || data.senderId !== userID || typeof data.receiverId !== "string") return;
-      console.log("Chat message received:", data);
-      io.to(data.receiverId).emit("notification", {
-        type: "chat_message",
-        message: `New message from ${data.senderName || 'someone'}`,
-        data
-      });
-    });
-
-    socket.on("disconnect", () => {
-      console.log("User disconnected:", socket.id);
-    });
+  app.use("/api/encore", (req, res) => {
+    void proxyEncoreRequest(req, res);
   });
 
-  // API routes
-  app.get("/api/health", (req, res) => {
+  app.get("/api/health", (_req, res) => {
     res.json({ status: "ok" });
   });
 
-  // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -147,16 +104,16 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+    app.get("*", (_req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
     });
   }
 
-  httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  httpServer.listen(port, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${port}`);
   });
 }
 
-startServer();
+void startServer();

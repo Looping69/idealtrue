@@ -82,7 +82,7 @@ export const getClient = {
       };
 
       try {
-        const response = await encoreRequest<{ listing: { id: string } }>(
+        const response = await encoreRequest<{ listing: any }>(
           '/host/listings',
           {
             method: id ? 'PUT' : 'POST',
@@ -90,7 +90,7 @@ export const getClient = {
           },
           { auth: true },
         );
-        return { id: response.listing.id };
+        return { id: response.listing.id, listing: response.listing };
       } catch (error) {
         handleFirestoreError(error, id ? OperationType.UPDATE : OperationType.CREATE, 'listings');
         throw error;

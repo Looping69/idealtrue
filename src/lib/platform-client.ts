@@ -71,6 +71,13 @@ interface EncoreReview {
   createdAt: string;
 }
 
+interface EncoreHostListingQuota {
+  plan: 'standard' | 'professional' | 'premium';
+  maxListings: number | null;
+  usedListings: number;
+  canCreate: boolean;
+}
+
 interface EncoreReferralReward {
   id: string;
   referrerId: string;
@@ -184,6 +191,15 @@ export async function listHostListings(hostId: string) {
     { auth: true },
   );
   return response.listings.map(mapListing);
+}
+
+export async function getMyListingQuota() {
+  const response = await encoreRequest<{ quota: EncoreHostListingQuota }>(
+    '/host/listings/quota',
+    {},
+    { auth: true },
+  );
+  return response.quota;
 }
 
 export async function updateListingBlockedDates(listingId: string, blockedDates: string[]) {

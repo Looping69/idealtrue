@@ -65,7 +65,12 @@ let fetchCalls: FetchCall[];
 function installWindow() {
   storage = new MemoryStorage();
   Object.defineProperty(globalThis, 'window', {
-    value: { localStorage: storage },
+    value: {
+      localStorage: storage,
+      location: {
+        hostname: '127.0.0.1',
+      },
+    },
     configurable: true,
     writable: true,
   });
@@ -246,6 +251,9 @@ test('submitPaymentProof posts the guest payment proof to the booking payment en
     id: 'booking-9',
     paymentReference: 'IDEAL-4100',
     paymentProofUrl: 'https://cdn.example.com/payment-proof.jpg',
+    paymentProofFilename: null,
+    paymentProofContentType: null,
+    paymentProofDataBase64: null,
   });
   assert.equal(booking.status, 'payment_submitted');
   assert.equal(booking.paymentReference, 'IDEAL-4100');

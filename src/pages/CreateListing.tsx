@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getClient } from "@/lib/client";
-import { listHostListings } from "@/lib/platform-client";
+import { getMyListingQuota } from "@/lib/platform-client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
@@ -105,24 +105,26 @@ export default function CreateListing() {
   const [checkingLimit, setCheckingLimit] = useState(true);
   const [canCreate, setCanCreate] = useState(true);
 
-  const countsTowardStandardPlanLimit = useCallback((listing: Listing) => {
-    return listing.status !== 'archived' && listing.status !== 'draft';
-  }, []);
-
   const checkLimits = useCallback(async () => {
-    if (!profile || !user) return;
-    setPlan(profile.host_plan || 'standard');
+    if (!profile || !user) {
+      setCheckingLimit(false);
+      return;
+    }
     if (isEditMode) {
+      setPlan(profile.host_plan || 'standard');
       setCanCreate(true);
       setCheckingLimit(false);
       return;
     }
 
-    const existingListings = await listHostListings(user.uid);
-    const countedListings = existingListings.filter(countsTowardStandardPlanLimit);
-    setCanCreate((profile.host_plan || 'standard') !== 'standard' || countedListings.length < 1);
-    setCheckingLimit(false);
-  }, [countsTowardStandardPlanLimit, effectiveKycStatus, isEditMode, profile, user]);
+    try {
+      const quota = await getMyListingQuota();
+      setPlan(quota.plan);
+      setCanCreate(quota.canCreate);
+    } finally {
+      setCheckingLimit(false);
+    }
+  }, [isEditMode, profile, user]);
 
   useEffect(() => {
     checkLimits();
@@ -407,8 +409,8 @@ export default function CreateListing() {
         </div>
         <h1 className="text-3xl font-bold text-on-surface">Listing Limit Reached</h1>
         <p className="text-on-surface-variant text-lg max-w-md mx-auto">
-          Your current <strong>Standard plan</strong> includes one active listing.
-          Upgrade to Professional or Premium if you need to publish more.
+          Your current <strong>Standard plan</strong> allows one non-archived listing at a time.
+          Archive or delete your current listing to free the slot, or upgrade if you need more capacity.
         </p>
         <div className="pt-6">
                       <Button onClick={() => navigate('/pricing?audience=host')} className="h-12 px-8 text-base bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
