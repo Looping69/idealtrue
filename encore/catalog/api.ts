@@ -164,6 +164,19 @@ function decodeBase64Payload(dataBase64: string) {
   return buffer;
 }
 
+function normalizeDraftListingId(listingId?: string | null) {
+  if (!listingId) {
+    return undefined;
+  }
+
+  const normalized = listingId.trim();
+  if (!normalized || normalized === "undefined" || normalized === "null") {
+    return undefined;
+  }
+
+  return normalized;
+}
+
 async function readRawBuffer(req: IncomingMessage, maxBytes: number) {
   const chunks: Buffer[] = [];
   let totalBytes = 0;
@@ -186,12 +199,13 @@ async function readRawBuffer(req: IncomingMessage, maxBytes: number) {
 }
 
 async function assertCanUploadMedia(auth: AuthData, listingId?: string) {
-  if (!listingId) {
+  const normalizedListingId = normalizeDraftListingId(listingId);
+  if (!normalizedListingId) {
     return;
   }
 
   const listing = await catalogDB.queryRow<ListingRow>`
-    SELECT * FROM listings WHERE id = ${listingId}
+    SELECT * FROM listings WHERE id = ${normalizedListingId}
   `;
   if (!listing) throw APIError.notFound("Listing not found.");
   if (listing.host_id !== auth.userID && auth.role !== "admin") {
@@ -204,9 +218,10 @@ function buildListingMediaObjectKey(params: {
   listingId?: string;
   filename: string;
 }) {
+  const normalizedListingId = normalizeDraftListingId(params.listingId);
   const safeFilename = sanitizeObjectFilename(params.filename);
-  return params.listingId
-    ? `${params.listingId}/${Date.now()}-${safeFilename}`
+  return normalizedListingId
+    ? `${normalizedListingId}/${Date.now()}-${safeFilename}`
     : `drafts/${params.auth.userID}/${Date.now()}-${safeFilename}`;
 }
 
@@ -518,8 +533,9 @@ export const requestListingMediaUpload = api<UploadUrlParams, { objectKey: strin
     if (!ALLOWED_LISTING_MEDIA_CONTENT_TYPES.has(contentType)) {
       throw APIError.invalidArgument("Unsupported listing media content type.");
     }
-    await assertCanUploadMedia(auth, listingId);
-    const objectKey = buildListingMediaObjectKey({ auth, listingId, filename });
+    const normalizedListingId = normalizeDraftListingId(listingId);
+    await assertCanUploadMedia(auth, normalizedListingId);
+    const objectKey = buildListingMediaObjectKey({ auth, listingId: normalizedListingId, filename });
     const signed = await listingMediaBucket.signedUploadUrl(objectKey, {
       ttl: 60 * 15,
     });
