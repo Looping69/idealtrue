@@ -1,18 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import {
-  CalendarDays,
-  MapPin,
-  Minus,
-  Plus,
-  Search,
-  Send,
-  Sparkles,
-  TrendingUp,
-  Wand2,
-  type LucideIcon,
-} from "lucide-react";
-import { Button, rawButtonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { useState, useRef, useEffect } from "react";
+import { Send, Sparkles, Plus, Minus, MapPin, Search, TrendingUp, Building, Home, Palmtree, LucideIcon } from "lucide-react";
 import type { Listing } from "@/types";
 
 export type SearchFilterState = {
@@ -24,48 +11,26 @@ export type SearchFilterState = {
   };
 };
 
-type Suggestion = {
-  label: string;
-  type: "province" | "place" | "listing" | "city";
-  icon?: LucideIcon;
-};
-
 type Props = {
   onChange: (state: SearchFilterState) => void;
-  onModeChange?: (mode: "chat" | "search") => void;
+  onModeChange?: (mode: 'chat' | 'search') => void;
   onSendMessage?: (message: string) => void;
-  mode?: "chat" | "search";
+  mode?: 'chat' | 'search';
   listings?: Listing[];
-  quickDestinations?: string[];
 };
 
-const POPULAR_DESTINATIONS: Suggestion[] = [
-  { label: "Cape Town", type: "city", icon: TrendingUp },
-  { label: "Durban", type: "city", icon: TrendingUp },
-  { label: "Kruger National Park", type: "place", icon: MapPin },
-  { label: "Garden Route", type: "place", icon: MapPin },
-  { label: "Western Cape", type: "province", icon: MapPin },
-  { label: "Winelands", type: "place", icon: MapPin },
+// Popular destinations shown when user focuses the input
+const POPULAR_DESTINATIONS = [
+  { label: "Cape Town", type: "city" as const, icon: Building },
+  { label: "Johannesburg", type: "city" as const, icon: Building },
+  { label: "Durban", type: "city" as const, icon: Palmtree },
+  { label: "Kruger National Park", type: "place" as const, icon: MapPin },
+  { label: "Garden Route", type: "place" as const, icon: Palmtree },
+  { label: "Western Cape", type: "province" as const, icon: MapPin },
 ];
 
-const PLANNER_PROMPTS = [
-  "Family beach break with space for 4",
-  "Romantic safari weekend under R3,500",
-  "Quiet work retreat with strong wifi",
-];
-
-const fieldChrome =
-  "rounded-[1.4rem] border border-slate-200/80 bg-white/92 px-4 py-3 shadow-[0_12px_30px_rgba(15,23,42,0.06)] transition-colors hover:border-slate-300";
-
-export default function SearchFilterBar({
-  onChange,
-  onModeChange,
-  onSendMessage,
-  mode = "search",
-  listings = [],
-  quickDestinations = [],
-}: Props) {
-  const [activeMode, setActiveMode] = useState<"chat" | "search">(mode);
+export default function SearchFilterBar({ onChange, onModeChange, onSendMessage, mode = 'search', listings = [] }: Props) {
+  const [isFlipped, setIsFlipped] = useState(mode === 'search');
   const [message, setMessage] = useState("");
   const [showCheckInCal, setShowCheckInCal] = useState(false);
   const [showCheckOutCal, setShowCheckOutCal] = useState(false);
@@ -73,59 +38,36 @@ export default function SearchFilterBar({
   const [checkOut, setCheckOut] = useState<Date | null>(null);
   const [guests, setGuests] = useState(1);
   const [location, setLocation] = useState("");
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [suggestions, setSuggestions] = useState<{ label: string; type: "province" | "place" | "listing" | "city"; icon?: LucideIcon }[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [isLoading, setIsLoading] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
-  const wrapperRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
+  // Sync isFlipped with mode prop
   useEffect(() => {
-    setActiveMode(mode);
+    setIsFlipped(mode === 'search');
   }, [mode]);
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (wrapperRef.current?.contains(event.target as Node)) {
-        return;
-      }
-      setShowSuggestions(false);
-      setShowCheckInCal(false);
-      setShowCheckOutCal(false);
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  useEffect(() => () => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
-  }, []);
-
-  const emit = (
-    nextLocation = location,
-    nextGuests = guests,
-    from = checkIn ?? undefined,
-    to = checkOut ?? undefined,
-  ) => {
-    onChange({ query: nextLocation, guests: nextGuests, date: { from, to } });
-  };
-
-  const switchMode = (nextMode: "chat" | "search") => {
-    setActiveMode(nextMode);
-    setShowSuggestions(false);
+  const handleFlip = () => {
+    const nextFlipped = !isFlipped;
+    setIsFlipped(nextFlipped);
     setShowCheckInCal(false);
     setShowCheckOutCal(false);
-    onModeChange?.(nextMode);
+    onModeChange?.(nextFlipped ? 'search' : 'chat');
+  };
+
+  const emit = (loc = location, g = guests, from = checkIn ?? undefined, to = checkOut ?? undefined) => {
+    onChange({ query: loc, guests: g, date: { from, to } });
   };
 
   const generateCalendarDays = () => {
     const today = new Date();
     const days: Date[] = [];
-    for (let index = 0; index < 42; index += 1) {
-      days.push(new Date(today.getFullYear(), today.getMonth(), index - today.getDay() + 1));
+    for (let i = 0; i < 42; i++) {
+      const date = new Date(today.getFullYear(), today.getMonth(), i - today.getDay() + 1);
+      days.push(date);
     }
     return days;
   };
@@ -133,13 +75,14 @@ export default function SearchFilterBar({
   const handleLocationFocus = () => {
     setShowSuggestions(true);
     if (!location.trim()) {
-      setSuggestions(POPULAR_DESTINATIONS);
+      // Show popular destinations when field is empty
+      setSuggestions(POPULAR_DESTINATIONS.map(d => ({ ...d })));
     }
   };
 
-  const handleLocationChange = (value: string) => {
-    setLocation(value);
-    emit(value);
+  const handleLocationChange = (v: string) => {
+    setLocation(v);
+    emit(v);
     setShowSuggestions(true);
     setActiveIndex(-1);
 
@@ -147,87 +90,93 @@ export default function SearchFilterBar({
       clearTimeout(debounceRef.current);
     }
 
-    if (!value.trim()) {
-      setSuggestions(POPULAR_DESTINATIONS);
+    if (!v.trim()) {
+      setSuggestions(POPULAR_DESTINATIONS.map(d => ({ ...d })));
       setIsLoading(false);
       return;
     }
 
     setIsLoading(true);
     debounceRef.current = setTimeout(() => {
-      const normalizedQuery = value.toLowerCase();
-      const matchedListings = listings.filter((listing) =>
-        listing.title.toLowerCase().includes(normalizedQuery) ||
-        listing.location.toLowerCase().includes(normalizedQuery) ||
-        listing.area?.toLowerCase().includes(normalizedQuery) ||
-        listing.province?.toLowerCase().includes(normalizedQuery),
-      );
+      try {
+        const normalizedQuery = v.toLowerCase();
+        const data = listings.filter((listing) =>
+          listing.title.toLowerCase().includes(normalizedQuery) ||
+          listing.location.toLowerCase().includes(normalizedQuery) ||
+          listing.area?.toLowerCase().includes(normalizedQuery) ||
+          listing.province?.toLowerCase().includes(normalizedQuery),
+        );
 
-      const places = new Set<string>();
-      const provinces = new Set<string>();
-      const listingSuggestions: Suggestion[] = [];
+        const places = new Map<string, boolean>();
+        const listingSuggestions: { label: string; type: "listing"; icon: LucideIcon }[] = [];
+        const provinces = new Set<string>();
 
-      matchedListings.forEach((listing) => {
-        if (listing.location) {
-          places.add(listing.location);
+        (data || []).forEach((p: any) => {
+          if (p.location && !places.has(p.location)) {
+            places.set(p.location, true);
+          }
+          if (p.title) {
+            listingSuggestions.push({ label: p.title, type: "listing", icon: Home });
+          }
+          if (p.province && p.province.toLowerCase().includes(v.toLowerCase())) {
+            provinces.add(p.province);
+          }
+        });
+
+        const placeItems = Array.from(places.keys()).slice(0, 4).map(l => ({ label: l, type: "place" as const, icon: MapPin }));
+        const provinceItems = Array.from(provinces).slice(0, 2).map(p => ({ label: p, type: "province" as const, icon: MapPin }));
+
+        const merged = [...provinceItems, ...placeItems, ...listingSuggestions.slice(0, 3)];
+
+        // If no results, show "no matches" state
+        if (merged.length === 0) {
+          setSuggestions([]);
+        } else {
+          setSuggestions(merged);
         }
-        if (listing.province && listing.province.toLowerCase().includes(normalizedQuery)) {
-          provinces.add(listing.province);
-        }
-        if (listing.title.toLowerCase().includes(normalizedQuery) && listingSuggestions.length < 3) {
-          listingSuggestions.push({ label: listing.title, type: "listing", icon: Sparkles });
-        }
-      });
-
-      const nextSuggestions: Suggestion[] = [
-        ...Array.from(provinces).slice(0, 2).map((label) => ({ label, type: "province" as const, icon: MapPin })),
-        ...Array.from(places).slice(0, 4).map((label) => ({ label, type: "place" as const, icon: MapPin })),
-        ...listingSuggestions,
-      ];
-
-      setSuggestions(nextSuggestions);
-      setIsLoading(false);
-    }, 220);
+      } catch {
+        setSuggestions([]);
+      } finally {
+        setIsLoading(false);
+      }
+    }, 250);
   };
 
-  const pickSuggestion = (suggestion: Suggestion) => {
-    setLocation(suggestion.label);
-    emit(suggestion.label);
+  const pickSuggestion = (s: { label: string; type: "province" | "place" | "listing" | "city" }) => {
+    setLocation(s.label);
+    emit(s.label);
     setShowSuggestions(false);
   };
 
-  const onLocationKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!showSuggestions || suggestions.length === 0) {
-      return;
-    }
-
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setActiveIndex((index) => Math.min(suggestions.length - 1, index + 1));
-      return;
-    }
-
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setActiveIndex((index) => Math.max(0, index - 1));
-      return;
-    }
-
-    if (event.key === "Enter" && activeIndex >= 0) {
-      event.preventDefault();
+  const onLocationKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!showSuggestions || suggestions.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIndex(i => Math.min(suggestions.length - 1, i + 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIndex(i => Math.max(0, i - 1));
+    } else if (e.key === "Enter" && activeIndex >= 0) {
+      e.preventDefault();
       pickSuggestion(suggestions[activeIndex]);
-      return;
-    }
-
-    if (event.key === "Escape") {
+    } else if (e.key === "Escape") {
       setShowSuggestions(false);
     }
   };
 
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (inputRef.current && !inputRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const formatDate = (date: Date | null) => {
-    if (!date) {
-      return "Add dates";
-    }
+    if (!date) return "";
     return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   };
 
@@ -235,79 +184,53 @@ export default function SearchFilterBar({
     if (type === "checkin") {
       setCheckIn(date);
       setShowCheckInCal(false);
-      setShowCheckOutCal(true);
+      setTimeout(() => setShowCheckOutCal(true), 300);
       emit(location, guests, date, checkOut ?? undefined);
-      return;
+    } else {
+      setCheckOut(date);
+      setShowCheckOutCal(false);
+      emit(location, guests, checkIn ?? undefined, date);
     }
-
-    setCheckOut(date);
-    setShowCheckOutCal(false);
-    emit(location, guests, checkIn ?? undefined, date);
   };
 
-  const handlePlannerSend = () => {
-    const trimmed = message.trim();
-    if (!trimmed) {
-      return;
-    }
-    onSendMessage?.(trimmed);
-  };
-
-  const CalendarDropdown = ({
-    minDate,
-    onSelect,
-    selectedDate,
-    type,
-  }: {
-    minDate?: Date | null;
-    onSelect: (date: Date) => void;
-    selectedDate: Date | null;
-    type: "checkin" | "checkout";
-  }) => {
+  const CalendarDropdown = ({ onSelect, selectedDate, type, minDate }: { onSelect: (d: Date) => void; selectedDate: Date | null; type: "checkin" | "checkout"; minDate?: Date | null }) => {
     const days = generateCalendarDays();
     const today = new Date();
     const monthName = today.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
     return (
-      <div className="absolute left-0 top-full z-40 mt-3 w-[min(22rem,calc(100vw-2.5rem))] rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-[0_28px_60px_rgba(15,23,42,0.18)]">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <p className="text-[0.7rem] font-semibold uppercase tracking-[0.22em] text-slate-400">
-              {type === "checkin" ? "Check in" : "Check out"}
-            </p>
-            <h3 className="text-sm font-semibold text-slate-900">{monthName}</h3>
-          </div>
-          <CalendarDays className="h-4 w-4 text-slate-400" />
+      <div
+        className="absolute top-full mt-2 bg-surface rounded-2xl p-4 z-40 w-[320px]"
+        style={{
+          animation: "slideDown 0.3s ease-out",
+          left: type === "checkin" ? "0" : "auto",
+          right: type === "checkout" ? "0" : "auto",
+          boxShadow: "0 20px 40px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05)",
+          minWidth: "300px",
+        }}
+      >
+        <div className="text-center mb-3">
+          <h3 className="text-slate-800 font-semibold">{monthName}</h3>
         </div>
-        <div className="mb-2 grid grid-cols-7 gap-1">
+        <div className="grid grid-cols-7 gap-1 mb-2">
           {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
-            <div key={day} className="text-center text-[0.65rem] font-semibold uppercase tracking-wide text-slate-400">
+            <div key={day} className="text-center text-xs font-medium text-slate-500 p-1">
               {day}
             </div>
           ))}
         </div>
         <div className="grid grid-cols-7 gap-1">
-          {days.map((date) => {
-            const key = date.toISOString();
+          {days.map((date, idx) => {
             const isToday = date.toDateString() === today.toDateString();
             const isPast = date < today && !isToday;
-            const isBeforeMinimum = minDate && date < minDate;
+            const isBeforeMin = minDate && date < minDate;
             const isSelected = selectedDate && date.toDateString() === selectedDate.toDateString();
-
             return (
               <button
-                key={key}
-                type="button"
-                disabled={isPast || isBeforeMinimum}
-                onClick={() => !isPast && !isBeforeMinimum && onSelect(date)}
-                className={cn(
-                  "h-9 rounded-xl text-sm transition-colors",
-                  isPast || isBeforeMinimum
-                    ? "cursor-not-allowed text-slate-300"
-                    : "text-slate-700 hover:bg-slate-100",
-                  isToday && "font-semibold text-primary",
-                  isSelected && "bg-slate-900 text-white hover:bg-slate-900",
-                )}
+                key={idx}
+                onClick={() => !isPast && !isBeforeMin && onSelect(date)}
+                disabled={isPast || isBeforeMin}
+                className={`p-2 rounded-lg text-sm transition-all ${isPast || isBeforeMin ? "text-slate-300 cursor-not-allowed" : "hover:bg-primary/10 cursor-pointer"} ${isToday ? "bg-primary/20 text-primary font-semibold" : ""} ${isSelected ? "bg-primary text-white font-semibold" : "text-slate-700"}`}
               >
                 {date.getDate()}
               </button>
@@ -318,267 +241,167 @@ export default function SearchFilterBar({
     );
   };
 
-  const destinationChips = quickDestinations.length > 0
-    ? quickDestinations
-    : POPULAR_DESTINATIONS.map((destination) => destination.label);
-
   return (
-    <div ref={wrapperRef} className="w-full">
-      <div className="rounded-[2rem] border border-white/45 bg-white/86 p-3 shadow-[0_24px_80px_rgba(15,23,42,0.16)] backdrop-blur-xl sm:p-4">
-        <div className="flex flex-col gap-3 border-b border-slate-200/70 px-1 pb-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="inline-flex w-fit rounded-full bg-slate-100 p-1">
-            <button
-              type="button"
-              onClick={() => switchMode("search")}
-              className={cn(
-                rawButtonVariants({ variant: activeMode === "search" ? "primary" : "ghost", size: "sm" }),
-                activeMode === "search" ? null : "shadow-none",
-              )}
+    <div className="min-h-0 flex items-center justify-center">
+      <style>{`@keyframes slideDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}`}</style>
+      <div className="w-full max-w-3xl mx-auto mt-2 mb-2">
+        <div className="bg-surface-container-lowest rounded-full border border-outline-variant shadow-[0_10px_40px_rgba(18,28,42,0.06)] p-1.5 relative z-30 transition-all hover:shadow-2xl">
+          <div className="relative h-14 z-30">
+            <div
+              className="absolute w-full h-full z-30"
+              style={{ transformStyle: "preserve-3d", transition: "transform 0.7s cubic-bezier(0.4,0,0.2,1)", transform: isFlipped ? "rotateX(180deg)" : "rotateX(0deg)" }}
             >
-              Search stays
-            </button>
-            <button
-              type="button"
-              onClick={() => switchMode("chat")}
-              className={cn(
-                rawButtonVariants({ variant: activeMode === "chat" ? "primary" : "ghost", size: "sm" }),
-                activeMode === "chat" ? null : "shadow-none",
-              )}
-            >
-              AI planner
-            </button>
-          </div>
-          <p className="max-w-sm text-sm text-slate-500">
-            {activeMode === "search"
-              ? "Search by destination, refine by dates, then move fast."
-              : "Describe the trip in plain English and let the planner do the heavy lifting."}
-          </p>
-        </div>
-
-        {activeMode === "search" ? (
-          <div className="space-y-4 pt-4">
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,0.72fr)_auto]">
-              <div className={cn(fieldChrome, "relative")}>
-                <div className="mb-2 flex items-center gap-2 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                  <MapPin className="h-3.5 w-3.5" />
-                  Where to
+              <div className="absolute w-full h-full" style={{ backfaceVisibility: "hidden" }}>
+                <div className="bg-surface rounded-full p-2 flex items-center gap-3 h-full">
+                  <button onClick={handleFlip} className="p-2.5 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 transition-all shadow-lg shadow-blue-500/30">
+                    <Sparkles className="w-4 h-4 text-white" />
+                  </button>
+                  <input 
+                    type="text" 
+                    value={message} 
+                    onChange={(e) => setMessage(e.target.value)} 
+                    onKeyDown={(e) => e.key === 'Enter' && onSendMessage?.(message)}
+                    placeholder="Describe the trip you want to plan..." 
+                    className="flex-1 bg-transparent text-on-surface placeholder-on-surface-variant outline-none text-base px-2 font-medium" 
+                  />
+                  <button className="p-2.5 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 transition-all shadow-lg shadow-blue-500/30" onClick={() => onSendMessage?.(message)}>
+                    <Send className="w-4 h-4 text-white" />
+                  </button>
                 </div>
-                <input
-                  type="text"
-                  value={location}
-                  onChange={(event) => handleLocationChange(event.target.value)}
-                  onFocus={handleLocationFocus}
-                  onKeyDown={onLocationKeyDown}
-                  placeholder="Cape Town, safari, coast, winelands..."
-                  className="w-full bg-transparent text-base font-medium text-slate-900 outline-none placeholder:text-slate-400"
-                />
+              </div>
+              <div className="absolute w-full h-full" style={{ backfaceVisibility: "hidden", transform: "rotateX(180deg)" }}>
+                <div className="bg-surface-container-lowest rounded-full p-1 flex items-center h-full divide-x divide-outline-variant">
+                  <button onClick={handleFlip} className="p-3 rounded-full hover:bg-surface-container-low transition-colors mr-1">
+                    <Sparkles className="w-4 h-4 text-on-surface-variant" />
+                  </button>
 
-                {showSuggestions && (
-                  <div className="absolute left-0 top-full z-40 mt-3 w-full overflow-hidden rounded-[1.4rem] border border-slate-200 bg-white shadow-[0_28px_60px_rgba(15,23,42,0.14)]">
-                    <div className="border-b border-slate-100 px-4 py-3">
-                      <div className="flex items-center gap-2 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                        <TrendingUp className="h-3.5 w-3.5" />
-                        {location.trim() ? "Matches" : "Popular right now"}
-                      </div>
-                    </div>
-                    {isLoading ? (
-                      <div className="px-4 py-5 text-sm text-slate-500">Searching destinations…</div>
-                    ) : suggestions.length > 0 ? (
-                      <ul className="py-2">
-                        {suggestions.map((suggestion, index) => {
-                          const Icon = suggestion.icon ?? MapPin;
-
-                          return (
-                            <li key={`${suggestion.type}-${suggestion.label}`}>
-                              <button
-                                type="button"
-                                onMouseEnter={() => setActiveIndex(index)}
-                                onClick={() => pickSuggestion(suggestion)}
-                                className={cn(
-                                  "flex w-full items-center gap-3 px-4 py-3 text-left transition-colors",
-                                  activeIndex === index ? "bg-slate-50" : "hover:bg-slate-50",
-                                )}
-                              >
-                                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
-                                  <Icon className="h-4 w-4" />
-                                </div>
-                                <div>
-                                  <div className="text-sm font-medium text-slate-900">{suggestion.label}</div>
-                                  <div className="text-xs capitalize text-slate-500">
-                                    {suggestion.type === "listing" ? "Property" : suggestion.type}
-                                  </div>
-                                </div>
-                              </button>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    ) : (
-                      <div className="px-4 py-5 text-sm text-slate-500">
-                        No destination matched that search.
+                  <div ref={inputRef} className="relative flex-1 px-4 hover:bg-surface-container-low rounded-full transition-colors cursor-pointer group">
+                    <div className="text-[10px] font-bold text-on-surface uppercase tracking-wider mb-0.5">Where</div>
+                    <input
+                      type="text"
+                      value={location}
+                      onChange={(e) => handleLocationChange(e.target.value)}
+                      onFocus={handleLocationFocus}
+                      onKeyDown={onLocationKeyDown}
+                      placeholder="Search destinations"
+                      className="w-full bg-transparent border-none text-on-surface-variant text-sm outline-none placeholder-on-surface-variant truncate"
+                    />
+                    {showSuggestions && (
+                      <div className="absolute top-full left-0 mt-4 bg-surface-container-lowest rounded-2xl border border-outline-variant shadow-[0_10px_40px_rgba(18,28,42,0.06)] w-[350px] z-50 overflow-hidden">
+                        {!location.trim() && (
+                          <div className="px-4 py-2 border-b border-outline-variant">
+                            <div className="flex items-center gap-2 text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
+                              <TrendingUp className="w-3 h-3" />
+                              Popular Destinations
+                            </div>
+                          </div>
+                        )}
+                        {isLoading ? (
+                          <div className="px-4 py-6 text-center">
+                            <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                            <span className="text-sm text-on-surface-variant">Searching...</span>
+                          </div>
+                        ) : suggestions.length > 0 ? (
+                          <ul className="max-h-72 overflow-auto py-2">
+                            {suggestions.map((s, idx) => {
+                              const IconComp = s.icon || MapPin;
+                              return (
+                                <li key={`${s.type}-${s.label}-${idx}`}>
+                                  <button
+                                    className={`w-full text-left px-4 py-3 text-sm flex items-center gap-3 hover:bg-surface-container-low transition-colors ${activeIndex === idx ? "bg-surface-container-low" : ""}`}
+                                    onMouseEnter={() => setActiveIndex(idx)}
+                                    onClick={() => pickSuggestion(s)}
+                                  >
+                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${s.type === 'city' ? 'bg-primary/10' :
+                                      s.type === 'province' ? 'bg-green-100' :
+                                        s.type === 'listing' ? 'bg-purple-100' : 'bg-surface-dim'
+                                      }`}>
+                                      <IconComp className={`w-5 h-5 ${s.type === 'city' ? 'text-primary' :
+                                        s.type === 'province' ? 'text-green-600' :
+                                          s.type === 'listing' ? 'text-purple-600' : 'text-on-surface-variant'
+                                        }`} />
+                                    </div>
+                                    <div className="flex flex-col">
+                                      <span className="font-medium text-on-surface">{s.label}</span>
+                                      <span className={`text-xs capitalize ${s.type === 'city' ? 'text-primary/80' :
+                                        s.type === 'province' ? 'text-green-500' :
+                                          s.type === 'listing' ? 'text-purple-500' : 'text-on-surface-variant'
+                                        }`}>{s.type === 'listing' ? 'Property' : s.type}</span>
+                                    </div>
+                                  </button>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        ) : location.trim() ? (
+                          <div className="px-4 py-6 text-center">
+                            <MapPin className="w-8 h-8 text-outline-variant mx-auto mb-2" />
+                            <span className="text-sm text-on-surface-variant">No destinations found</span>
+                            <p className="text-xs text-on-surface-variant mt-1">Try a different search term</p>
+                          </div>
+                        ) : null}
                       </div>
                     )}
                   </div>
-                )}
-              </div>
 
-              <div className={cn(fieldChrome, "relative")}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCheckInCal((open) => !open);
-                    setShowCheckOutCal(false);
-                  }}
-                  className="w-full text-left"
-                >
-                  <div className="mb-2 flex items-center gap-2 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                    <CalendarDays className="h-3.5 w-3.5" />
-                    Check in
+                  <div className="relative px-4 hover:bg-surface-container-low rounded-full transition-colors cursor-pointer group flex flex-col justify-center" onClick={() => { setShowCheckInCal(!showCheckInCal); setShowCheckOutCal(false); }}>
+                    <div className="text-[10px] font-bold text-on-surface uppercase tracking-wider mb-0.5">Check in</div>
+                    <div className="text-sm text-on-surface-variant truncate">
+                      {checkIn ? formatDate(checkIn) : "Add dates"}
+                    </div>
+                    {showCheckInCal && (
+                      <CalendarDropdown
+                        type="checkin"
+                        selectedDate={checkIn}
+                        onSelect={(d) => handleDateSelect(d, "checkin")}
+                      />
+                    )}
                   </div>
-                  <div className="text-base font-medium text-slate-900">{formatDate(checkIn)}</div>
-                </button>
-                {showCheckInCal && (
-                  <CalendarDropdown
-                    type="checkin"
-                    selectedDate={checkIn}
-                    onSelect={(date) => handleDateSelect(date, "checkin")}
-                  />
-                )}
-              </div>
 
-              <div className={cn(fieldChrome, "relative")}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCheckOutCal((open) => !open);
-                    setShowCheckInCal(false);
-                  }}
-                  className="w-full text-left"
-                >
-                  <div className="mb-2 flex items-center gap-2 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                    <CalendarDays className="h-3.5 w-3.5" />
-                    Check out
+                  <div className="relative px-4 hover:bg-surface-container-low rounded-full transition-colors cursor-pointer group flex flex-col justify-center" onClick={() => { setShowCheckOutCal(!showCheckOutCal); setShowCheckInCal(false); }}>
+                    <div className="text-[10px] font-bold text-on-surface uppercase tracking-wider mb-0.5">Check out</div>
+                    <div className="text-sm text-on-surface-variant truncate">
+                      {checkOut ? formatDate(checkOut) : "Add dates"}
+                    </div>
+                    {showCheckOutCal && (
+                      <CalendarDropdown
+                        type="checkout"
+                        selectedDate={checkOut}
+                        minDate={checkIn}
+                        onSelect={(d) => handleDateSelect(d, "checkout")}
+                      />
+                    )}
                   </div>
-                  <div className="text-base font-medium text-slate-900">{formatDate(checkOut)}</div>
-                </button>
-                {showCheckOutCal && (
-                  <CalendarDropdown
-                    type="checkout"
-                    minDate={checkIn}
-                    selectedDate={checkOut}
-                    onSelect={(date) => handleDateSelect(date, "checkout")}
-                  />
-                )}
-              </div>
 
-              <div className={fieldChrome}>
-                <div className="mb-2 flex items-center gap-2 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Guests
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const nextGuests = Math.max(1, guests - 1);
-                      setGuests(nextGuests);
-                      emit(location, nextGuests);
-                    }}
-                    className={rawButtonVariants({ variant: "neutral", size: "icon-sm" })}
-                  >
-                    <Minus className="h-4 w-4" />
-                  </button>
-                  <span className="min-w-10 text-center text-lg font-semibold text-slate-900">{guests}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const nextGuests = guests + 1;
-                      setGuests(nextGuests);
-                      emit(location, nextGuests);
-                    }}
-                    className={rawButtonVariants({ variant: "neutral", size: "icon-sm" })}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
+                  <div className="relative px-4 hover:bg-surface-container-low rounded-full transition-colors cursor-pointer group flex flex-col justify-center">
+                    <div className="text-[10px] font-bold text-on-surface uppercase tracking-wider mb-0.5">Who</div>
+                    <div className="flex items-center gap-3">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setGuests(Math.max(1, guests - 1)); emit(location, Math.max(1, guests - 1)); }}
+                        className="p-1 rounded-full hover:bg-surface-container-high text-on-surface-variant"
+                      >
+                        <Minus className="w-3 h-3" />
+                      </button>
+                      <span className="text-sm font-medium text-on-surface min-w-[1rem] text-center">{guests}</span>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setGuests(guests + 1); emit(location, guests + 1); }}
+                        className="p-1 rounded-full hover:bg-surface-container-high text-on-surface-variant"
+                      >
+                        <Plus className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="pl-2 pr-1 flex items-center ml-auto">
+                    <button className="p-3 rounded-full bg-gradient-to-r from-slate-900 to-blue-600 text-white hover:opacity-90 transition-all shadow-lg shadow-blue-900/30" onClick={() => emit()}>
+                      <Search className="w-5 h-5 text-white" strokeWidth={2.5} />
+                    </button>
+                  </div>
                 </div>
               </div>
-
-              <Button
-                type="button"
-                size="lg"
-                className="h-full min-h-16 rounded-[1.4rem] bg-slate-900 px-5 text-sm font-semibold text-white hover:bg-slate-800"
-                onClick={() => emit()}
-              >
-                <Search className="h-4 w-4" />
-                Search
-              </Button>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                Quick starts
-              </span>
-              {destinationChips.slice(0, 6).map((destination) => (
-                <button
-                  key={destination}
-                  type="button"
-                  onClick={() => {
-                    setLocation(destination);
-                    emit(destination);
-                    setShowSuggestions(false);
-                  }}
-                  className={cn(rawButtonVariants({ variant: "neutral", size: "sm" }), "text-slate-700")}
-                >
-                  {destination}
-                </button>
-              ))}
             </div>
           </div>
-        ) : (
-          <div className="space-y-4 pt-4">
-            <div className="rounded-[1.6rem] border border-slate-200/80 bg-white/92 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.06)]">
-              <div className="mb-3 flex items-center gap-2 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                <Wand2 className="h-3.5 w-3.5" />
-                Planner prompt
-              </div>
-              <textarea
-                rows={3}
-                value={message}
-                onChange={(event) => setMessage(event.target.value)}
-                placeholder="Plan a long weekend with one luxury stay, one family stop, and a scenic route between them."
-                className="w-full resize-none bg-transparent text-base font-medium text-slate-900 outline-none placeholder:text-slate-400"
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {PLANNER_PROMPTS.map((prompt) => (
-                <button
-                  key={prompt}
-                  type="button"
-                  onClick={() => setMessage(prompt)}
-                  className={cn(rawButtonVariants({ variant: "neutral", size: "sm" }), "text-slate-700")}
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="max-w-lg text-sm text-slate-500">
-                The planner can route around province, mood, budget, and guest count without you hand-building the itinerary.
-              </p>
-              <Button
-                type="button"
-                size="lg"
-                className="h-12 rounded-full bg-slate-900 px-5 text-sm font-semibold text-white hover:bg-slate-800"
-                onClick={handlePlannerSend}
-              >
-                <Send className="h-4 w-4" />
-                Launch planner
-              </Button>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );
