@@ -30,6 +30,7 @@ interface NotificationRecord {
   type: "info" | "warning" | "success" | "error";
   target: string;
   actionPath?: string | null;
+  readAt?: string | null;
   createdAt: string;
 }
 
@@ -125,6 +126,7 @@ type NotificationRow = {
   type: "info" | "warning" | "success" | "error";
   target: string;
   action_path: string | null;
+  read_at: string | null;
   created_at: string;
 };
 
@@ -181,6 +183,7 @@ function mapNotification(row: NotificationRow): NotificationRecord {
     type: row.type,
     target: row.target,
     actionPath: row.action_path,
+    readAt: row.read_at,
     createdAt: row.created_at,
   };
 }
@@ -519,7 +522,7 @@ export const listAdminNotifications = api<void, { notifications: NotificationRec
   async () => {
     requireRole("admin", "support");
     const notifications = await opsDB.rawQueryAll<NotificationRow>(
-      `SELECT id, title, message, type, target, action_path, created_at FROM notifications ORDER BY created_at DESC`,
+      `SELECT id, title, message, type, target, action_path, NULL::TEXT AS read_at, created_at FROM notifications ORDER BY created_at DESC`,
     );
     return { notifications: notifications.map(mapNotification) };
   },
@@ -542,13 +545,72 @@ export const listMyNotifications = api<void, { notifications: NotificationRecord
     }
 
     const notifications = await opsDB.queryAll<NotificationRow>`
-      SELECT id, title, message, type, target, action_path, created_at
+      SELECT
+        notifications.id,
+        notifications.title,
+        notifications.message,
+        notifications.type,
+        notifications.target,
+        notifications.action_path,
+        notification_reads.read_at,
+        notifications.created_at
       FROM notifications
-      WHERE target = ANY(${audience})
+      LEFT JOIN notification_reads
+        ON notification_reads.notification_id = notifications.id
+       AND notification_reads.user_id = ${auth.userID}
+      WHERE notifications.target = ANY(${audience})
       ORDER BY created_at DESC
     `;
 
     return { notifications: notifications.map(mapNotification) };
+  },
+);
+
+export const markNotificationRead = api<{ notificationId: string }, { ok: true; readAt: string }>(
+  { expose: true, method: "POST", path: "/ops/my-notifications/read", auth: true },
+  async ({ notificationId }) => {
+    const auth = requireAuth();
+    const readAt = new Date().toISOString();
+
+    await opsDB.exec`
+      INSERT INTO notification_reads (notification_id, user_id, read_at)
+      VALUES (${notificationId}, ${auth.userID}, ${readAt})
+      ON CONFLICT (notification_id, user_id)
+      DO UPDATE SET read_at = EXCLUDED.read_at
+    `;
+
+    return { ok: true, readAt };
+  },
+);
+
+export const markAllNotificationsRead = api<void, { ok: true; readAt: string }>(
+  { expose: true, method: "POST", path: "/ops/my-notifications/read-all", auth: true },
+  async () => {
+    const auth = requireAuth();
+    const audience = ["all", auth.userID];
+
+    if (auth.role === "host") {
+      audience.push("hosts");
+    }
+    if (auth.role === "guest") {
+      audience.push("guests");
+    }
+    if (auth.role === "admin") {
+      audience.push("admins");
+    }
+
+    const readAt = new Date().toISOString();
+
+    await opsDB.exec`
+      INSERT INTO notification_reads (notification_id, user_id, read_at)
+      SELECT notifications.id, ${auth.userID}, ${readAt}
+      FROM notifications
+      WHERE notifications.target = ANY(${audience})
+      ON CONFLICT (notification_id, user_id)
+      DO UPDATE SET read_at = EXCLUDED.read_at
+    `;
+
+    return { ok: true, readAt };
   },
 );
 

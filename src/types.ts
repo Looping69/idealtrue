@@ -1,22 +1,23 @@
-export type UserRole = 'host' | 'guest' | 'admin';
+export type UserRole = 'host' | 'guest' | 'admin' | 'support';
 export type ReferralTier = 'bronze' | 'silver' | 'gold';
-export type KYCStatus = 'none' | 'pending' | 'verified' | 'rejected';
+export type KycStatus = 'none' | 'pending' | 'verified' | 'rejected';
+export type HostPlan = 'standard' | 'professional' | 'premium';
 
 export interface UserProfile {
-  uid: string;
+  id: string;
   displayName: string;
   email: string;
   emailVerified?: boolean;
-  photoURL: string;
+  photoUrl: string;
   role: UserRole;
   isAdmin?: boolean;
   referralCode: string;
-  referredBy?: string | null;
+  referredByCode?: string | null;
   balance: number;
   referralCount: number;
   tier: ReferralTier;
-  host_plan?: 'standard' | 'professional' | 'premium';
-  kycStatus: KYCStatus;
+  hostPlan?: HostPlan;
+  kycStatus: KycStatus;
   paymentMethod?: string | null;
   paymentInstructions?: string | null;
   paymentReferencePrefix?: string | null;
@@ -32,7 +33,7 @@ export interface UserProfile {
 
 export interface Listing {
   id: string;
-  hostUid: string;
+  hostId: string;
   title: string;
   description: string;
   location: string;
@@ -42,18 +43,18 @@ export interface Listing {
   pricePerNight: number;
   discount: number;
   images: string[];
-  video_url: string | null;
+  videoUrl: string | null;
   amenities: string[];
   facilities: string[];
-  other_facility: string;
+  otherFacility: string;
   adults: number;
   children: number;
   bedrooms: number;
   bathrooms: number;
-  is_self_catering: boolean;
-  has_restaurant: boolean;
-  restaurant_offers: string[];
-  is_occupied: boolean;
+  isSelfCatering: boolean;
+  hasRestaurant: boolean;
+  restaurantOffers: string[];
+  isOccupied: boolean;
   rating: number;
   reviews: number;
   category: string;
@@ -67,8 +68,8 @@ export interface Listing {
 export interface Booking {
   id: string;
   listingId: string;
-  guestUid: string;
-  hostUid: string;
+  guestId: string;
+  hostId: string;
   checkIn: string;
   checkOut: string;
   totalPrice: number;
@@ -89,7 +90,7 @@ export interface Booking {
 export interface SocialPost {
   id: string;
   listingId: string;
-  hostUid: string;
+  hostId: string;
   platform: 'instagram' | 'facebook' | 'twitter' | 'linkedin';
   content: string;
   createdAt: string;
@@ -97,10 +98,10 @@ export interface SocialPost {
 
 export interface Referral {
   id: string;
-  referrerUid: string;
-  referredUid: string;
+  referrerId: string;
+  referredUserId: string;
   amount: number;
-  type: 'signup' | 'booking' | 'subscription';
+  trigger: 'signup' | 'booking' | 'subscription';
   program?: 'guest' | 'host';
   status: 'pending' | 'confirmed' | 'rewarded' | 'rejected';
   createdAt: string;
@@ -109,8 +110,8 @@ export interface Referral {
 export interface Review {
   id: string;
   listingId: string;
-  guestUid: string;
-  hostUid: string;
+  guestId: string;
+  hostId: string;
   cleanliness: number;
   accuracy: number;
   communication: number;
@@ -128,6 +129,7 @@ export interface Notification {
   type: 'info' | 'warning' | 'success' | 'error';
   target: string;
   actionPath?: string | null;
+  readAt?: string | null;
   createdAt: string;
 }
 
@@ -148,8 +150,8 @@ export interface PlatformSettings {
 
 export interface Subscription {
   id: string;
-  hostUid: string;
-  plan: 'standard' | 'professional' | 'premium';
+  userId: string;
+  plan: HostPlan;
   amount: number;
   status: 'active' | 'expired' | 'cancelled';
   startDate: string;

@@ -45,14 +45,14 @@ export function usePlatformData(user: AuthSessionUser | null): PlatformDataState
         return;
       }
 
-      const hostListings = await listHostListings(user.uid);
+      const hostListings = await listHostListings(user.id);
       if (cancelled) {
         return;
       }
 
       setMyListings(hostListings);
-      setMyBookings(sessionBookings.filter((booking) => booking.guestUid === user.uid));
-      setHostBookings(sessionBookings.filter((booking) => booking.hostUid === user.uid));
+      setMyBookings(sessionBookings.filter((booking) => booking.guestId === user.id));
+      setHostBookings(sessionBookings.filter((booking) => booking.hostId === user.id));
     }
 
     void loadData();
@@ -71,14 +71,14 @@ export function usePlatformData(user: AuthSessionUser | null): PlatformDataState
     syncUpdatedBooking(updatedBooking) {
       setMyBookings((current) => {
         const existingIndex = current.findIndex((item) => item.id === updatedBooking.id);
-        if (existingIndex === -1 && updatedBooking.guestUid === user?.uid) {
+        if (existingIndex === -1 && updatedBooking.guestId === user?.id) {
           return [updatedBooking, ...current];
         }
         return current.map((item) => item.id === updatedBooking.id ? updatedBooking : item);
       });
       setHostBookings((current) => {
         const existingIndex = current.findIndex((item) => item.id === updatedBooking.id);
-        if (existingIndex === -1 && updatedBooking.hostUid === user?.uid) {
+        if (existingIndex === -1 && updatedBooking.hostId === user?.id) {
           return [updatedBooking, ...current];
         }
         return current.map((item) => item.id === updatedBooking.id ? updatedBooking : item);
@@ -94,7 +94,7 @@ export function usePlatformData(user: AuthSessionUser | null): PlatformDataState
       });
       setMyListings((current) => {
         const existingIndex = current.findIndex((item) => item.id === updatedListing.id);
-        if (existingIndex === -1 && updatedListing.hostUid === user?.uid) {
+        if (existingIndex === -1 && updatedListing.hostId === user?.id) {
           return [updatedListing, ...current];
         }
         return current.map((item) => item.id === updatedListing.id ? updatedListing : item);

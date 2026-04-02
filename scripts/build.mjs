@@ -16,3 +16,4 @@ const viteCliPath = fileURLToPath(new URL("../node_modules/vite/bin/vite.js", im
 
 run(nodeCommand, ["scripts/check-production-config.mjs"]);
 run(nodeCommand, [viteCliPath, "build"]);
+run(nodeCommand, ["scripts/check-bundle-budget.mjs"]);

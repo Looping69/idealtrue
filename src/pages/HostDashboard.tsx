@@ -53,7 +53,7 @@ export default function HostDashboard({
   return (
     <div className="space-y-8">
       {/* Subscription Banner */}
-      {profile?.host_plan === 'standard' && (
+      {profile?.hostPlan === 'standard' && (
         <Card className="bg-gradient-to-r from-blue-700 via-blue-600 to-cyan-500 text-white p-8 relative overflow-hidden border-0 shadow-xl shadow-blue-900/20">
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none"></div>
           <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-6">
@@ -191,7 +191,7 @@ export default function HostDashboard({
                   </div>
                   <p className="text-sm font-bold mb-1 truncate">{listing?.title || 'Unknown Listing'}</p>
                   <p className="text-xs text-on-surface-variant mb-2">
-                    Guest: {booking.guestUid.slice(0, 8)}... • {booking.guests?.adults || 0} Adults, {booking.guests?.children || 0} Children
+                    Guest: {booking.guestId.slice(0, 8)}... • {booking.guests?.adults || 0} Adults, {booking.guests?.children || 0} Children
                   </p>
                   <p className="text-xs text-on-surface-variant bg-surface-container-lowest p-2 rounded">
                     {format(new Date(booking.checkIn), 'MMM d')} - {format(new Date(booking.checkOut), 'MMM d, yyyy')}
@@ -290,19 +290,19 @@ export default function HostDashboard({
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <h3 className="text-lg font-bold">Current Plan: <span className="capitalize">{profile?.host_plan || 'Standard'}</span></h3>
-                {profile?.host_plan && (
+                <h3 className="text-lg font-bold">Current Plan: <span className="capitalize">{profile?.hostPlan || 'Standard'}</span></h3>
+                {profile?.hostPlan && (
                   <Badge variant="success" className="flex items-center gap-1">
                     <Crown className="w-3 h-3" /> Active
                   </Badge>
                 )}
               </div>
               <p className="text-on-surface-variant text-sm max-w-md">
-                {profile?.host_plan === 'premium' 
+                {profile?.hostPlan === 'premium' 
                   ? 'You are on the highest tier. Enjoy all premium features including priority support and advanced analytics.'
-                  : profile?.host_plan === 'professional'
+                  : profile?.hostPlan === 'professional'
                   ? 'You have access to the content studio and advanced listing features. Upgrade to Premium for priority support.'
-                  : profile?.host_plan === 'standard'
+                  : profile?.hostPlan === 'standard'
                   ? 'You are on the entry paid tier. One live listing, content studio access, and a clean path to upgrade when you need more reach.'
                   : 'Your plan details are syncing.'}
               </p>
@@ -311,7 +311,7 @@ export default function HostDashboard({
               <Button variant="outline" onClick={() => navigate('/pricing')}>
                 View All Plans
               </Button>
-              {profile?.host_plan !== 'premium' && (
+              {profile?.hostPlan !== 'premium' && (
                 <Button onClick={() => navigate('/pricing')}>
                   Upgrade Plan
                 </Button>

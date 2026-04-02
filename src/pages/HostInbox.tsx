@@ -52,7 +52,7 @@ export default function HostInbox({
                   <div className="flex items-center gap-4 text-on-surface-variant text-sm">
                     <div className="flex items-center gap-1">
                       <User className="w-4 h-4" />
-                      <span>Guest: {booking.guestUid.substring(0, 8)}...</span>
+                      <span>Guest: {booking.guestId.substring(0, 8)}...</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <CalendarDays className="w-4 h-4" />

@@ -26,7 +26,8 @@ This is no longer a Gemini template repo, and it is no longer pretending Firebas
 
 ### Realtime notes
 
-- Socket.IO is still used for live notification delivery
+- notification delivery currently uses backend-backed polling through the same-origin Encore proxy
+- read state is persisted per user in Encore, so notifications stay consistent across devices
 - the durable source of truth for bookings, listings, identity, KYC, reviews, referrals, notifications, and admin workflows is Encore
 
 This is now an Encore-first repo, not a Firebase bridge with new paint.
@@ -92,15 +93,15 @@ The frontend runs at [http://localhost:3000](http://localhost:3000).
 
 ### Backend notes
 
-The frontend now targets a local Encore backend by default at `http://127.0.0.1:4000`.
+The local dev proxy defaults to `http://127.0.0.1:4000` only in local development.
 
 If you want to be explicit in your local env file, set:
 
 ```bash
-VITE_ENCORE_API_URL=http://127.0.0.1:4000
+ENCORE_API_URL=http://127.0.0.1:4000
 ```
 
-If you explicitly want to point the frontend at a remote Encore environment, set `VITE_ENCORE_API_URL` to that environment URL in your local env file. Do not rely on a checked-in staging default.
+Preview and production must set `ENCORE_API_URL` explicitly. They fail closed if the variable is missing, and production-like environments refuse to start if the value points at the staging Encore host.
 
 Dev login is now opt-in only and should never be enabled in a shared environment:
 
@@ -128,6 +129,19 @@ The Encore app typechecks cleanly, but there are two environment caveats in the 
 
 That is why the frontend currently uses a manual fetch client in [`src/lib/encore-client.ts`](/C:/Git%20Repos/IdealTrue/src/lib/encore-client.ts) instead of a generated one.
 
+## Production env contract
+
+These are the important runtime expectations now:
+
+- `ENCORE_API_URL`
+  Required for preview and production.
+  Optional only for local dev, where the proxy falls back to `http://127.0.0.1:4000`.
+- auth runs through the same-origin proxy and is stored in an HttpOnly cookie.
+- proxy logs are structured and include request id, upstream path, status, and duration.
+- proxy logs never include bearer tokens or cookie contents.
+- production and preview builds run a config guard that rejects missing `ENCORE_API_URL` and any staging Encore host reference.
+- frontend builds also run a bundle-budget check so large JS regressions fail the build instead of sneaking through.
+
 ## Verification
 
 The following pass in the current repo state:
@@ -135,6 +149,7 @@ The following pass in the current repo state:
 ```bash
 npm run lint
 npm run test
+npm run test:e2e
 npm run build
 cd encore
 npx tsc --noEmit

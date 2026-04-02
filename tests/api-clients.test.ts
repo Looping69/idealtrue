@@ -135,9 +135,9 @@ test('getEncoreSessionProfile maps the Encore user profile from the proxy respon
   const profile = await getEncoreSessionProfile();
 
   assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/auth/session`);
-  assert.equal(profile.uid, 'user-1');
+  assert.equal(profile.id, 'user-1');
   assert.equal(profile.role, 'host');
-  assert.equal(profile.host_plan, 'professional');
+  assert.equal(profile.hostPlan, 'professional');
   assert.equal(profile.kycStatus, 'verified');
   assert.equal(profile.paymentMethod, 'bank_transfer');
 });
@@ -236,18 +236,18 @@ test('getListing and saveListing use the canonical Encore listing contract', asy
     bathrooms: 2,
     amenities: ['wifi'],
     facilities: ['pool'],
-    restaurant_offers: [],
+    restaurantOffers: [],
     images: [],
-    video_url: null,
-    is_self_catering: true,
-    has_restaurant: false,
-    is_occupied: false,
+    videoUrl: null,
+    isSelfCatering: true,
+    hasRestaurant: false,
+    isOccupied: false,
     coordinates: null,
     blockedDates: [],
     status: 'pending',
   });
 
-  assert.equal(listing.hostUid, 'host-1');
+  assert.equal(listing.hostId, 'host-1');
   assert.equal(fetchCalls[1]?.url, `${DEFAULT_ENCORE_API_URL}/host/listings`);
   assert.equal(fetchCalls[1]?.init?.method, 'POST');
   assert.deepEqual(JSON.parse(String(fetchCalls[1]?.init?.body)), {
@@ -347,12 +347,9 @@ test('submitPaymentProof posts the guest payment proof to the booking payment en
   assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/bookings/booking-9/payment-proof`);
   assert.equal(fetchCalls[0]?.init?.method, 'POST');
   assert.deepEqual(JSON.parse(String(fetchCalls[0]?.init?.body)), {
-    id: 'booking-9',
     paymentReference: 'IDEAL-4100',
+    paymentProof: null,
     paymentProofUrl: 'https://cdn.example.com/payment-proof.jpg',
-    paymentProofFilename: null,
-    paymentProofContentType: null,
-    paymentProofDataBase64: null,
   });
   assert.equal(booking.status, 'payment_submitted');
   assert.equal(booking.paymentReference, 'IDEAL-4100');

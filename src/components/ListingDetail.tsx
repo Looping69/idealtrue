@@ -17,12 +17,12 @@ export default function ListingDetail({
   listing, 
   onClose, 
   onBook,
-  currentUserUid
+  currentUserId
 }: { 
   listing: Listing, 
   onClose: () => void, 
   onBook: (bookingData: { checkIn: Date, checkOut: Date, adults: number, children: number, totalPrice: number }) => Promise<void> | void,
-  currentUserUid?: string
+  currentUserId?: string
 }) {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loadingReviews, setLoadingReviews] = useState(true);
@@ -248,7 +248,7 @@ export default function ListingDetail({
                     <Card key={review.id} className="p-6 space-y-4 border-outline-variant">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-surface-container-high rounded-full flex items-center justify-center font-bold">
-                          {review.guestUid[0].toUpperCase()}
+                          {review.guestId[0].toUpperCase()}
                         </div>
                         <div>
                           <p className="font-bold">Guest</p>
@@ -373,7 +373,7 @@ export default function ListingDetail({
               <Button 
                 className="w-full py-4 text-lg" 
                 onClick={handleBookClick}
-                disabled={currentUserUid === listing.hostUid || isBooking}
+                disabled={currentUserId === listing.hostId || isBooking}
               >
                 {isBooking ? (
                   <>
@@ -381,7 +381,7 @@ export default function ListingDetail({
                     Processing...
                   </>
                 ) : (
-                  currentUserUid === listing.hostUid ? "This is your listing" : "Request to Book"
+                  currentUserId === listing.hostId ? "This is your listing" : "Request to Book"
                 )}
               </Button>
               

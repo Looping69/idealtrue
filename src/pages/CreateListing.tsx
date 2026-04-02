@@ -110,7 +110,7 @@ export default function CreateListing() {
       return;
     }
     if (isEditMode) {
-      setPlan(profile.host_plan || 'standard');
+      setPlan(profile.hostPlan || 'standard');
       setCanCreate(true);
       setCheckingLimit(false);
       return;
@@ -148,18 +148,18 @@ export default function CreateListing() {
           children: data.children || 0,
           bedrooms: data.bedrooms || 1,
           bathrooms: data.bathrooms || 1,
-          is_self_catering: data.is_self_catering || false,
-          has_restaurant: data.has_restaurant || false,
-          restaurant_offers: data.restaurant_offers || [],
+          is_self_catering: data.isSelfCatering || false,
+          has_restaurant: data.hasRestaurant || false,
+          restaurant_offers: data.restaurantOffers || [],
           amenities: data.amenities || [],
           facilities: data.facilities || [],
-          other_facility: data.other_facility || "",
+          other_facility: data.otherFacility || "",
           description: data.description || "",
           pricePerNight: data.pricePerNight?.toString() || "",
           discount: data.discount?.toString() || "0",
           images: data.images || [],
-          video_url: data.video_url || null,
-          is_occupied: data.is_occupied || false,
+          video_url: data.videoUrl || null,
+          is_occupied: data.isOccupied || false,
           coordinates: data.coordinates || null
         });
 
@@ -258,17 +258,17 @@ export default function CreateListing() {
         type: formData.category,
         amenities: formData.amenities,
         facilities: formData.facilities,
-        other_facility: formData.other_facility,
+        otherFacility: formData.other_facility,
         adults: formData.adults,
         children: formData.children,
         bedrooms: formData.bedrooms,
         bathrooms: formData.bathrooms,
-        is_self_catering: formData.is_self_catering,
-        has_restaurant: formData.has_restaurant,
-        restaurant_offers: formData.restaurant_offers,
+        isSelfCatering: formData.is_self_catering,
+        hasRestaurant: formData.has_restaurant,
+        restaurantOffers: formData.restaurant_offers,
         images: formData.images,
-        video_url: formData.video_url,
-        is_occupied: formData.is_occupied,
+        videoUrl: formData.video_url,
+        isOccupied: formData.is_occupied,
         status: 'pending' as const,
         category: parentCategory || "",
         coordinates
@@ -330,17 +330,17 @@ export default function CreateListing() {
       type: formData.category,
       amenities: formData.amenities,
       facilities: formData.facilities,
-      other_facility: formData.other_facility,
+      otherFacility: formData.other_facility,
       adults: formData.adults,
       children: formData.children,
       bedrooms: formData.bedrooms,
       bathrooms: formData.bathrooms,
-      is_self_catering: formData.is_self_catering,
-      has_restaurant: formData.has_restaurant,
-      restaurant_offers: formData.restaurant_offers,
+      isSelfCatering: formData.is_self_catering,
+      hasRestaurant: formData.has_restaurant,
+      restaurantOffers: formData.restaurant_offers,
       images: formData.images,
-      video_url: formData.video_url,
-      is_occupied: formData.is_occupied,
+      videoUrl: formData.video_url,
+      isOccupied: formData.is_occupied,
       status: 'pending' as const,
       category: parentCategory || "",
       coordinates

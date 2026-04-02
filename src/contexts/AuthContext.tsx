@@ -4,10 +4,10 @@ import { getEncoreSessionProfile, signInWithPassword, signUpWithPassword } from 
 import { UserProfile, UserRole } from '@/types';
 
 export interface AuthSessionUser {
-  uid: string;
+  id: string;
   email: string;
   displayName: string;
-  photoURL: string;
+  photoUrl: string;
 }
 
 interface LoginParams {
@@ -50,10 +50,10 @@ const AuthContext = createContext<AuthContextType>({
 
 function toSessionUser(profile: UserProfile): AuthSessionUser {
   return {
-    uid: profile.uid,
+    id: profile.id,
     email: profile.email,
     displayName: profile.displayName,
-    photoURL: profile.photoURL || '',
+    photoUrl: profile.photoUrl || '',
   };
 }
 

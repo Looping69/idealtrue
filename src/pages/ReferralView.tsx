@@ -168,7 +168,7 @@ export default function ReferralView({ profile, referrals }: { profile: UserProf
                     </div>
                     <div>
                       <p className="font-bold">
-                        Reward for {ref.type === 'signup' ? 'New User Signup' : ref.type === 'subscription' ? 'Paid Subscription' : 'Booking'}
+                        Reward for {ref.trigger === 'signup' ? 'New User Signup' : ref.trigger === 'subscription' ? 'Paid Subscription' : 'Booking'}
                       </p>
                       <p className="text-xs text-on-surface-variant">{format(new Date(ref.createdAt), 'MMM d, yyyy')}</p>
                     </div>
@@ -190,13 +190,13 @@ export default function ReferralView({ profile, referrals }: { profile: UserProf
             </h2>
             <Card className="p-0 overflow-hidden">
               {leaderboard.map((user, index) => (
-                <div key={user.uid} className={cn(
+                <div key={user.id} className={cn(
                   "flex items-center justify-between p-4 border-b border-outline-variant last:border-none",
-                  user.uid === profile?.uid ? "bg-surface-container-low" : ""
+                  user.id === profile?.id ? "bg-surface-container-low" : ""
                 )}>
                   <div className="flex items-center gap-3">
                     <span className="w-5 text-sm font-bold text-outline-variant">#{index + 1}</span>
-                    <img src={user.photoURL} className="w-8 h-8 rounded-full border border-outline-variant" alt="" referrerPolicy="no-referrer" />
+                    <img src={user.photoUrl} className="w-8 h-8 rounded-full border border-outline-variant" alt="" referrerPolicy="no-referrer" />
                     <div>
                       <p className="text-sm font-bold truncate max-w-[120px]">{user.displayName}</p>
                       <p className="text-[10px] text-on-surface-variant uppercase font-bold tracking-wider">{user.tier}</p>

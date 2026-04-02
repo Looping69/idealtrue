@@ -1,49 +1,13 @@
 import { encoreRequest } from './encore-client';
 import type { UserProfile } from '@/types';
+import { mapEncoreLeaderboardUser, mapEncoreUserToProfile, type EncoreLeaderboardUser, type EncoreUser, type LeaderboardUser } from './domain-mappers';
 import { serializeImageFile } from './media-client';
 
-type EncoreUserRole = 'guest' | 'host' | 'admin';
-type EncoreHostPlan = 'standard' | 'professional' | 'premium';
-type EncoreKycStatus = 'none' | 'pending' | 'verified' | 'rejected';
-type EncoreReferralTier = 'bronze' | 'silver' | 'gold';
+export type { LeaderboardUser } from './domain-mappers';
 
-interface EncoreUser {
-  id: string;
-  email: string;
-  emailVerified: boolean;
-  displayName: string;
-  photoUrl?: string | null;
-  role: EncoreUserRole;
-  isAdmin: boolean;
-  hostPlan: EncoreHostPlan;
-  kycStatus: EncoreKycStatus;
-  balance: number;
-  referralCount: number;
-  tier: EncoreReferralTier;
-  referralCode?: string | null;
-  referredByCode?: string | null;
-  paymentMethod?: string | null;
-  paymentInstructions?: string | null;
-  paymentReferencePrefix?: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface EncoreLeaderboardUser {
-  id: string;
-  displayName: string;
-  photoUrl?: string | null;
-  tier: EncoreReferralTier;
-  referralCount: number;
-}
-
-export interface LeaderboardUser {
-  uid: string;
-  displayName: string;
-  photoURL: string;
-  tier: EncoreReferralTier;
-  referralCount: number;
-}
+type EncoreUserRole = EncoreUser['role'];
+type EncoreHostPlan = EncoreUser['hostPlan'];
+type EncoreKycStatus = EncoreUser['kycStatus'];
 
 interface SignupParams {
   email: string;
@@ -69,29 +33,6 @@ interface UpdateEncoreProfileParams {
   paymentMethod?: string | null;
   paymentInstructions?: string | null;
   paymentReferencePrefix?: string | null;
-}
-
-function mapEncoreUserToProfile(user: EncoreUser): UserProfile {
-  return {
-    uid: user.id,
-    displayName: user.displayName,
-    email: user.email,
-    emailVerified: user.emailVerified,
-    photoURL: user.photoUrl || '',
-    role: user.role,
-    isAdmin: user.isAdmin,
-    referralCode: user.referralCode || '',
-    referredBy: user.referredByCode || null,
-    balance: user.balance,
-    referralCount: user.referralCount,
-    tier: user.tier,
-    host_plan: user.hostPlan,
-    kycStatus: user.kycStatus,
-    paymentMethod: user.paymentMethod || null,
-    paymentInstructions: user.paymentInstructions || null,
-    paymentReferencePrefix: user.paymentReferencePrefix || null,
-    createdAt: user.createdAt,
-  };
 }
 
 async function storeSessionResponse(response: { user: EncoreUser }) {
@@ -174,7 +115,7 @@ export async function getEncoreSessionProfile() {
   return mapEncoreUserToProfile(response.user);
 }
 
-export async function updateEncoreProfile(params: UpdateEncoreProfileParams) {
+export async function updateEncoreProfile(params: UpdateEncoreProfileParams): Promise<UserProfile> {
   const response = await encoreRequest<{ user: EncoreUser }>(
     '/users/me',
     {
@@ -187,15 +128,9 @@ export async function updateEncoreProfile(params: UpdateEncoreProfileParams) {
   return mapEncoreUserToProfile(response.user);
 }
 
-export async function listReferralLeaderboard() {
+export async function listReferralLeaderboard(): Promise<LeaderboardUser[]> {
   const response = await encoreRequest<{ users: EncoreLeaderboardUser[] }>('/users/leaderboard/referrals');
-  return response.users.map((user): LeaderboardUser => ({
-    uid: user.id,
-    displayName: user.displayName,
-    photoURL: user.photoUrl || '',
-    tier: user.tier,
-    referralCount: user.referralCount,
-  }));
+  return response.users.map(mapEncoreLeaderboardUser);
 }
 
 export async function setUserKycStatus(params: { userId: string; kycStatus: EncoreKycStatus }) {

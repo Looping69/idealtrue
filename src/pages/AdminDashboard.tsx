@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   BarChart, 
   Bar, 
@@ -54,17 +54,6 @@ import {
   deleteAdminReferralReward,
   deleteAdminReview,
   deleteAdminUser,
-  getAdminObservability,
-  getAdminPlatformSettings,
-  listAdminBookings,
-  listAdminCheckouts,
-  listAdminListings,
-  listAdminNotifications,
-  listAdminReferralRewards,
-  listAdminReviews,
-  listAdminSubscriptions,
-  listAdminUsers,
-  updateAdminPlatformSettings,
   updateAdminUser,
 } from '@/lib/admin-client';
 import { getKycSubmissionAssets, listKycSubmissions, reviewKycSubmission, type KycSubmission } from '@/lib/ops-client';
@@ -72,6 +61,7 @@ import { setUserKycStatus } from '@/lib/identity-client';
 import { saveListing } from '@/lib/platform-client';
 import { cn } from '@/lib/utils';
 import { formatUptime, HealthMetric, sortByDate, StatCard, toListingPayload } from '@/features/admin/dashboard-support';
+import { useAdminDashboardData } from '@/features/admin/use-admin-dashboard-data';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -111,25 +101,6 @@ export default function AdminDashboard() {
   const { toast } = useToast();
   const { profile } = useAuth();
   const [activeMenu, setActiveMenu] = useState('overview');
-  const [stats, setStats] = useState({
-    totalUsers: 0,
-    activeListings: 0,
-    totalEnquiries: 0,
-    pendingReviews: 0
-  });
-  const [recentEnquiries, setRecentEnquiries] = useState<Booking[]>([]);
-  const [allBookings, setAllBookings] = useState<Booking[]>([]);
-  const [topListings, setTopListings] = useState<Listing[]>([]);
-  const [allListings, setAllListings] = useState<Listing[]>([]);
-  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
-  const [allReferrals, setAllReferrals] = useState<Referral[]>([]);
-  const [allReviews, setAllReviews] = useState<Review[]>([]);
-  const [allSubscriptions, setAllSubscriptions] = useState<Subscription[]>([]);
-  const [allCheckouts, setAllCheckouts] = useState<AdminCheckout[]>([]);
-  const [allNotifications, setAllNotifications] = useState<Notification[]>([]);
-  const [platformSettings, setPlatformSettings] = useState<PlatformSettings | null>(null);
-  const [observability, setObservability] = useState<AdminObservabilitySnapshot | null>(null);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [manualReferrerEmail, setManualReferrerEmail] = useState('');
   const [manualRefereeEmail, setManualRefereeEmail] = useState('');
@@ -137,7 +108,6 @@ export default function AdminDashboard() {
   const [referralTab, setReferralTab] = useState<'guest' | 'host'>('guest');
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [editingListing, setEditingListing] = useState<Listing | null>(null);
-  const [kycSubmissions, setKycSubmissions] = useState<KycSubmission[]>([]);
   const [kycFilter, setKycFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>('pending');
   const [dateSorts, setDateSorts] = useState<Record<DateSortTable, DateSortDirection>>({
     users: 'desc',
@@ -153,10 +123,44 @@ export default function AdminDashboard() {
   const [rejectingKycSubmission, setRejectingKycSubmission] = useState<KycReviewState | null>(null);
   const [kycRejectionReason, setKycRejectionReason] = useState('Documents were unclear or incomplete.');
   const [isRejectingKyc, setIsRejectingKyc] = useState(false);
-  const pendingKycCount = useMemo(
-    () => kycSubmissions.filter((submission) => submission.status === 'pending').length,
-    [kycSubmissions],
-  );
+  const {
+    stats,
+    setStats,
+    recentEnquiries,
+    allBookings,
+    setAllBookings,
+    topListings,
+    setTopListings,
+    allListings,
+    setAllListings,
+    allUsers,
+    setAllUsers,
+    allReferrals,
+    setAllReferrals,
+    allReviews,
+    setAllReviews,
+    allSubscriptions,
+    setAllSubscriptions,
+    allCheckouts,
+    setAllCheckouts,
+    allNotifications,
+    setAllNotifications,
+    platformSettings,
+    setPlatformSettings,
+    observability,
+    kycSubmissions,
+    setKycSubmissions,
+    loading,
+    pendingKycCount,
+    handleApproveKyc: handleApproveKYC,
+    handleUpdateListingStatus,
+    handleUpdateSettings,
+    handleUpdateUserRole,
+  } = useAdminDashboardData({
+    notify: toast,
+    profileId: profile?.id,
+    profileRole: profile?.role,
+  });
 
   const toggleDateSort = (table: DateSortTable) => {
     setDateSorts((current) => ({
@@ -177,117 +181,13 @@ export default function AdminDashboard() {
     </button>
   );
 
-  useEffect(() => {
-    let cancelled = false;
-
-    Promise.all([
-      listAdminUsers(),
-      listAdminListings(),
-      listAdminBookings(),
-      listAdminReviews(),
-      listAdminReferralRewards(),
-      listAdminSubscriptions(),
-      listAdminCheckouts(),
-      listAdminNotifications(),
-      getAdminPlatformSettings(),
-    ]).then(([users, listings, bookings, reviews, referrals, subscriptions, checkouts, notifications, settings]) => {
-      if (cancelled) return;
-
-      setAllUsers(users);
-      setAllListings(listings);
-      setAllBookings(bookings);
-      setAllReviews(reviews);
-      setAllReferrals(referrals);
-      setAllSubscriptions(subscriptions);
-      setAllCheckouts(checkouts);
-      setAllNotifications(notifications);
-      setPlatformSettings(settings);
-      setRecentEnquiries([...bookings].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5));
-      setTopListings([...listings].filter((listing) => listing.status === 'active').slice(0, 5));
-      setStats({
-        totalUsers: users.length,
-        activeListings: listings.filter((listing) => listing.status === 'active').length,
-        totalEnquiries: bookings.length,
-        pendingReviews: reviews.filter((review) => review.status === 'pending').length,
-      });
-      setLoading(false);
-    }).catch((error) => {
-      console.error('Failed to load admin core data', error);
-      toast({ title: 'Admin data failed', description: 'Could not load admin dashboard data.', variant: 'destructive' });
-      setLoading(false);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [toast]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    getAdminObservability()
-      .then((snapshot) => {
-        if (cancelled) return;
-        setObservability(snapshot);
-      })
-      .catch((error) => {
-        console.error('Failed to load admin observability snapshot', error);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (profile?.role !== 'admin') return;
-
-    listKycSubmissions()
-      .then(setKycSubmissions)
-      .catch((error) => {
-        console.error('Failed to load KYC submissions', error);
-        toast({ title: 'KYC load failed', description: 'Could not load KYC submissions.', variant: 'destructive' });
-      });
-  }, [profile?.role, toast]);
-
-  const handleUpdateUserRole = async (uid: string, newRole: string) => {
-    console.log('Updating user role:', { uid, newRole });
-    try {
-      const updatedUser = await updateAdminUser({ userId: uid, role: newRole as UserProfile['role'] });
-      setAllUsers((current) => current.map((user) => user.uid === uid ? updatedUser : user));
-      toast({ title: "Role Updated", description: "User role updated successfully." });
-    } catch (err) {
-      console.error('Error updating user role:', err);
-      toast({ title: 'Role update failed', description: 'Could not update the user role.', variant: 'destructive' });
-    }
-  };
-
-  const handleUpdateListingStatus = async (id: string, newStatus: string) => {
-    console.log('Updating listing status:', { id, newStatus });
-    try {
-      const listing = allListings.find((item) => item.id === id);
-      if (!listing) return;
-      await saveListing(toListingPayload(listing, newStatus as Listing['status']));
-      setAllListings((current) => current.map((item) => item.id === id ? { ...item, status: newStatus as Listing['status'] } : item));
-      setTopListings((current) => current.map((item) => item.id === id ? { ...item, status: newStatus as Listing['status'] } : item).filter((item) => item.status === 'active').slice(0, 5));
-      setStats((current) => ({
-        ...current,
-        activeListings: allListings.map((item) => item.id === id ? { ...item, status: newStatus as Listing['status'] } : item).filter((item) => item.status === 'active').length,
-      }));
-      toast({ title: "Status Updated", description: `Listing status updated to ${newStatus}.` });
-    } catch (err) {
-      console.error('Error updating listing status:', err);
-      toast({ title: 'Listing update failed', description: 'Could not update the listing status.', variant: 'destructive' });
-    }
-  };
-
   const [confirmDelete, setConfirmDelete] = useState<{ type: 'user' | 'listing' | 'review' | 'referral' | 'notification', id: string } | null>(null);
 
   const handleDeleteUser = async (uid: string) => {
     console.log('Deleting user:', uid);
     try {
       await deleteAdminUser(uid);
-      setAllUsers((current) => current.filter((user) => user.uid !== uid));
+      setAllUsers((current) => current.filter((user) => user.id !== uid));
       setStats((current) => ({
         ...current,
         totalUsers: current.totalUsers - 1,
@@ -382,36 +282,23 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleUpdateSettings = async (settings: Partial<PlatformSettings>) => {
-    try {
-      const updatedSettings = await updateAdminPlatformSettings(settings);
-      setPlatformSettings(updatedSettings);
-      toast({
-        title: "Settings Updated",
-        description: "Platform configuration has been saved.",
-      });
-    } catch (err) {
-      toast({ title: 'Settings update failed', description: 'Could not save platform settings.', variant: 'destructive' });
-    }
-  };
-
   const handleUpdateUser = async (user: UserProfile) => {
     try {
       const updatedUser = await updateAdminUser({
-        userId: user.uid,
+        userId: user.id,
         displayName: user.displayName,
         role: user.role,
-        hostPlan: user.host_plan,
+        hostPlan: user.hostPlan,
         kycStatus: user.kycStatus,
         balance: user.balance,
         tier: user.tier,
       });
-      setAllUsers((current) => current.map((item) => item.uid === user.uid ? updatedUser : item));
+      setAllUsers((current) => current.map((item) => item.id === user.id ? updatedUser : item));
       const notification = await createAdminNotification({
         title: 'Profile Updated',
         message: 'Your profile has been updated by an administrator.',
         type: 'info',
-        target: user.uid,
+        target: user.id,
         actionPath: '/account',
       });
       setAllNotifications((current) => [notification, ...current]);
@@ -430,7 +317,7 @@ export default function AdminDashboard() {
         title: 'Listing Updated',
         message: `Your listing "${listing.title}" has been updated by an administrator.`,
         type: 'info',
-        target: listing.hostUid,
+        target: listing.hostId,
         actionPath: '/host/listings',
       });
       setAllNotifications((current) => [notification, ...current]);
@@ -438,39 +325,6 @@ export default function AdminDashboard() {
       setEditingListing(null);
     } catch (err) {
       toast({ title: 'Listing update failed', description: 'Could not update the listing.', variant: 'destructive' });
-    }
-  };
-
-  const handleApproveKYC = async (uid: string) => {
-    try {
-      await reviewKycSubmission({ userId: uid, status: 'verified' });
-      await setUserKycStatus({ userId: uid, kycStatus: 'verified' });
-      const notification = await createAdminNotification({
-        title: 'Verification Approved',
-        message: 'Your identity verification has been approved. You can now start listing properties.',
-        type: 'success',
-        target: uid,
-        actionPath: '/account',
-      });
-      setAllNotifications((current) => [notification, ...current]);
-      toast({ title: "Verification Approved", description: "User has been verified." });
-      setViewingKYCSubmission(null);
-        setKycSubmissions((current) =>
-          current.map((submission) =>
-            submission.userId === uid
-              ? {
-                  ...submission,
-                  status: 'verified',
-                  rejectionReason: null,
-                  reviewedAt: notification.createdAt,
-                  reviewerId: profile?.uid ?? submission.reviewerId ?? null,
-                }
-              : submission,
-          ),
-        );
-      } catch (err) {
-      console.error('Failed to approve KYC submission', err);
-      toast({ title: 'Approval failed', description: 'Could not approve this KYC submission.', variant: 'destructive' });
     }
   };
 
@@ -509,7 +363,7 @@ export default function AdminDashboard() {
                   status: 'rejected',
                   rejectionReason: kycRejectionReason,
                   reviewedAt: new Date().toISOString(),
-                  reviewerId: profile?.uid ?? submission.reviewerId ?? null,
+                  reviewerId: profile?.id ?? submission.reviewerId ?? null,
                 }
               : submission,
           ),
@@ -523,7 +377,7 @@ export default function AdminDashboard() {
   };
 
   const handleReviewKYC = async (submission: KycSubmission) => {
-    const user = allUsers.find((candidate) => candidate.uid === submission.userId) || null;
+    const user = allUsers.find((candidate) => candidate.id === submission.userId) || null;
     setViewingKYCSubmission({ ...submission, user });
     setKycAssetsLoading(true);
 
@@ -557,11 +411,11 @@ export default function AdminDashboard() {
       }
 
       const referral = await createAdminReferralReward({
-        referrerId: referrer.uid,
-        referredUserId: referee.uid,
+        referrerId: referrer.id,
+        referredUserId: referee.id,
         amount: platformSettings?.referralRewardAmount || 50,
         trigger: 'signup',
-        status: 'pending',
+        program: referralTab,
       });
       setAllReferrals((current) => [referral, ...current]);
 
@@ -849,10 +703,10 @@ export default function AdminDashboard() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredUsers.map((user) => (
-                  <tr key={user.uid} className="hover:bg-slate-50 transition-colors">
+                  <tr key={user.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <img src={user.photoURL} className="w-10 h-10 rounded-full border border-slate-100" alt="" referrerPolicy="no-referrer" />
+                        <img src={user.photoUrl} className="w-10 h-10 rounded-full border border-slate-100" alt="" referrerPolicy="no-referrer" />
                         <div>
                           <p className="text-sm font-bold text-slate-900">{user.displayName}</p>
                           <p className="text-xs text-slate-500">{user.email}</p>
@@ -863,7 +717,7 @@ export default function AdminDashboard() {
                       <select 
                         className="text-xs font-bold bg-slate-100 rounded-md px-2 py-1 border-none focus:ring-2 focus:ring-primary"
                         value={user.role}
-                        onChange={(e) => handleUpdateUserRole(user.uid, e.target.value)}
+                        onChange={(e) => handleUpdateUserRole(user.id, e.target.value as UserProfile['role'])}
                       >
                         <option value="guest">Guest</option>
                         <option value="host">Host</option>
@@ -899,7 +753,7 @@ export default function AdminDashboard() {
                           size="sm" 
                           className="text-xs h-8 text-green-600 border-green-200 hover:bg-green-50"
                           onClick={() => {
-                            const submission = kycSubmissions.find((item) => item.userId === user.uid);
+                            const submission = kycSubmissions.find((item) => item.userId === user.id);
                             if (submission) {
                               handleReviewKYC(submission);
                             }
@@ -913,7 +767,7 @@ export default function AdminDashboard() {
                         size="sm" 
                         className="text-xs text-blue-500" 
                         onClick={() => {
-                          console.log('Edit user clicked:', user.uid);
+                          console.log('Edit user clicked:', user.id);
                           setEditingUser(user);
                         }}
                       >
@@ -924,8 +778,8 @@ export default function AdminDashboard() {
                         size="sm" 
                         className="text-xs text-red-500" 
                         onClick={() => {
-                          console.log('Delete user clicked:', user.uid);
-                          setConfirmDelete({ type: 'user', id: user.uid });
+                          console.log('Delete user clicked:', user.id);
+                          setConfirmDelete({ type: 'user', id: user.id });
                         }}
                       >
                         Delete
@@ -935,8 +789,8 @@ export default function AdminDashboard() {
                         size="sm" 
                         className="text-xs"
                         onClick={() => {
-                          console.log('View profile clicked for user:', user.uid);
-                          navigate(`/account?uid=${user.uid}`);
+                          console.log('View profile clicked for user:', user.id);
+                          navigate(`/account?id=${user.id}`);
                         }}
                       >
                         View Profile
@@ -997,7 +851,7 @@ export default function AdminDashboard() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredListings.map((listing) => {
-                  const host = allUsers.find(u => u.uid === listing.hostUid);
+                  const host = allUsers.find(u => u.id === listing.hostId);
                   return (
                     <tr key={listing.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4">
@@ -1011,7 +865,7 @@ export default function AdminDashboard() {
                       </td>
                       <td className="px-6 py-4">
                         <p className="text-sm font-medium">{host?.displayName || 'Unknown Host'}</p>
-                        <p className="text-[10px] text-slate-400">{listing.hostUid.slice(0, 8)}...</p>
+                        <p className="text-[10px] text-slate-400">{listing.hostId.slice(0, 8)}...</p>
                       </td>
                       <td className="px-6 py-4">
                           <p className="text-sm font-bold">{formatRand(listing.pricePerNight)}</p>
@@ -1077,7 +931,7 @@ export default function AdminDashboard() {
     const filteredBookings = sortByDate(
       allBookings.filter(b => {
         const listing = allListings.find(l => l.id === b.listingId);
-        const guest = allUsers.find(u => u.uid === b.guestUid);
+        const guest = allUsers.find(u => u.id === b.guestId);
         return (
           listing?.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
           guest?.displayName.toLowerCase().includes(searchQuery.toLowerCase())
@@ -1124,7 +978,7 @@ export default function AdminDashboard() {
               <tbody className="divide-y divide-slate-100">
                 {filteredBookings.map((booking) => {
                   const listing = allListings.find(l => l.id === booking.listingId);
-                  const guest = allUsers.find(u => u.uid === booking.guestUid);
+                  const guest = allUsers.find(u => u.id === booking.guestId);
                   return (
                     <tr key={booking.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4">
@@ -1179,7 +1033,7 @@ export default function AdminDashboard() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {pendingListings.map(listing => {
-            const host = allUsers.find(u => u.uid === listing.hostUid);
+            const host = allUsers.find(u => u.id === listing.hostId);
             return (
               <Card key={listing.id} className="overflow-hidden flex flex-col group">
                 <div className="aspect-video relative overflow-hidden">
@@ -1202,7 +1056,7 @@ export default function AdminDashboard() {
                   </div>
                   
                   <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
-                    <img src={host?.photoURL} className="w-8 h-8 rounded-full border border-white" alt="" referrerPolicy="no-referrer" />
+                    <img src={host?.photoUrl} className="w-8 h-8 rounded-full border border-white" alt="" referrerPolicy="no-referrer" />
                     <div>
                       <p className="text-xs font-bold">{host?.displayName}</p>
                       <p className="text-[10px] text-slate-400">Host</p>
@@ -1242,8 +1096,8 @@ export default function AdminDashboard() {
   const renderReferrals = () => {
     const filteredReferrals = sortByDate(
       allReferrals.filter(ref => {
-        const referrer = allUsers.find(u => u.uid === ref.referrerUid);
-        const referred = allUsers.find(u => u.uid === ref.referredUid);
+        const referrer = allUsers.find(u => u.id === ref.referrerId);
+        const referred = allUsers.find(u => u.id === ref.referredUserId);
         
         const matchesSearch = 
           referrer?.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -1251,7 +1105,7 @@ export default function AdminDashboard() {
           referrer?.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
           referred?.email.toLowerCase().includes(searchQuery.toLowerCase());
         
-        const matchesTab = referralTab === 'guest' ? ref.type === 'signup' : ref.type === 'booking';
+        const matchesTab = referralTab === 'guest' ? ref.trigger === 'signup' : ref.trigger === 'booking';
         const matchesFilter = referralFilter === 'all' || ref.status === referralFilter;
 
         return matchesSearch && matchesTab && matchesFilter;
@@ -1261,10 +1115,10 @@ export default function AdminDashboard() {
     );
 
     const counts = {
-      all: allReferrals.filter(r => (referralTab === 'guest' ? r.type === 'signup' : r.type === 'booking')).length,
-      pending: allReferrals.filter(r => (referralTab === 'guest' ? r.type === 'signup' : r.type === 'booking') && r.status === 'pending').length,
-      confirmed: allReferrals.filter(r => (referralTab === 'guest' ? r.type === 'signup' : r.type === 'booking') && r.status === 'confirmed').length,
-      rewarded: allReferrals.filter(r => (referralTab === 'guest' ? r.type === 'signup' : r.type === 'booking') && r.status === 'rewarded').length,
+      all: allReferrals.filter(r => (referralTab === 'guest' ? r.trigger === 'signup' : r.trigger === 'booking')).length,
+      pending: allReferrals.filter(r => (referralTab === 'guest' ? r.trigger === 'signup' : r.trigger === 'booking') && r.status === 'pending').length,
+      confirmed: allReferrals.filter(r => (referralTab === 'guest' ? r.trigger === 'signup' : r.trigger === 'booking') && r.status === 'confirmed').length,
+      rewarded: allReferrals.filter(r => (referralTab === 'guest' ? r.trigger === 'signup' : r.trigger === 'booking') && r.status === 'rewarded').length,
     };
 
     return (
@@ -1355,8 +1209,8 @@ export default function AdminDashboard() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredReferrals.map((ref) => {
-                  const referrer = allUsers.find(u => u.uid === ref.referrerUid);
-                  const referred = allUsers.find(u => u.uid === ref.referredUid);
+                  const referrer = allUsers.find(u => u.id === ref.referrerId);
+                  const referred = allUsers.find(u => u.id === ref.referredUserId);
                   return (
                     <tr key={ref.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4">
@@ -1528,14 +1382,14 @@ export default function AdminDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {allReviews.map(review => {
             const listing = allListings.find(l => l.id === review.listingId);
-            const guest = allUsers.find(u => u.uid === review.guestUid);
+            const guest = allUsers.find(u => u.id === review.guestId);
             const avgRating = (review.cleanliness + review.accuracy + review.communication + review.location + review.value) / 5;
             
             return (
               <Card key={review.id} className="p-6 space-y-4">
                 <div className="flex justify-between items-start">
                   <div className="flex items-center gap-3">
-                    <img src={guest?.photoURL} className="w-10 h-10 rounded-full border border-slate-100" alt="" referrerPolicy="no-referrer" />
+                    <img src={guest?.photoUrl} className="w-10 h-10 rounded-full border border-slate-100" alt="" referrerPolicy="no-referrer" />
                     <div>
                       <p className="text-sm font-bold">{guest?.displayName}</p>
                       <p className="text-[10px] text-slate-400">{new Date(review.createdAt).toLocaleDateString()}</p>
@@ -1579,7 +1433,7 @@ export default function AdminDashboard() {
     const paidCheckouts = allCheckouts.filter((checkout) => checkout.status === 'paid');
     const pendingCheckouts = allCheckouts.filter((checkout) => checkout.status === 'pending');
     const sortedSubscriptions = sortByDate(allSubscriptions, (subscription) => subscription.endDate, dateSorts.subscriptions);
-    const sortedCheckouts = sortByDate(allCheckouts, (checkout) => checkout.created_at, dateSorts.checkouts);
+    const sortedCheckouts = sortByDate(allCheckouts, (checkout) => checkout.createdAt, dateSorts.checkouts);
 
     return (
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -1627,12 +1481,12 @@ export default function AdminDashboard() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                   {sortedSubscriptions.map((sub) => {
-                  const host = allUsers.find(u => u.uid === sub.hostUid);
+                  const host = allUsers.find(u => u.id === sub.userId);
                   return (
                     <tr key={sub.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <img src={host?.photoURL} className="w-8 h-8 rounded-full" alt="" referrerPolicy="no-referrer" />
+                          <img src={host?.photoUrl} className="w-8 h-8 rounded-full" alt="" referrerPolicy="no-referrer" />
                           <p className="text-sm font-bold">{host?.displayName || 'Unknown'}</p>
                         </div>
                       </td>
@@ -1685,22 +1539,22 @@ export default function AdminDashboard() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                   {sortedCheckouts.map((checkout) => {
-                  const user = allUsers.find((candidate) => candidate.uid === checkout.user_id);
-                  const detail = checkout.checkout_type === 'subscription'
-                    ? `${checkout.host_plan || 'unknown'} • ${checkout.billing_interval || 'n/a'}`
-                    : `${checkout.credit_quantity || 0} credits`;
+                  const user = allUsers.find((candidate) => candidate.id === checkout.userId);
+                  const detail = checkout.checkoutType === 'subscription'
+                    ? `${checkout.hostPlan || 'unknown'} • ${checkout.billingInterval || 'n/a'}`
+                    : `${checkout.creditQuantity || 0} credits`;
 
                   return (
                     <tr key={checkout.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4">
                         <div className="space-y-1">
                           <p className="text-sm font-bold text-slate-900">{user?.displayName || 'Unknown user'}</p>
-                          <p className="text-xs text-slate-500">{user?.email || checkout.user_id}</p>
+                          <p className="text-xs text-slate-500">{user?.email || checkout.userId}</p>
                         </div>
                       </td>
                       <td className="px-6 py-4">
                         <Badge variant="secondary" className="text-[10px] uppercase font-bold">
-                          {checkout.checkout_type === 'subscription' ? 'Subscription' : 'Credits'}
+                          {checkout.checkoutType === 'subscription' ? 'Subscription' : 'Credits'}
                         </Badge>
                       </td>
                       <td className="px-6 py-4">
@@ -1725,11 +1579,11 @@ export default function AdminDashboard() {
                       </td>
                       <td className="px-6 py-4">
                         <p className="max-w-[180px] truncate text-xs text-slate-500">
-                          {checkout.provider_payment_id || checkout.provider_checkout_id || 'Pending provider ref'}
+                          {checkout.providerPaymentId || checkout.providerCheckoutId || 'Pending provider ref'}
                         </p>
                       </td>
                       <td className="px-6 py-4">
-                        <p className="text-xs text-slate-500">{new Date(checkout.created_at).toLocaleString()}</p>
+                        <p className="text-xs text-slate-500">{new Date(checkout.createdAt).toLocaleString()}</p>
                       </td>
                     </tr>
                   );
@@ -2076,12 +1930,12 @@ export default function AdminDashboard() {
                   </tr>
                 ) : (
                   filteredKycSubmissions.map((submission) => {
-                    const user = allUsers.find((candidate) => candidate.uid === submission.userId);
+                    const user = allUsers.find((candidate) => candidate.id === submission.userId);
                     return (
                       <tr key={submission.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <img src={user?.photoURL || 'https://placehold.co/80x80?text=User'} className="w-10 h-10 rounded-full border border-slate-100 object-cover" alt="" referrerPolicy="no-referrer" />
+                          <img src={user?.photoUrl || 'https://placehold.co/80x80?text=User'} className="w-10 h-10 rounded-full border border-slate-100 object-cover" alt="" referrerPolicy="no-referrer" />
                           <div>
                             <p className="text-sm font-bold text-slate-900">{user?.displayName || submission.userId}</p>
                             <p className="text-xs text-slate-500">{user?.email || 'Unknown user'}</p>

@@ -1,27 +1,6 @@
 import type { Notification } from '@/types';
 import { encoreRequest } from './encore-client';
-
-interface EncoreNotification {
-  id: string;
-  title: string;
-  message: string;
-  type: Notification['type'];
-  target: string;
-  actionPath?: string | null;
-  createdAt: string;
-}
-
-function mapNotification(notification: EncoreNotification): Notification {
-  return {
-    id: notification.id,
-    title: notification.title,
-    message: notification.message,
-    type: notification.type,
-    target: notification.target,
-    actionPath: notification.actionPath || null,
-    createdAt: notification.createdAt,
-  };
-}
+import { mapEncoreNotification, type EncoreNotification } from './domain-mappers';
 
 export async function listMyNotifications() {
   try {
@@ -31,11 +10,32 @@ export async function listMyNotifications() {
       { auth: true },
     );
 
-    return response.notifications.map(mapNotification);
+    return response.notifications.map(mapEncoreNotification);
   } catch (error) {
     if (error instanceof Error && error.message.includes('"code":"not_found"')) {
       return [];
     }
     throw error;
   }
+}
+
+export async function markNotificationRead(notificationId: string) {
+  return encoreRequest<{ ok: true; readAt: string }>(
+    '/ops/my-notifications/read',
+    {
+      method: 'POST',
+      body: JSON.stringify({ notificationId }),
+    },
+    { auth: true },
+  );
+}
+
+export async function markAllNotificationsRead() {
+  return encoreRequest<{ ok: true; readAt: string }>(
+    '/ops/my-notifications/read-all',
+    {
+      method: 'POST',
+    },
+    { auth: true },
+  );
 }

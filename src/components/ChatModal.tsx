@@ -10,19 +10,19 @@ import { listMessages, sendMessage as sendPlatformMessage } from '@/lib/messagin
 interface ChatModalProps {
   booking: Booking;
   listing: Listing;
-  currentUserUid: string;
+  currentUserId: string;
   onClose: () => void;
 }
 
-export default function ChatModal({ booking, listing, currentUserUid, onClose }: ChatModalProps) {
+export default function ChatModal({ booking, listing, currentUserId, onClose }: ChatModalProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const isHost = currentUserUid === booking.hostUid;
-  const otherPartyUid = isHost ? booking.guestUid : booking.hostUid;
+  const isHost = currentUserId === booking.hostId;
+  const otherPartyId = isHost ? booking.guestId : booking.hostId;
 
   useEffect(() => {
     let cancelled = false;
@@ -59,10 +59,10 @@ export default function ChatModal({ booking, listing, currentUserUid, onClose }:
     
     setIsSending(true);
     try {
-      const savedMessage = await sendPlatformMessage({
-        bookingId: booking.id,
-        receiverId: otherPartyUid,
-        text,
+        const savedMessage = await sendPlatformMessage({
+          bookingId: booking.id,
+          receiverId: otherPartyId,
+          text,
         isSystem,
         suggestionType,
       });
@@ -119,7 +119,7 @@ export default function ChatModal({ booking, listing, currentUserUid, onClose }:
           </div>
         ) : (
           messages.map((msg) => {
-            const isMine = msg.senderId === currentUserUid;
+            const isMine = msg.senderId === currentUserId;
             if (msg.isSystem) {
               return (
                 <div key={msg.id} className="flex justify-center">

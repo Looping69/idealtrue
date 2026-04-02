@@ -125,7 +125,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
             setFetchingPlan(false);
             return;
         }
-        setCurrentPlan((profile.host_plan as PlanTier) || 'standard');
+        setCurrentPlan((profile.hostPlan as PlanTier) || 'standard');
         setFetchingPlan(false);
     }, [profile]);
 
@@ -149,7 +149,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
 
                 if (result.status === 'paid') {
                     await refreshProfile();
-                    setCurrentPlan((profile?.host_plan as PlanTier) || currentPlan);
+                    setCurrentPlan((profile?.hostPlan as PlanTier) || currentPlan);
                     toast.success('Subscription payment confirmed. Your plan access is now live.');
                     navigate('/host', { replace: true });
                     return;
@@ -177,7 +177,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
         return () => {
             cancelled = true;
         };
-    }, [billingStatus, checkoutId, currentPlan, navigate, profile?.host_plan, refreshProfile, user]);
+    }, [billingStatus, checkoutId, currentPlan, navigate, profile?.hostPlan, refreshProfile, user]);
 
 
     const handleUpgrade = useCallback(async (planId: PlanTier) => {

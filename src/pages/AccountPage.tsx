@@ -163,9 +163,9 @@ export default function AccountPage() {
           <Card className="p-6 flex flex-col items-center text-center space-y-4">
             <div className="relative group">
               <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-surface-container-high bg-surface-container relative">
-                {profile.photoURL ? (
+                {profile.photoUrl ? (
                   <img 
-                    src={profile.photoURL} 
+                    src={profile.photoUrl} 
                     alt={profile.displayName} 
                     className="w-full h-full object-cover"
                     referrerPolicy="no-referrer"

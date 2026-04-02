@@ -23,7 +23,7 @@ export default function ReviewForm({ booking, onClose }: { booking: Booking, onC
       await createListingReview({
         listingId: booking.listingId,
         bookingId: booking.id,
-        hostId: booking.hostUid,
+        hostId: booking.hostId,
         ...ratings,
         comment,
       });

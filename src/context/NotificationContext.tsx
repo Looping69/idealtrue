@@ -2,54 +2,33 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import { toast } from 'sonner';
 import type { AuthSessionUser } from '@/contexts/AuthContext';
 import type { Notification } from '@/types';
-import { listMyNotifications } from '@/lib/notification-client';
+import {
+  listMyNotifications,
+  markAllNotificationsRead as persistMarkAllNotificationsRead,
+  markNotificationRead as persistMarkNotificationRead,
+} from '@/lib/notification-client';
 
 interface NotificationContextType {
   notifications: Notification[];
   unreadCount: number;
   isNotificationRead: (notificationId: string) => boolean;
-  markNotificationRead: (notificationId: string) => void;
-  markAllNotificationsRead: () => void;
+  markNotificationRead: (notificationId: string) => Promise<void>;
+  markAllNotificationsRead: () => Promise<void>;
 }
 
 const NotificationContext = createContext<NotificationContextType>({
   notifications: [],
   unreadCount: 0,
   isNotificationRead: () => false,
-  markNotificationRead: () => {},
-  markAllNotificationsRead: () => {},
+  markNotificationRead: async () => {},
+  markAllNotificationsRead: async () => {},
 });
-
-function getReadStorageKey(userId: string) {
-  return `idealstay.notifications.read.${userId}`;
-}
-
-function getReadIds(userId: string) {
-  if (typeof window === 'undefined') {
-    return new Set<string>();
-  }
-
-  try {
-    const raw = window.localStorage.getItem(getReadStorageKey(userId));
-    const parsed = raw ? JSON.parse(raw) : [];
-    return new Set(Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : []);
-  } catch {
-    return new Set<string>();
-  }
-}
-
-function persistReadIds(userId: string, readIds: Set<string>) {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  window.localStorage.setItem(getReadStorageKey(userId), JSON.stringify(Array.from(readIds)));
-}
 
 function normalizeNotification(notification: Notification) {
   return {
     ...notification,
     actionPath: notification.actionPath || null,
+    readAt: notification.readAt || null,
   };
 }
 
@@ -61,7 +40,14 @@ function mergeNotifications(existing: Notification[], incoming: Notification[]) 
   }
 
   for (const notification of incoming) {
-    merged.set(notification.id, normalizeNotification(notification));
+    const current = merged.get(notification.id);
+    const next = normalizeNotification(notification);
+
+    if (current?.readAt && !next.readAt) {
+      next.readAt = current.readAt;
+    }
+
+    merged.set(notification.id, next);
   }
 
   return Array.from(merged.values()).sort(
@@ -71,16 +57,13 @@ function mergeNotifications(existing: Notification[], incoming: Notification[]) 
 
 export const NotificationProvider = ({ children, user }: { children: React.ReactNode; user: AuthSessionUser | null }) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [readIds, setReadIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!user) {
       setNotifications([]);
-      setReadIds(new Set());
       return;
     }
 
-    setReadIds(getReadIds(user.uid));
     let cancelled = false;
 
     const refreshNotifications = async (showToastForNew = false) => {
@@ -123,32 +106,50 @@ export const NotificationProvider = ({ children, user }: { children: React.React
     };
   }, [user]);
 
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
-
-    persistReadIds(user.uid, readIds);
-  }, [readIds, user]);
-
   const unreadCount = useMemo(
-    () => notifications.filter((notification) => !readIds.has(notification.id)).length,
-    [notifications, readIds],
+    () => notifications.filter((notification) => !notification.readAt).length,
+    [notifications],
   );
 
-  const markNotificationRead = (notificationId: string) => {
-    setReadIds((current) => {
-      const next = new Set(current);
-      next.add(notificationId);
-      return next;
-    });
+  const markNotificationRead = async (notificationId: string) => {
+    setNotifications((current) =>
+      current.map((notification) =>
+        notification.id === notificationId && !notification.readAt
+          ? { ...notification, readAt: new Date().toISOString() }
+          : notification,
+      ),
+    );
+
+    try {
+      const response = await persistMarkNotificationRead(notificationId);
+      setNotifications((current) =>
+        current.map((notification) =>
+          notification.id === notificationId ? { ...notification, readAt: response.readAt } : notification,
+        ),
+      );
+    } catch (error) {
+      console.error('Failed to mark notification read:', error);
+    }
   };
 
-  const markAllNotificationsRead = () => {
-    setReadIds(new Set(notifications.map((notification) => notification.id)));
+  const markAllNotificationsRead = async () => {
+    const optimisticReadAt = new Date().toISOString();
+    setNotifications((current) =>
+      current.map((notification) => ({ ...notification, readAt: notification.readAt || optimisticReadAt })),
+    );
+
+    try {
+      const response = await persistMarkAllNotificationsRead();
+      setNotifications((current) =>
+        current.map((notification) => ({ ...notification, readAt: notification.readAt || response.readAt })),
+      );
+    } catch (error) {
+      console.error('Failed to mark all notifications read:', error);
+    }
   };
 
-  const isNotificationRead = (notificationId: string) => readIds.has(notificationId);
+  const isNotificationRead = (notificationId: string) =>
+    notifications.some((notification) => notification.id === notificationId && Boolean(notification.readAt));
 
   return (
     <NotificationContext.Provider

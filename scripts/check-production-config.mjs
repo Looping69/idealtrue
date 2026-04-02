@@ -3,6 +3,10 @@ import path from "node:path";
 
 const repoRoot = process.cwd();
 const forbiddenHost = "staging-ideal-stay-online-gh5i.encr.app";
+const encoreApiUrl = `${process.env.ENCORE_API_URL || ""}`.trim();
+const isProductionLikeEnvironment =
+  `${process.env.NODE_ENV || ""}`.trim().toLowerCase() === "production" ||
+  ["preview", "production"].includes(`${process.env.VERCEL_ENV || ""}`.trim().toLowerCase());
 const ignoredPatterns = [
   `${path.sep}.git${path.sep}`,
   `${path.sep}dist${path.sep}`,
@@ -47,6 +51,11 @@ if (offenders.length > 0) {
   for (const offender of offenders) {
     console.error(`- ${path.relative(repoRoot, offender)}`);
   }
+  process.exit(1);
+}
+
+if (isProductionLikeEnvironment && !encoreApiUrl) {
+  console.error("Production config check failed. ENCORE_API_URL must be set for preview and production builds.");
   process.exit(1);
 }
 
