@@ -85,18 +85,18 @@ export default function CreateListing() {
     children: 0,
     bedrooms: 1,
     bathrooms: 1,
-    is_self_catering: false,
-    has_restaurant: false,
-    restaurant_offers: [] as string[],
+    isSelfCatering: false,
+    hasRestaurant: false,
+    restaurantOffers: [] as string[],
     amenities: [] as string[],
     facilities: [] as string[],
-    other_facility: "",
+    otherFacility: "",
     description: "",
     pricePerNight: "",
     discount: "0",
     images: [] as string[],
-    video_url: null as string | null,
-    is_occupied: false,
+    videoUrl: null as string | null,
+    isOccupied: false,
     coordinates: null as { lat: number; lng: number } | null
   });
 
@@ -148,18 +148,18 @@ export default function CreateListing() {
           children: data.children || 0,
           bedrooms: data.bedrooms || 1,
           bathrooms: data.bathrooms || 1,
-          is_self_catering: data.isSelfCatering || false,
-          has_restaurant: data.hasRestaurant || false,
-          restaurant_offers: data.restaurantOffers || [],
+          isSelfCatering: data.isSelfCatering || false,
+          hasRestaurant: data.hasRestaurant || false,
+          restaurantOffers: data.restaurantOffers || [],
           amenities: data.amenities || [],
           facilities: data.facilities || [],
-          other_facility: data.otherFacility || "",
+          otherFacility: data.otherFacility || "",
           description: data.description || "",
           pricePerNight: data.pricePerNight?.toString() || "",
           discount: data.discount?.toString() || "0",
           images: data.images || [],
-          video_url: data.videoUrl || null,
-          is_occupied: data.isOccupied || false,
+          videoUrl: data.videoUrl || null,
+          isOccupied: data.isOccupied || false,
           coordinates: data.coordinates || null
         });
 
@@ -218,9 +218,9 @@ export default function CreateListing() {
   const toggleRestaurantOffer = useCallback((offer: string) => {
     setFormData(prev => ({
       ...prev,
-      restaurant_offers: prev.restaurant_offers.includes(offer)
-        ? prev.restaurant_offers.filter(o => o !== offer)
-        : [...prev.restaurant_offers, offer]
+      restaurantOffers: prev.restaurantOffers.includes(offer)
+        ? prev.restaurantOffers.filter(o => o !== offer)
+        : [...prev.restaurantOffers, offer]
     }));
   }, []);
 
@@ -258,17 +258,17 @@ export default function CreateListing() {
         type: formData.category,
         amenities: formData.amenities,
         facilities: formData.facilities,
-        otherFacility: formData.other_facility,
+        otherFacility: formData.otherFacility,
         adults: formData.adults,
         children: formData.children,
         bedrooms: formData.bedrooms,
         bathrooms: formData.bathrooms,
-        isSelfCatering: formData.is_self_catering,
-        hasRestaurant: formData.has_restaurant,
-        restaurantOffers: formData.restaurant_offers,
+        isSelfCatering: formData.isSelfCatering,
+        hasRestaurant: formData.hasRestaurant,
+        restaurantOffers: formData.restaurantOffers,
         images: formData.images,
-        videoUrl: formData.video_url,
-        isOccupied: formData.is_occupied,
+        videoUrl: formData.videoUrl,
+        isOccupied: formData.isOccupied,
         status: 'pending' as const,
         category: parentCategory || "",
         coordinates
@@ -330,17 +330,17 @@ export default function CreateListing() {
       type: formData.category,
       amenities: formData.amenities,
       facilities: formData.facilities,
-      otherFacility: formData.other_facility,
+      otherFacility: formData.otherFacility,
       adults: formData.adults,
       children: formData.children,
       bedrooms: formData.bedrooms,
       bathrooms: formData.bathrooms,
-      isSelfCatering: formData.is_self_catering,
-      hasRestaurant: formData.has_restaurant,
-      restaurantOffers: formData.restaurant_offers,
+      isSelfCatering: formData.isSelfCatering,
+      hasRestaurant: formData.hasRestaurant,
+      restaurantOffers: formData.restaurantOffers,
       images: formData.images,
-      videoUrl: formData.video_url,
-      isOccupied: formData.is_occupied,
+      videoUrl: formData.videoUrl,
+      isOccupied: formData.isOccupied,
       status: 'pending' as const,
       category: parentCategory || "",
       coordinates
@@ -653,28 +653,28 @@ export default function CreateListing() {
                     <h3 className="font-semibold text-lg">Catering Options</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <button
-                        onClick={() => updateData("is_self_catering", !formData.is_self_catering)}
+                        onClick={() => updateData("isSelfCatering", !formData.isSelfCatering)}
                         className={cn(
                           "flex items-center justify-between p-4 rounded-xl border-2 transition-all",
-                          formData.is_self_catering ? "border-primary bg-primary/10" : "border-outline-variant"
+                          formData.isSelfCatering ? "border-primary bg-primary/10" : "border-outline-variant"
                         )}
                       >
                         <span className="font-medium">Self-Catering</span>
-                        {formData.is_self_catering && <Check className="w-5 h-5 text-primary" />}
+                        {formData.isSelfCatering && <Check className="w-5 h-5 text-primary" />}
                       </button>
                       <button
-                        onClick={() => updateData("has_restaurant", !formData.has_restaurant)}
+                        onClick={() => updateData("hasRestaurant", !formData.hasRestaurant)}
                         className={cn(
                           "flex items-center justify-between p-4 rounded-xl border-2 transition-all",
-                          formData.has_restaurant ? "border-primary bg-primary/10" : "border-outline-variant"
+                          formData.hasRestaurant ? "border-primary bg-primary/10" : "border-outline-variant"
                         )}
                       >
                         <span className="font-medium">Onsite Restaurant</span>
-                        {formData.has_restaurant && <Check className="w-5 h-5 text-primary" />}
+                        {formData.hasRestaurant && <Check className="w-5 h-5 text-primary" />}
                       </button>
                     </div>
 
-                    {formData.has_restaurant && (
+                    {formData.hasRestaurant && (
                       <div className="p-4 bg-surface-container-lowest rounded-xl space-y-3">
                         <p className="text-sm font-medium text-on-surface-variant">Restaurant offers:</p>
                         <div className="flex flex-wrap gap-3">
@@ -684,7 +684,7 @@ export default function CreateListing() {
                               onClick={() => toggleRestaurantOffer(meal)}
                               className={cn(
                                 "px-4 py-2 rounded-full border transition-all text-sm font-medium",
-                                formData.restaurant_offers.includes(meal)
+                                formData.restaurantOffers.includes(meal)
                                   ? "bg-gradient-to-r from-slate-900 to-blue-600 text-white border-transparent"
                                   : "bg-surface text-on-surface-variant border-outline-variant"
                               )}
@@ -705,23 +705,23 @@ export default function CreateListing() {
                     <div className="space-y-1">
                       <span className="font-medium block text-on-surface">Occupancy Status</span>
                       <p className="text-xs text-outline-variant normal-case font-normal leading-normal">
-                        {formData.is_occupied
+                        {formData.isOccupied
                           ? "This property is currently marked as occupied and will NOT appear in the featured carousel."
                           : "This property is currently available and will appear in the listings."}
                       </p>
                     </div>
                     <button
                       type="button"
-                      onClick={() => updateData("is_occupied", !formData.is_occupied)}
+                      onClick={() => updateData("isOccupied", !formData.isOccupied)}
                       className={cn(
                         "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
-                        formData.is_occupied ? "bg-red-500" : "bg-green-500"
+                        formData.isOccupied ? "bg-red-500" : "bg-green-500"
                       )}
                     >
                       <span
                         className={cn(
                           "inline-block h-4 w-4 transform rounded-full bg-surface transition-transform",
-                          formData.is_occupied ? "translate-x-6" : "translate-x-1"
+                          formData.isOccupied ? "translate-x-6" : "translate-x-1"
                         )}
                       />
                     </button>
@@ -782,8 +782,8 @@ export default function CreateListing() {
                     {formData.facilities.includes("Other") && (
                       <Input
                         placeholder="Please specify other facilities..."
-                        value={formData.other_facility}
-                        onChange={(e) => updateData("other_facility", e.target.value)}
+                        value={formData.otherFacility}
+                        onChange={(e) => updateData("otherFacility", e.target.value)}
                         className="mt-2"
                       />
                     )}
@@ -841,8 +841,8 @@ export default function CreateListing() {
                   <div className="space-y-3 pt-6 border-t border-outline-variant">
                     <Label className="text-base">Showcase Video</Label>
                     <VideoUpload
-                      value={formData.video_url}
-                      onChange={(url) => updateData("video_url", url)}
+                      value={formData.videoUrl}
+                      onChange={(url) => updateData("videoUrl", url)}
                       listingId={workingListingId}
                       ensureListingId={ensureListingId}
                       maxSizeMB={100}
@@ -947,3 +947,4 @@ export default function CreateListing() {
     </div>
   );
 }
+
