@@ -2,7 +2,7 @@ import { Home, LogOut, Menu, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import NotificationBell from '@/components/NotificationBell';
-import { Button } from '@/components/ui/button';
+import { Button, rawButtonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { UserProfile } from '@/types';
 
@@ -44,14 +44,19 @@ export default function AppNavigation({
 
   return (
     <>
-      <nav className="sticky top-0 z-50 bg-surface-variant/60 backdrop-blur-md">
+      <nav className="sticky top-0 z-50 border-b border-white/50 bg-surface-variant/70 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
-              <div className="w-8 h-8 bg-gradient-to-br from-primary to-primary-container rounded-lg flex items-center justify-center shadow-md shadow-primary/20">
+          <div className="flex justify-between h-18 items-center py-3">
+            <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
+              <div className="w-10 h-10 bg-gradient-to-br from-primary to-primary-container rounded-2xl flex items-center justify-center shadow-md shadow-primary/20">
                 <Home className="w-5 h-5 text-white" />
               </div>
-              <span className="text-xl font-bold tracking-tight">Ideal Stay</span>
+              <div>
+                <span className="block text-lg font-semibold tracking-tight">Ideal Stay</span>
+                <span className="hidden sm:block text-xs uppercase tracking-[0.22em] text-on-surface-variant">
+                  Curated escapes
+                </span>
+              </div>
             </div>
 
             <div className="hidden md:flex items-center gap-6">
@@ -92,7 +97,10 @@ export default function AppNavigation({
                   ) : (
                     <button
                       type="button"
-                      className="w-8 h-8 rounded-full border border-outline-variant bg-surface-container text-xs font-semibold cursor-pointer hover:ring-2 hover:ring-primary transition-all"
+                      className={cn(
+                        rawButtonVariants({ variant: 'neutral', size: 'icon-sm' }),
+                        "text-xs"
+                      )}
                       onClick={() => navigate('/account')}
                       aria-label="Open account"
                     >
@@ -105,11 +113,15 @@ export default function AppNavigation({
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <Button variant="ghost" onClick={() => navigate('/signup')}>Sign In</Button>
-                  <Button onClick={() => navigate('/signup')}>Sign Up</Button>
+                  <Button variant="ghost" className="hidden sm:inline-flex" onClick={() => navigate('/signup')}>Sign In</Button>
+                  <Button className="rounded-full px-4" onClick={() => navigate('/signup')}>Sign Up</Button>
                 </div>
               )}
-              <button className="md:hidden" onClick={onToggleMenu}>
+              <button
+                type="button"
+                className={cn(rawButtonVariants({ variant: 'neutral', size: 'icon-sm' }), "md:hidden")}
+                onClick={onToggleMenu}
+              >
                 {isMenuOpen ? <X /> : <Menu />}
               </button>
             </div>
@@ -141,12 +153,30 @@ export default function AppNavigation({
                   <Link to="/guest" onClick={onCloseMenu} className="text-2xl font-bold">My Stays</Link>
                   <Link to="/referral" onClick={onCloseMenu} className="text-2xl font-bold">Rewards</Link>
                   <Link to="/account" onClick={onCloseMenu} className="text-2xl font-bold">Account</Link>
-                  <button onClick={onLogout} className="text-2xl font-bold text-red-500">Sign Out</button>
+                  <button
+                    type="button"
+                    onClick={onLogout}
+                    className={cn(rawButtonVariants({ variant: 'destructive', size: 'lg' }), "justify-center")}
+                  >
+                    Sign Out
+                  </button>
                 </>
               ) : (
                 <>
-                  <button onClick={() => { onCloseMenu(); navigate('/signup'); }} className="text-2xl font-bold">Sign In</button>
-                  <button onClick={() => { onCloseMenu(); navigate('/signup'); }} className="text-2xl font-bold text-primary">Sign Up</button>
+                  <button
+                    type="button"
+                    onClick={() => { onCloseMenu(); navigate('/signup'); }}
+                    className={cn(rawButtonVariants({ variant: 'neutral', size: 'lg' }), "justify-center")}
+                  >
+                    Sign In
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { onCloseMenu(); navigate('/signup'); }}
+                    className={cn(rawButtonVariants({ variant: 'primary', size: 'lg' }), "justify-center")}
+                  >
+                    Sign Up
+                  </button>
                 </>
               )}
             </div>

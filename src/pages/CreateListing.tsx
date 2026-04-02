@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, Link, useParams } from "react-router-dom";
-import { Button } from "@/components/ui/button";
+import { Button, rawButtonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -683,10 +683,8 @@ export default function CreateListing() {
                               key={meal}
                               onClick={() => toggleRestaurantOffer(meal)}
                               className={cn(
-                                "px-4 py-2 rounded-full border transition-all text-sm font-medium",
-                                formData.restaurantOffers.includes(meal)
-                                  ? "bg-gradient-to-r from-slate-900 to-blue-600 text-white border-transparent"
-                                  : "bg-surface text-on-surface-variant border-outline-variant"
+                                rawButtonVariants({ variant: formData.restaurantOffers.includes(meal) ? "primary" : "neutral", size: "sm" }),
+                                formData.restaurantOffers.includes(meal) ? null : "text-slate-700"
                               )}
                             >
                               {meal}

@@ -1,6 +1,6 @@
 import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
+import { Button, rawButtonVariants } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Home, Users, ChevronRight, Loader2, CheckCircle2, MailCheck, KeyRound } from 'lucide-react';
@@ -181,8 +181,8 @@ export default function SignupPage() {
           <button
             type="button"
             className={cn(
-              'px-5 py-2 rounded-xl text-sm font-semibold transition-colors',
-              isSignupMode ? 'bg-primary text-white' : 'text-on-surface-variant hover:text-on-surface',
+              rawButtonVariants({ variant: isSignupMode ? 'primary' : 'ghost', size: 'sm' }),
+              !isSignupMode ? 'shadow-none' : null,
             )}
             onClick={() => setMode('signup')}
           >
@@ -191,8 +191,8 @@ export default function SignupPage() {
           <button
             type="button"
             className={cn(
-              'px-5 py-2 rounded-xl text-sm font-semibold transition-colors',
-              !isSignupMode ? 'bg-primary text-white' : 'text-on-surface-variant hover:text-on-surface',
+              rawButtonVariants({ variant: !isSignupMode ? 'primary' : 'ghost', size: 'sm' }),
+              isSignupMode ? 'shadow-none' : null,
             )}
             onClick={() => setMode('signin')}
           >
@@ -333,7 +333,7 @@ export default function SignupPage() {
               {mode === 'signin' ? (
                 <button
                   type="button"
-                  className="text-sm text-primary font-medium inline-flex items-center gap-2"
+                  className={cn(rawButtonVariants({ variant: 'ghost', size: 'sm' }), 'shadow-none text-primary hover:text-primary')}
                   onClick={handlePasswordResetRequest}
                   disabled={isSubmitting || !email.trim()}
                 >

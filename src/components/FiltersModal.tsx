@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { X, Check, Minus, Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, rawButtonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AMENITIES, FACILITIES, PROVINCES } from "@/constants/categories";
@@ -84,11 +84,19 @@ export default function FiltersModal({ isOpen, onClose, onApply, initialFilters 
       >
         {/* Header */}
         <div className="px-6 py-4 border-b flex items-center justify-between bg-surface sticky top-0 z-10">
-          <button onClick={onClose} className="p-2 hover:bg-surface-container-low rounded-full transition-colors">
+          <button
+            type="button"
+            onClick={onClose}
+            className={rawButtonVariants({ variant: "neutral", size: "icon-sm" })}
+          >
             <X className="w-5 h-5" />
           </button>
           <h2 className="text-lg font-bold">Filters</h2>
-          <button onClick={handleClearAll} className="text-sm font-semibold underline hover:text-on-surface-variant">
+          <button
+            type="button"
+            onClick={handleClearAll}
+            className={cn(rawButtonVariants({ variant: "ghost", size: "sm" }), "shadow-none")}
+          >
             Clear all
           </button>
         </div>
@@ -141,16 +149,18 @@ export default function FiltersModal({ isOpen, onClose, onApply, initialFilters 
                 </div>
                 <div className="flex items-center gap-4">
                   <button
+                    type="button"
                     onClick={() => updateCount("adults", -1)}
                     disabled={filters.adults <= 0}
-                    className="w-8 h-8 rounded-full border border-outline-variant flex items-center justify-center hover:border-primary disabled:opacity-30"
+                    className={rawButtonVariants({ variant: "neutral", size: "icon-sm" })}
                   >
                     <Minus className="w-4 h-4" />
                   </button>
                   <span className="w-4 text-center font-medium">{filters.adults}</span>
                   <button
+                    type="button"
                     onClick={() => updateCount("adults", 1)}
-                    className="w-8 h-8 rounded-full border border-outline-variant flex items-center justify-center hover:border-primary"
+                    className={rawButtonVariants({ variant: "neutral", size: "icon-sm" })}
                   >
                     <Plus className="w-4 h-4" />
                   </button>
@@ -163,16 +173,18 @@ export default function FiltersModal({ isOpen, onClose, onApply, initialFilters 
                 </div>
                 <div className="flex items-center gap-4">
                   <button
+                    type="button"
                     onClick={() => updateCount("children", -1)}
                     disabled={filters.children <= 0}
-                    className="w-8 h-8 rounded-full border border-outline-variant flex items-center justify-center hover:border-primary disabled:opacity-30"
+                    className={rawButtonVariants({ variant: "neutral", size: "icon-sm" })}
                   >
                     <Minus className="w-4 h-4" />
                   </button>
                   <span className="w-4 text-center font-medium">{filters.children}</span>
                   <button
+                    type="button"
                     onClick={() => updateCount("children", 1)}
-                    className="w-8 h-8 rounded-full border border-outline-variant flex items-center justify-center hover:border-primary"
+                    className={rawButtonVariants({ variant: "neutral", size: "icon-sm" })}
                   >
                     <Plus className="w-4 h-4" />
                   </button>
@@ -186,10 +198,11 @@ export default function FiltersModal({ isOpen, onClose, onApply, initialFilters 
             <h3 className="text-xl font-bold">Province</h3>
             <div className="flex flex-wrap gap-2">
               <button
+                type="button"
                 onClick={() => setFilters({ ...filters, province: "all" })}
                 className={cn(
-                  "px-4 py-2 rounded-full border text-sm font-medium transition-all",
-                  filters.province === "all" ? "bg-gradient-to-r from-slate-900 to-blue-600 text-white border-transparent" : "bg-surface text-on-surface-variant border-outline-variant hover:border-primary"
+                  rawButtonVariants({ variant: filters.province === "all" ? "primary" : "neutral" }),
+                  filters.province === "all" ? null : "text-slate-700"
                 )}
               >
                 All Provinces
@@ -197,10 +210,11 @@ export default function FiltersModal({ isOpen, onClose, onApply, initialFilters 
               {PROVINCES.map((p) => (
                 <button
                   key={p}
+                  type="button"
                   onClick={() => setFilters({ ...filters, province: p })}
                   className={cn(
-                    "px-4 py-2 rounded-full border text-sm font-medium transition-all",
-                    filters.province === p ? "bg-gradient-to-r from-slate-900 to-blue-600 text-white border-transparent" : "bg-surface text-on-surface-variant border-outline-variant hover:border-primary"
+                    rawButtonVariants({ variant: filters.province === p ? "primary" : "neutral" }),
+                    filters.province === p ? null : "text-slate-700"
                   )}
                 >
                   {p}
@@ -256,7 +270,11 @@ export default function FiltersModal({ isOpen, onClose, onApply, initialFilters 
 
         {/* Footer */}
         <div className="p-6 border-t flex items-center justify-between bg-surface sticky bottom-0 z-10">
-          <button onClick={handleClearAll} className="text-sm font-bold underline">
+          <button
+            type="button"
+            onClick={handleClearAll}
+            className={cn(rawButtonVariants({ variant: "ghost", size: "sm" }), "shadow-none")}
+          >
             Clear all
           </button>
           <Button onClick={handleApply} className="rounded-xl px-8 py-6 text-base font-bold">
