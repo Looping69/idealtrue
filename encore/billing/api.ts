@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { billingDB } from "./db";
 import { classifyYocoWebhookOutcome } from "./webhook-classification";
+import { toMinorUnits } from "./pricing";
 import { catalogDB } from "../catalog/db";
 import { identityDB } from "../identity/db";
 import { requireAuth, requireRole } from "../shared/auth";
@@ -753,7 +754,7 @@ export const createSubscriptionCheckout = api<SubscriptionCheckoutParams, { chec
     });
 
     const yoco = await createYocoCheckout({
-      amount,
+      amount: toMinorUnits(amount),
       currency: "ZAR",
       successUrl: urls.successUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
       cancelUrl: urls.cancelUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
@@ -849,7 +850,7 @@ export const createContentCreditsCheckout = api<PurchaseCreditsParams, { checkou
     });
 
     const yoco = await createYocoCheckout({
-      amount,
+      amount: toMinorUnits(amount),
       currency: "ZAR",
       successUrl: urls.successUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
       cancelUrl: urls.cancelUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
