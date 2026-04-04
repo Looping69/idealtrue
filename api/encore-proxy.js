@@ -11,7 +11,7 @@ import {
   sanitizeSessionPayload,
   serializeSessionCookie,
   shouldPersistSessionToken,
-} from "../../lib/server/session-cookie.js";
+} from "../lib/server/session-cookie.js";
 
 export const config = {
   api: {
@@ -19,26 +19,39 @@ export const config = {
   },
 };
 
-function getPathname(req) {
-  const segments = Array.isArray(req.query.path)
-    ? req.query.path
-    : typeof req.query.path === "string" && req.query.path
-      ? [req.query.path]
-      : [];
+function normalizePathSegments(value) {
+  const rawSegments = Array.isArray(value) ? value : [value];
 
-  return `/${segments.map((segment) => encodeURIComponent(segment)).join("/")}`;
+  return rawSegments
+    .flatMap((segment) => `${segment || ""}`.split("/"))
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment));
+}
+
+function getProxyPath(req) {
+  const incomingUrl = new URL(req.url, "http://localhost");
+  const pathSegments = normalizePathSegments(req.query.path);
+  const pathname = pathSegments.length > 0 ? `/${pathSegments.join("/")}` : "/";
+
+  incomingUrl.searchParams.delete("path");
+  const search = incomingUrl.searchParams.toString();
+
+  return {
+    pathname,
+    proxyPath: `${pathname}${search ? `?${search}` : ""}`,
+  };
 }
 
 export default async function handler(req, res) {
   const startedAt = Date.now();
   const requestId = getRequestId(req.headers);
-  const pathname = getPathname(req);
+  const { pathname, proxyPath } = getProxyPath(req);
   let targetUrl;
 
   try {
-    const incomingUrl = new URL(req.url, "http://localhost");
     const encoreApiUrl = resolveEncoreApiUrl(process.env);
-    targetUrl = new URL(`${encoreApiUrl}${pathname}${incomingUrl.search}`);
+    targetUrl = new URL(proxyPath, `${encoreApiUrl}/`);
     const headers = copyRequestHeaders(req.headers);
     const cookieToken = getSessionTokenFromCookieHeader(req.headers.cookie);
 
@@ -61,7 +74,7 @@ export default async function handler(req, res) {
     logEncoreProxyEvent({
       durationMs: Date.now() - startedAt,
       method: req.method,
-      proxyPath: `${pathname}${incomingUrl.search}`,
+      proxyPath,
       requestId,
       status: upstream.status,
       targetUrl,
@@ -98,7 +111,7 @@ export default async function handler(req, res) {
       durationMs: Date.now() - startedAt,
       error,
       method: req.method,
-      proxyPath: req.url,
+      proxyPath,
       requestId,
       targetUrl,
     });
