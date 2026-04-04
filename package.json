@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
+    "dev": "tsx --eval \"import { join } from 'node:path'; import { pathToFileURL } from 'node:url'; import(pathToFileURL(join(process.cwd().replace(/^\\\\\\\\\\?\\\\/, ''), 'server.ts')).href);\"",
     "check:config": "node scripts/check-production-config.mjs",
     "build": "node scripts/build.mjs",
     "preview": "vite preview",
