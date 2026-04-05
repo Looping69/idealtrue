@@ -198,28 +198,21 @@ export async function uploadListingImage(params: { listingId?: string; file: Fil
 
 export async function uploadListingMedia(params: { listingId?: string; file: File }) {
   const listingId = normalizeListingId(params.listingId);
-  const query = new URLSearchParams({
-    listingId: listingId ?? '',
-    filename: params.file.name,
-    contentType: params.file.type || 'application/octet-stream',
-  });
-
-  const response = await encoreFetch(`/host/listings/media/videos?${query.toString()}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': params.file.type || 'application/octet-stream',
-      'X-Upload-Filename': params.file.name,
+  const signed = await encoreRequest<{ objectKey: string; uploadUrl: string; publicUrl: string }>(
+    '/host/listings/media/upload-url',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        ...(listingId ? { listingId } : {}),
+        filename: params.file.name,
+        contentType: params.file.type || 'application/octet-stream',
+      }),
     },
-    body: params.file,
-  }, { auth: true });
+    { auth: true },
+  );
 
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(body || `Video upload failed with status ${response.status}`);
-  }
-
-  const payload = await response.json() as { objectKey: string; publicUrl: string };
-  return payload.publicUrl;
+  await uploadToSignedUrl(signed.uploadUrl, params.file);
+  return signed.publicUrl;
 }
 
 export async function uploadChatAttachment(params: { bookingId: string; file: File }) {

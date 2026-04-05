@@ -135,7 +135,7 @@ export async function deleteAdminUser(userId: string) {
 }
 
 export async function listAdminListings(): Promise<Listing[]> {
-  const response = await encoreRequest<{ listings: EncoreListing[] }>('/admin/listings', {}, { auth: true });
+  const response = await encoreRequest<{ listings: EncoreListing[] }>('/listings', {}, { auth: true });
   return response.listings.map(mapEncoreListing);
 }
 
@@ -150,7 +150,7 @@ export async function listAdminReviews(): Promise<Review[]> {
 }
 
 export async function listAdminReferralRewards(): Promise<Referral[]> {
-  const response = await encoreRequest<{ rewards: EncoreReferralReward[] }>('/admin/referral-rewards', {}, { auth: true });
+  const response = await encoreRequest<{ rewards: EncoreReferralReward[] }>('/admin/referrals', {}, { auth: true });
   return response.rewards.map(mapEncoreReferralReward);
 }
 
@@ -162,7 +162,7 @@ export async function createAdminReferralReward(params: {
   amount: number;
 }) {
   const response = await encoreRequest<{ reward: EncoreReferralReward }>(
-    '/admin/referral-rewards',
+    '/admin/referrals',
     {
       method: 'POST',
       body: JSON.stringify(params),
@@ -174,7 +174,7 @@ export async function createAdminReferralReward(params: {
 
 export async function deleteAdminReferralReward(referralId: string) {
   await encoreRequest<{ deleted: true }>(
-    `/admin/referral-rewards/${encodeURIComponent(referralId)}`,
+    `/admin/referrals/${encodeURIComponent(referralId)}`,
     { method: 'DELETE' },
     { auth: true },
   );

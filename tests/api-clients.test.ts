@@ -8,6 +8,7 @@ import {
   getEncoreApiUrl,
 } from '../src/lib/encore-client.ts';
 import { getEncoreSessionProfile } from '../src/lib/identity-client.ts';
+import { uploadListingMedia } from '../src/lib/media-client.ts';
 import { getAdminPlatformSettings, listAdminNotifications } from '../src/lib/admin-client.ts';
 import { reviewKycSubmission } from '../src/lib/ops-client.ts';
 import { getListing, mapReferralStatus, saveListing, submitPaymentProof, updateBookingStatus } from '../src/lib/platform-client.ts';
@@ -354,6 +355,43 @@ test('submitPaymentProof posts the guest payment proof to the booking payment en
   assert.equal(booking.status, 'payment_submitted');
   assert.equal(booking.paymentReference, 'IDEAL-4100');
   assert.equal(booking.paymentProofUrl, 'https://cdn.example.com/payment-proof.jpg');
+});
+
+test('uploadListingMedia uses a signed upload URL instead of proxying the video through Encore', async () => {
+  installFetch((url, init) => {
+    if (url.endsWith('/host/listings/media/upload-url')) {
+      return createJsonResponse({
+        objectKey: 'listing-1/demo-video.mp4',
+        uploadUrl: 'https://storage.example.com/listing-1/demo-video.mp4?signature=abc',
+        publicUrl: 'https://cdn.example.com/listing-1/demo-video.mp4',
+      });
+    }
+
+    if (url.startsWith('https://storage.example.com/')) {
+      return new Response(null, { status: 200 });
+    }
+
+    throw new Error(`Unexpected URL: ${url} ${init?.method || 'GET'}`);
+  });
+
+  const file = new File([new Uint8Array([1, 2, 3, 4])], 'demo-video.mp4', { type: 'video/mp4' });
+  const publicUrl = await uploadListingMedia({
+    listingId: 'listing-1',
+    file,
+  });
+
+  assert.equal(publicUrl, 'https://cdn.example.com/listing-1/demo-video.mp4');
+  assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/host/listings/media/upload-url`);
+  assert.equal(fetchCalls[0]?.init?.method, 'POST');
+  assert.deepEqual(JSON.parse(String(fetchCalls[0]?.init?.body)), {
+    listingId: 'listing-1',
+    filename: 'demo-video.mp4',
+    contentType: 'video/mp4',
+  });
+  assert.equal(fetchCalls[1]?.url, 'https://storage.example.com/listing-1/demo-video.mp4?signature=abc');
+  assert.equal(fetchCalls[1]?.init?.method, 'PUT');
+  assert.equal(getHeaders(fetchCalls[1]?.init).get('Content-Type'), 'video/mp4');
+  assert.equal(fetchCalls[1]?.init?.body, file);
 });
 
 test('referral mapping preserves rejected rewards instead of corrupting them to pending', () => {
