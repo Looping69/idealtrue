@@ -139,11 +139,6 @@ export async function submitPaymentProof(params: {
   return mapEncoreBooking(response.booking);
 }
 
-export async function listHostBookings() {
-  const response = await encoreRequest<{ bookings: EncoreBooking[] }>('/bookings/host', {}, { auth: true });
-  return response.bookings.map(mapEncoreBooking);
-}
-
 export async function listListingReviews(listingId: string): Promise<Review[]> {
   const response = await encoreRequest<{ reviews: EncoreReview[] }>(`/reviews/${listingId}`);
   return response.reviews.map(mapEncoreReview);
