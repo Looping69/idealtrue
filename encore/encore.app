@@ -8,17 +8,17 @@
 			"http://localhost:3000",
 			"http://127.0.0.1:3000",
 			"https://ideal-stay.vercel.app",
-			"https://*.vercel.app"
+			"https://*.vercel.app",
 		],
 		"allow_origins_with_credentials": [
 			"http://localhost:3000",
 			"http://127.0.0.1:3000",
 			"https://ideal-stay.vercel.app",
-			"https://*.vercel.app"
+			"https://*.vercel.app",
 		],
 		"allow_headers": [
 			"authorization",
-			"content-type"
-		]
-	}
+			"content-type",
+		],
+	},
 }
