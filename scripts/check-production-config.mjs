@@ -15,6 +15,7 @@ const ignoredPatterns = [
   `${path.sep}node_modules${path.sep}`,
   `${path.sep}.encore${path.sep}`,
   `${path.sep}encore.gen${path.sep}`,
+  `${path.sep}tests${path.sep}`,
 ];
 const ignoredFiles = new Set([
   path.join(repoRoot, "package-lock.json"),
