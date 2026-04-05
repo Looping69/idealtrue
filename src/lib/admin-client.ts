@@ -181,12 +181,12 @@ export async function deleteAdminReferralReward(referralId: string) {
 }
 
 export async function listAdminSubscriptions(): Promise<Subscription[]> {
-  const response = await encoreRequest<{ subscriptions: EncoreSubscription[] }>('/billing/admin/subscriptions', {}, { auth: true });
+  const response = await encoreRequest<{ subscriptions: EncoreSubscription[] }>('/admin/subscriptions', {}, { auth: true });
   return response.subscriptions.map(mapEncoreSubscription);
 }
 
 export async function listAdminCheckouts(): Promise<AdminCheckout[]> {
-  const response = await encoreRequest<{ checkouts: EncoreCheckout[] }>('/billing/admin/checkouts', {}, { auth: true });
+  const response = await encoreRequest<{ checkouts: EncoreCheckout[] }>('/admin/checkouts', {}, { auth: true });
   return response.checkouts.map(mapCheckout);
 }
 

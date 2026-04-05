@@ -106,8 +106,8 @@ describe('useAdminDashboardData', () => {
       http.get('*/api/encore/admin/bookings', () => HttpResponse.json({ bookings: [] })),
       http.get('*/api/encore/admin/reviews', () => HttpResponse.json({ reviews: [] })),
       http.get('*/api/encore/admin/referral-rewards', () => HttpResponse.json({ rewards: [] })),
-      http.get('*/api/encore/billing/admin/subscriptions', () => HttpResponse.json({ subscriptions: [] })),
-      http.get('*/api/encore/billing/admin/checkouts', () => HttpResponse.json({ checkouts: [] })),
+      http.get('*/api/encore/admin/subscriptions', () => HttpResponse.json({ subscriptions: [] })),
+      http.get('*/api/encore/admin/checkouts', () => HttpResponse.json({ checkouts: [] })),
       http.get('*/api/encore/ops/admin/notifications', () => HttpResponse.json({ notifications: [] })),
       http.get('*/api/encore/ops/admin/settings', () =>
         HttpResponse.json({
