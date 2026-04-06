@@ -64,6 +64,11 @@ type KycReviewState = KycSubmission & {
   selfieImageUrl?: string;
 };
 
+type KycAssetFailureState = {
+  idImage: boolean;
+  selfieImage: boolean;
+};
+
 type ConfirmDelete = {
   type: 'user' | 'listing' | 'review' | 'referral' | 'notification';
   id: string;
@@ -78,9 +83,13 @@ export default function AdminDashboard() {
   const [editingListing, setEditingListing] = useState<Listing | null>(null);
   const [viewingKYCSubmission, setViewingKYCSubmission] = useState<KycReviewState | null>(null);
   const [kycAssetsLoading, setKycAssetsLoading] = useState(false);
+  const [kycAssetFailures, setKycAssetFailures] = useState<KycAssetFailureState>({ idImage: false, selfieImage: false });
   const [rejectingKycSubmission, setRejectingKycSubmission] = useState<KycReviewState | null>(null);
   const [kycRejectionReason, setKycRejectionReason] = useState('Documents were unclear or incomplete.');
   const [isRejectingKyc, setIsRejectingKyc] = useState(false);
+  const [rejectingListing, setRejectingListing] = useState<Listing | null>(null);
+  const [listingRejectionReason, setListingRejectionReason] = useState('Photos or listing details were incomplete.');
+  const [isRejectingListing, setIsRejectingListing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<ConfirmDelete | null>(null);
 
   const {
@@ -146,6 +155,46 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error('Error deleting listing:', error);
       toast({ title: 'Listing delete failed', description: 'Could not archive the listing.', variant: 'destructive' });
+    }
+  };
+
+  const openRejectListingDialog = (listing: Listing) => {
+    setRejectingListing(listing);
+    setListingRejectionReason(listing.rejectionReason || 'Photos or listing details were incomplete.');
+  };
+
+  const handleRejectListing = async () => {
+    if (!rejectingListing) return;
+
+    setIsRejectingListing(true);
+    const rejectionReason = listingRejectionReason.trim() || 'Rejected during admin review.';
+
+    try {
+      await saveListing(toListingPayload(rejectingListing, 'rejected', rejectionReason));
+      const notification = await createAdminNotification({
+        title: 'Listing Rejected',
+        message: `Your listing "${rejectingListing.title}" was rejected. Reason: ${rejectionReason}`,
+        type: 'error',
+        target: rejectingListing.hostId,
+        actionPath: '/host/listings',
+      });
+
+      setAllNotifications((current) => [notification, ...current]);
+      setAllListings((current) =>
+        current.map((listing) =>
+          listing.id === rejectingListing.id
+            ? { ...listing, status: 'rejected', rejectionReason, updatedAt: new Date().toISOString() }
+            : listing,
+        ),
+      );
+      setTopListings((current) => current.filter((listing) => listing.id !== rejectingListing.id));
+      toast({ title: 'Listing Rejected', description: 'The host has been given the rejection reason.' });
+      setRejectingListing(null);
+    } catch (error) {
+      console.error('Error rejecting listing:', error);
+      toast({ title: 'Listing rejection failed', description: 'Could not reject the listing.', variant: 'destructive' });
+    } finally {
+      setIsRejectingListing(false);
     }
   };
 
@@ -303,6 +352,7 @@ export default function AdminDashboard() {
     const user = allUsers.find((candidate) => candidate.id === submission.userId) || null;
     setViewingKYCSubmission({ ...submission, user });
     setKycAssetsLoading(true);
+    setKycAssetFailures({ idImage: false, selfieImage: false });
 
     try {
       const assets = await getKycSubmissionAssets(submission.userId);
@@ -369,7 +419,7 @@ export default function AdminDashboard() {
       case 'overview':
         return <OverviewSection allBookings={allBookings} allListings={allListings} observability={observability} recentEnquiries={recentEnquiries} setActiveMenu={setActiveMenu} stats={stats} topListings={topListings} />;
       case 'pending':
-        return <PendingListingsSection allListings={allListings} allUsers={allUsers} handleDeleteListing={handleDeleteListing} handleUpdateListingStatus={handleUpdateListingStatus} />;
+        return <PendingListingsSection allListings={allListings} allUsers={allUsers} openRejectListingDialog={openRejectListingDialog} handleUpdateListingStatus={handleUpdateListingStatus} />;
       case 'kyc':
         return <KycSection allUsers={allUsers} handleApproveKYC={handleApproveKYC} handleReviewKYC={handleReviewKYC} kycSubmissions={kycSubmissions} openRejectKycDialog={openRejectKycDialog} />;
       case 'users':
@@ -463,7 +513,10 @@ export default function AdminDashboard() {
         </div>
       </main>
 
-      <Dialog open={!!viewingKYCSubmission} onOpenChange={() => setViewingKYCSubmission(null)}>
+      <Dialog open={!!viewingKYCSubmission} onOpenChange={() => {
+        setViewingKYCSubmission(null);
+        setKycAssetFailures({ idImage: false, selfieImage: false });
+      }}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>Review Verification: {viewingKYCSubmission?.user?.displayName || viewingKYCSubmission?.userId}</DialogTitle>
@@ -476,8 +529,15 @@ export default function AdminDashboard() {
                   <div className="aspect-[4/3] overflow-hidden rounded-xl border border-slate-200">
                     {kycAssetsLoading ? (
                       <div className="flex h-full w-full items-center justify-center bg-slate-50 text-sm text-slate-500">Loading secure preview...</div>
-                    ) : viewingKYCSubmission.idImageUrl ? (
-                      <img src={viewingKYCSubmission.idImageUrl} className="h-full w-full cursor-zoom-in object-cover" alt="ID Document" onClick={() => window.open(viewingKYCSubmission.idImageUrl, '_blank')} />
+                    ) : viewingKYCSubmission.idImageUrl && !kycAssetFailures.idImage ? (
+                      <img
+                        src={viewingKYCSubmission.idImageUrl}
+                        className="h-full w-full cursor-zoom-in object-cover"
+                        alt="ID Document"
+                        referrerPolicy="no-referrer"
+                        onError={() => setKycAssetFailures((current) => ({ ...current, idImage: true }))}
+                        onClick={() => window.open(viewingKYCSubmission.idImageUrl, '_blank', 'noopener,noreferrer')}
+                      />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center bg-slate-50 text-sm text-slate-500">Preview unavailable</div>
                     )}
@@ -488,8 +548,15 @@ export default function AdminDashboard() {
                   <div className="aspect-[4/3] overflow-hidden rounded-xl border border-slate-200">
                     {kycAssetsLoading ? (
                       <div className="flex h-full w-full items-center justify-center bg-slate-50 text-sm text-slate-500">Loading secure preview...</div>
-                    ) : viewingKYCSubmission.selfieImageUrl ? (
-                      <img src={viewingKYCSubmission.selfieImageUrl} className="h-full w-full cursor-zoom-in object-cover" alt="Selfie" onClick={() => window.open(viewingKYCSubmission.selfieImageUrl, '_blank')} />
+                    ) : viewingKYCSubmission.selfieImageUrl && !kycAssetFailures.selfieImage ? (
+                      <img
+                        src={viewingKYCSubmission.selfieImageUrl}
+                        className="h-full w-full cursor-zoom-in object-cover"
+                        alt="Selfie"
+                        referrerPolicy="no-referrer"
+                        onError={() => setKycAssetFailures((current) => ({ ...current, selfieImage: true }))}
+                        onClick={() => window.open(viewingKYCSubmission.selfieImageUrl, '_blank', 'noopener,noreferrer')}
+                      />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center bg-slate-50 text-sm text-slate-500">Preview unavailable</div>
                     )}
@@ -521,6 +588,27 @@ export default function AdminDashboard() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setRejectingKycSubmission(null)} disabled={isRejectingKyc}>Cancel</Button>
             <Button variant="destructive" onClick={handleRejectKYC} disabled={isRejectingKyc}>{isRejectingKyc ? 'Rejecting...' : 'Reject Verification'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!rejectingListing} onOpenChange={() => !isRejectingListing && setRejectingListing(null)}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader><DialogTitle>Reject Listing</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-on-surface-variant">Give the host a direct reason so they know what to fix before resubmitting this listing.</p>
+            <Textarea
+              value={listingRejectionReason}
+              onChange={(event) => setListingRejectionReason(event.target.value)}
+              placeholder="Explain what is missing, misleading, low quality, or non-compliant."
+              className="min-h-[140px]"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectingListing(null)} disabled={isRejectingListing}>Cancel</Button>
+            <Button variant="destructive" onClick={handleRejectListing} disabled={isRejectingListing}>
+              {isRejectingListing ? 'Rejecting...' : 'Reject Listing'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

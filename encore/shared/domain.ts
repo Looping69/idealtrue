@@ -65,6 +65,7 @@ export interface ListingRecord {
   longitude?: number | null;
   blockedDates?: string[];
   status: ListingStatus;
+  rejectionReason?: string | null;
   createdAt: string;
   updatedAt: string;
 }

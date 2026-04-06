@@ -39,12 +39,20 @@ export const CarouselItem = React.forwardRef<HTMLDivElement, React.HTMLAttribute
 ));
 CarouselItem.displayName = "CarouselItem";
 
-export const CarouselPrevious = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement>>(({ className, ...props }, ref) => (
-  <Button ref={ref} className={cn("rounded-full", className)} {...props}>Previous</Button>
-));
+export const CarouselPrevious = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement>>(
+  ({ className, children, ...props }, ref) => (
+    <Button ref={ref} className={cn("rounded-xl", className)} {...props}>
+      {children ?? "Prev"}
+    </Button>
+  ),
+);
 CarouselPrevious.displayName = "CarouselPrevious";
 
-export const CarouselNext = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement>>(({ className, ...props }, ref) => (
-  <Button ref={ref} className={cn("rounded-full", className)} {...props}>Next</Button>
-));
+export const CarouselNext = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement>>(
+  ({ className, children, ...props }, ref) => (
+    <Button ref={ref} className={cn("rounded-xl", className)} {...props}>
+      {children ?? "Next"}
+    </Button>
+  ),
+);
 CarouselNext.displayName = "CarouselNext";

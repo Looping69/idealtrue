@@ -5,7 +5,11 @@ import { cn } from '@/lib/utils';
 import type { SaveListingInput } from '@/lib/platform-client';
 import type { Listing } from '@/types';
 
-export function toListingPayload(listing: Listing, status = listing.status): SaveListingInput {
+export function toListingPayload(
+  listing: Listing,
+  status = listing.status,
+  rejectionReason: string | null = status === 'rejected' ? listing.rejectionReason ?? null : null,
+): SaveListingInput {
   return {
     id: listing.id,
     title: listing.title,
@@ -33,6 +37,7 @@ export function toListingPayload(listing: Listing, status = listing.status): Sav
     coordinates: listing.coordinates || null,
     blockedDates: listing.blockedDates || [],
     status,
+    rejectionReason,
   };
 }
 

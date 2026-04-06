@@ -59,6 +59,7 @@ export interface Listing {
   reviews: number;
   category: string;
   status: 'draft' | 'pending' | 'active' | 'inactive' | 'rejected' | 'archived';
+  rejectionReason?: string | null;
   createdAt: string;
   updatedAt?: string;
   coordinates?: { lat: number; lng: number };

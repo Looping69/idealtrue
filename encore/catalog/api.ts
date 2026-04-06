@@ -38,6 +38,7 @@ type ListingRow = {
   longitude: number | null;
   blocked_dates: string[];
   status: ListingStatus;
+  rejection_reason: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -75,6 +76,7 @@ interface SaveListingParams {
   longitude?: number | null;
   blockedDates?: string[];
   status: ListingStatus;
+  rejectionReason?: string | null;
 }
 
 interface ListListingsParams {
@@ -280,6 +282,7 @@ function mapListing(row: ListingRow): ListingRecord {
     longitude: row.longitude,
     blockedDates: row.blocked_dates ?? [],
     status: row.status,
+    rejectionReason: row.rejection_reason,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -400,6 +403,8 @@ export const saveListing = api<SaveListingParams, { listing: ListingRecord }>(
       }
 
       let nextStatus = params.status;
+      let nextRejectionReason =
+        params.status === "rejected" ? params.rejectionReason?.trim() || "Rejected during admin review." : null;
       if (auth.role !== "admin") {
         if (existing.status === "archived" && params.status !== "archived") {
           throw APIError.failedPrecondition("Archived listings cannot be reactivated by hosts.");
@@ -407,11 +412,18 @@ export const saveListing = api<SaveListingParams, { listing: ListingRecord }>(
 
         if (existing.status === "pending") {
           nextStatus = "pending";
+          nextRejectionReason = null;
         } else if (existing.status === "rejected") {
           nextStatus = "pending";
+          nextRejectionReason = null;
         } else if (!["active", "inactive", "archived"].includes(params.status)) {
           nextStatus = existing.status;
+          nextRejectionReason = existing.rejection_reason;
         }
+      }
+
+      if (nextStatus !== "rejected") {
+        nextRejectionReason = null;
       }
 
       await catalogDB.exec`
@@ -441,6 +453,7 @@ export const saveListing = api<SaveListingParams, { listing: ListingRecord }>(
             longitude = ${params.longitude ?? null},
             blocked_dates = ${params.blockedDates ?? existing.blocked_dates ?? []},
             status = ${nextStatus},
+            rejection_reason = ${nextRejectionReason},
             updated_at = ${now}
         WHERE id = ${params.id}
       `;
@@ -455,10 +468,12 @@ export const saveListing = api<SaveListingParams, { listing: ListingRecord }>(
 
       return {
         listing: {
+          ...mapListing(existing),
           ...params,
-          status: nextStatus,
           id: params.id,
           hostId: existing.host_id,
+          status: nextStatus,
+          rejectionReason: nextRejectionReason,
           createdAt: existing.created_at,
           updatedAt: now,
         },
@@ -476,7 +491,7 @@ export const saveListing = api<SaveListingParams, { listing: ListingRecord }>(
         id, host_id, title, description, location, area, province, category, type,
         price_per_night, discount_percent, adults, children, bedrooms, bathrooms,
         amenities, facilities, restaurant_offers, images, video_url, is_self_catering,
-        has_restaurant, is_occupied, latitude, longitude, blocked_dates, status, created_at, updated_at
+        has_restaurant, is_occupied, latitude, longitude, blocked_dates, status, rejection_reason, created_at, updated_at
       )
       VALUES (
         ${id}, ${auth.userID}, ${params.title}, ${params.description}, ${params.location},
@@ -485,7 +500,7 @@ export const saveListing = api<SaveListingParams, { listing: ListingRecord }>(
         ${params.bedrooms}, ${params.bathrooms}, ${params.amenities}, ${params.facilities},
         ${params.restaurantOffers}, ${params.images}, ${params.videoUrl ?? null},
         ${params.isSelfCatering}, ${params.hasRestaurant}, ${params.isOccupied},
-        ${params.latitude ?? null}, ${params.longitude ?? null}, ${params.blockedDates ?? []}, ${createdStatus}, ${now}, ${now}
+        ${params.latitude ?? null}, ${params.longitude ?? null}, ${params.blockedDates ?? []}, ${createdStatus}, ${null}, ${now}, ${now}
       )
     `;
 
@@ -503,6 +518,7 @@ export const saveListing = api<SaveListingParams, { listing: ListingRecord }>(
         status: createdStatus,
         id,
         hostId: auth.userID,
+        rejectionReason: null,
         createdAt: now,
         updatedAt: now,
       },

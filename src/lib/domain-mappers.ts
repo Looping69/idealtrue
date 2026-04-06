@@ -71,6 +71,7 @@ export interface EncoreListing {
   longitude?: number | null;
   blockedDates?: string[];
   status: Listing['status'];
+  rejectionReason?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -188,6 +189,7 @@ export interface SaveListingInput {
   coordinates?: { lat: number; lng: number } | null;
   blockedDates?: string[];
   status: Listing['status'];
+  rejectionReason?: string | null;
 }
 
 export interface LeaderboardUser {
@@ -260,6 +262,7 @@ export function mapEncoreListing(listing: EncoreListing): Listing {
     reviews: 0,
     category: listing.category,
     status: listing.status,
+    rejectionReason: listing.rejectionReason || null,
     createdAt: listing.createdAt,
     updatedAt: listing.updatedAt,
     coordinates:
@@ -410,5 +413,6 @@ export function toEncoreListingPayload(input: SaveListingInput) {
     longitude: input.coordinates?.lng ?? null,
     blockedDates: input.blockedDates || [],
     status: input.status,
+    rejectionReason: input.status === 'rejected' ? input.rejectionReason ?? null : null,
   };
 }

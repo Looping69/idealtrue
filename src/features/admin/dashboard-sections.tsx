@@ -248,12 +248,12 @@ export function OverviewSection({
 export function PendingListingsSection({
   allListings,
   allUsers,
-  handleDeleteListing,
+  openRejectListingDialog,
   handleUpdateListingStatus,
 }: {
   allListings: Listing[];
   allUsers: UserProfile[];
-  handleDeleteListing: (listingId: string) => Promise<void> | void;
+  openRejectListingDialog: (listing: Listing) => void;
   handleUpdateListingStatus: (listingId: string, newStatus: Listing['status']) => Promise<void> | void;
 }) {
   const pendingListings = allListings.filter((listing) => listing.status === 'pending');
@@ -296,7 +296,7 @@ export function PendingListingsSection({
                   <Button className="h-9 flex-1 text-xs" onClick={() => handleUpdateListingStatus(listing.id, 'active')}>
                     Approve
                   </Button>
-                  <Button variant="outline" className="h-9 flex-1 text-xs" onClick={() => handleDeleteListing(listing.id)}>
+                  <Button variant="outline" className="h-9 flex-1 text-xs" onClick={() => openRejectListingDialog(listing)}>
                     Reject
                   </Button>
                 </div>

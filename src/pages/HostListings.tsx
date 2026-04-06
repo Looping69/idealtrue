@@ -43,6 +43,7 @@ function toSaveListingPayload(listing: Listing, status: Listing['status']) {
     isOccupied: listing.isOccupied,
     coordinates: listing.coordinates || null,
     status,
+    rejectionReason: status === 'rejected' ? listing.rejectionReason ?? null : null,
   };
 }
 
@@ -143,7 +144,9 @@ export default function HostListings({ listings, onListingUpdated, onListingRemo
               )}
               {listing.status === 'rejected' && (
                 <p className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
-                  This listing was rejected by admin review. Update it and resubmit from the edit flow if needed.
+                  {listing.rejectionReason?.trim()
+                    ? `Rejected by admin review: ${listing.rejectionReason}`
+                    : 'This listing was rejected by admin review. Update it and resubmit from the edit flow if needed.'}
                 </p>
               )}
               <div className="flex flex-wrap gap-2 pt-2">

@@ -175,6 +175,7 @@ test('getListing and saveListing use the canonical Encore listing contract', asy
           longitude: 18.4,
           blockedDates: [],
           status: 'active',
+          rejectionReason: null,
           createdAt: '2026-03-01T10:00:00.000Z',
           updatedAt: '2026-03-01T10:00:00.000Z',
         },
@@ -210,7 +211,8 @@ test('getListing and saveListing use the canonical Encore listing contract', asy
           latitude: null,
           longitude: null,
           blockedDates: [],
-          status: 'pending',
+          status: 'rejected',
+          rejectionReason: 'Photos were too blurry and the description was incomplete.',
           createdAt: '2026-03-02T10:00:00.000Z',
           updatedAt: '2026-03-02T10:00:00.000Z',
         },
@@ -245,10 +247,12 @@ test('getListing and saveListing use the canonical Encore listing contract', asy
     isOccupied: false,
     coordinates: null,
     blockedDates: [],
-    status: 'pending',
+    status: 'rejected',
+    rejectionReason: 'Photos were too blurry and the description was incomplete.',
   });
 
   assert.equal(listing.hostId, 'host-1');
+  assert.equal(listing.rejectionReason, null);
   assert.equal(fetchCalls[1]?.url, `${DEFAULT_ENCORE_API_URL}/host/listings`);
   assert.equal(fetchCalls[1]?.init?.method, 'POST');
   assert.deepEqual(JSON.parse(String(fetchCalls[1]?.init?.body)), {
@@ -276,9 +280,12 @@ test('getListing and saveListing use the canonical Encore listing contract', asy
     latitude: null,
     longitude: null,
     blockedDates: [],
-    status: 'pending',
+    status: 'rejected',
+    rejectionReason: 'Photos were too blurry and the description was incomplete.',
   });
   assert.equal(savedListing.id, 'listing-2');
+  assert.equal(savedListing.status, 'rejected');
+  assert.equal(savedListing.rejectionReason, 'Photos were too blurry and the description was incomplete.');
 });
 
 test('updateBookingStatus sends the booking status patch to the correct endpoint', async () => {
