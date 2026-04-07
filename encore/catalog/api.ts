@@ -447,9 +447,10 @@ export const getMyListingQuota = api<void, { quota: HostListingQuota }>(
 export const saveListing = api<SaveListingParams, { listing: ListingRecord }>(
   { expose: true, method: ["POST", "PUT"], path: "/host/listings", auth: true },
   async (params) => {
-    const auth = requireRole("host", "admin");
+    const auth = requireRole("host", "admin", "support");
     const now = new Date().toISOString();
-    const hostAccess = auth.role === "admin" ? null : await getHostAccess(auth.userID);
+    const isStaffOperator = auth.role === "admin" || auth.role === "support";
+    const hostAccess = isStaffOperator ? null : await getHostAccess(auth.userID);
     if (hostAccess) {
       assertListingImageCount(params.images, hostAccess.host_plan);
     }
@@ -459,7 +460,7 @@ export const saveListing = api<SaveListingParams, { listing: ListingRecord }>(
         SELECT * FROM listings WHERE id = ${params.id}
       `;
       if (!existing) throw APIError.notFound("Listing not found.");
-      if (existing.host_id !== auth.userID && auth.role !== "admin") {
+      if (existing.host_id !== auth.userID && !isStaffOperator) {
         throw APIError.permissionDenied("You cannot edit another host's listing.");
       }
 
@@ -528,7 +529,7 @@ export const saveListing = api<SaveListingParams, { listing: ListingRecord }>(
       });
 
       if (
-        auth.role === "admin" &&
+        isStaffOperator &&
         (nextStatus === "active" || nextStatus === "rejected") &&
         (existing.status !== nextStatus || existing.rejection_reason !== nextRejectionReason)
       ) {
@@ -556,6 +557,10 @@ export const saveListing = api<SaveListingParams, { listing: ListingRecord }>(
           updatedAt: now,
         },
       };
+    }
+
+    if (auth.role === "support") {
+      throw APIError.permissionDenied("Support staff can edit existing listings but cannot create new ones.");
     }
 
     if (auth.role !== "admin") {
@@ -607,12 +612,13 @@ export const saveListing = api<SaveListingParams, { listing: ListingRecord }>(
 export const deleteListing = api<{ id: string }, { deleted: true }>(
   { expose: true, method: "DELETE", path: "/host/listings/:id", auth: true },
   async ({ id }) => {
-    const auth = requireRole("host", "admin");
+    const auth = requireRole("host", "admin", "support");
+    const isStaffOperator = auth.role === "admin" || auth.role === "support";
     const existing = await catalogDB.queryRow<ListingRow>`
       SELECT * FROM listings WHERE id = ${id}
     `;
     if (!existing) throw APIError.notFound("Listing not found.");
-    if (existing.host_id !== auth.userID && auth.role !== "admin") {
+    if (existing.host_id !== auth.userID && !isStaffOperator) {
       throw APIError.permissionDenied("You cannot delete another host's listing.");
     }
 
@@ -658,12 +664,13 @@ export const deleteListing = api<{ id: string }, { deleted: true }>(
 export const updateListingAvailability = api<UpdateAvailabilityParams, { listing: ListingRecord }>(
   { expose: true, method: "PUT", path: "/host/listings/availability", auth: true },
   async ({ listingId, blockedDates }) => {
-    const auth = requireRole("host", "admin");
+    const auth = requireRole("host", "admin", "support");
+    const isStaffOperator = auth.role === "admin" || auth.role === "support";
     const existing = await catalogDB.queryRow<ListingRow>`
       SELECT * FROM listings WHERE id = ${listingId}
     `;
     if (!existing) throw APIError.notFound("Listing not found.");
-    if (existing.host_id !== auth.userID && auth.role !== "admin") {
+    if (existing.host_id !== auth.userID && !isStaffOperator) {
       throw APIError.permissionDenied("You cannot manage another host's availability.");
     }
 
