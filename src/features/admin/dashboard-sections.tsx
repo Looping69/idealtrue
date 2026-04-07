@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   AlertCircle,
   ArrowUpDown,
+  Ban,
   Bell,
   CheckCircle2,
   ChevronLeft,
@@ -11,7 +12,10 @@ import {
   Home,
   MapPin,
   MessageSquare,
+  Pencil,
   Plus,
+  Power,
+  RotateCcw,
   Search,
   Send,
   Star,
@@ -346,15 +350,15 @@ export function UsersSection({
   );
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-[#1a1c1e]">User Management</h1>
           <p className="text-[#5e6064]">Manage platform users and their roles.</p>
         </div>
-        <div className="relative w-72">
+        <div className="relative w-64 shrink-0">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <Input placeholder="Search users..." className="h-10 rounded-xl pl-10" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />
+          <Input placeholder="Search users..." className="h-9 rounded-xl pl-10 text-sm" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />
         </div>
       </div>
 
@@ -363,37 +367,37 @@ export function UsersSection({
           <table className="w-full border-collapse text-left">
             <thead>
               <tr className="border-b border-slate-100 bg-[#f8fafc]">
-                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-500">User</th>
-                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-500">Role</th>
-                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-500">Account</th>
-                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-500">KYC Status</th>
-                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-500">Stats</th>
-                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">User</th>
+                <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Role</th>
+                <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Account</th>
+                <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">KYC</th>
+                <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Stats</th>
+                <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                   <SortHeader label="Created" direction={sortDirection} onToggle={() => setSortDirection((current) => current === 'desc' ? 'asc' : 'desc')} />
                 </th>
-                <th className="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Actions</th>
+                <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredUsers.map((user) => (
                 <tr key={user.id} className="transition-colors hover:bg-slate-50">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <img src={user.photoUrl} className="h-10 w-10 rounded-full border border-slate-100" alt="" referrerPolicy="no-referrer" />
-                      <div>
-                        <p className="text-sm font-bold text-slate-900">{user.displayName}</p>
-                        <p className="text-xs text-slate-500">{user.email}</p>
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <img src={user.photoUrl} className="h-8 w-8 rounded-full border border-slate-100 object-cover" alt="" referrerPolicy="no-referrer" />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-slate-900">{user.displayName}</p>
+                        <p className="truncate text-[11px] text-slate-500">{user.email}</p>
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <select className="rounded-md border-none bg-slate-100 px-2 py-1 text-xs font-bold focus:ring-2 focus:ring-primary" value={user.role} onChange={(event) => handleUpdateUserRole(user.id, event.target.value as UserProfile['role'])}>
+                  <td className="px-4 py-2.5">
+                    <select className="h-8 rounded-md border-none bg-slate-100 px-2 text-[11px] font-bold focus:ring-2 focus:ring-primary" value={user.role} onChange={(event) => handleUpdateUserRole(user.id, event.target.value as UserProfile['role'])}>
                       <option value="guest">Guest</option>
                       <option value="host">Host</option>
                       <option value="admin">Admin</option>
                     </select>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-2.5">
                     <div className="space-y-1">
                       <Badge
                         variant={
@@ -403,56 +407,110 @@ export function UsersSection({
                               ? 'warning'
                               : 'danger'
                         }
-                        className="text-[10px] uppercase"
+                        className="text-[9px] uppercase"
                       >
                         {user.accountStatus}
                       </Badge>
                       {user.accountStatusReason ? (
-                        <p className="max-w-[220px] text-[11px] leading-4 text-slate-500">{user.accountStatusReason}</p>
+                        <p className="line-clamp-2 max-w-[180px] text-[10px] leading-4 text-slate-500">{user.accountStatusReason}</p>
                       ) : null}
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <Badge variant={user.kycStatus === 'verified' ? 'success' : user.kycStatus === 'pending' ? 'warning' : user.kycStatus === 'rejected' ? 'danger' : 'neutral'} className="text-[10px] uppercase">
+                  <td className="px-4 py-2.5">
+                    <Badge variant={user.kycStatus === 'verified' ? 'success' : user.kycStatus === 'pending' ? 'warning' : user.kycStatus === 'rejected' ? 'danger' : 'neutral'} className="text-[9px] uppercase">
                       {user.kycStatus}
                     </Badge>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="space-y-1 text-xs">
-                      <p><span className="text-slate-400">Referrals:</span> {user.referralCount}</p>
-                      <p><span className="text-slate-400">Balance:</span> {formatRand(user.balance)}</p>
+                  <td className="px-4 py-2.5">
+                    <div className="space-y-0.5 text-[11px]">
+                      <p><span className="text-slate-400">Refs</span> {user.referralCount}</p>
+                      <p><span className="text-slate-400">Bal</span> {formatRand(user.balance)}</p>
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <p className="text-xs text-slate-500">{new Date(user.createdAt).toLocaleDateString()}</p>
+                  <td className="px-4 py-2.5">
+                    <p className="whitespace-nowrap text-[11px] text-slate-500">{new Date(user.createdAt).toLocaleDateString()}</p>
                   </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex flex-wrap justify-end gap-2">
+                  <td className="px-4 py-2.5 text-right">
+                    <div className="flex flex-wrap justify-end gap-1.5">
                       {user.kycStatus === 'pending' ? (
-                        <Button variant="outline" size="sm" className="h-8 text-xs text-green-600 hover:bg-green-50" onClick={() => {
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 text-green-600 hover:bg-green-50"
+                          title="Review KYC"
+                          aria-label="Review KYC"
+                          onClick={() => {
                           const submission = kycSubmissions.find((item) => item.userId === user.id);
                           if (submission) handleReviewKYC(submission);
                         }}>
-                          Review KYC
+                          <Eye className="h-3.5 w-3.5" />
                         </Button>
                       ) : null}
                       {user.accountStatus === 'active' ? (
                         <>
-                          <Button variant="outline" size="sm" className="h-8 text-xs text-amber-700 hover:bg-amber-50" onClick={() => openAccountStatusDialog(user, 'suspended')}>
-                            Suspend
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 text-amber-700 hover:bg-amber-50"
+                            title="Suspend account"
+                            aria-label="Suspend account"
+                            onClick={() => openAccountStatusDialog(user, 'suspended')}
+                          >
+                            <Ban className="h-3.5 w-3.5" />
                           </Button>
-                          <Button variant="outline" size="sm" className="h-8 text-xs text-red-600 hover:bg-red-50" onClick={() => openAccountStatusDialog(user, 'deactivated')}>
-                            Deactivate
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 text-red-600 hover:bg-red-50"
+                            title="Deactivate account"
+                            aria-label="Deactivate account"
+                            onClick={() => openAccountStatusDialog(user, 'deactivated')}
+                          >
+                            <Power className="h-3.5 w-3.5" />
                           </Button>
                         </>
                       ) : (
-                        <Button variant="outline" size="sm" className="h-8 text-xs text-green-700 hover:bg-green-50" onClick={() => openAccountStatusDialog(user, 'active')}>
-                          Reactivate
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 text-green-700 hover:bg-green-50"
+                          title="Reactivate account"
+                          aria-label="Reactivate account"
+                          onClick={() => openAccountStatusDialog(user, 'active')}
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
                         </Button>
                       )}
-                      <Button variant="ghost" size="sm" className="text-xs text-blue-500" onClick={() => setEditingUser(user)}>Edit</Button>
-                      <Button variant="ghost" size="sm" className="text-xs text-red-500" onClick={() => setConfirmDelete({ type: 'user', id: user.id })}>Delete</Button>
-                      <Button variant="ghost" size="sm" className="text-xs" onClick={() => navigate(`/account?id=${user.id}`)}>View Profile</Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-blue-500"
+                        title="Edit user"
+                        aria-label="Edit user"
+                        onClick={() => setEditingUser(user)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        title="View profile"
+                        aria-label="View profile"
+                        onClick={() => navigate(`/account?id=${user.id}`)}
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-red-500"
+                        title="Delete user"
+                        aria-label="Delete user"
+                        onClick={() => setConfirmDelete({ type: 'user', id: user.id })}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
                   </td>
                 </tr>
