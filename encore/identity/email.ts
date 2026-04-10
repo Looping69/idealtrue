@@ -1,3 +1,4 @@
+import { APIError } from "encore.dev/api";
 import { secret } from "encore.dev/config";
 
 const resendApiKey = secret("RESEND_API_KEY");
@@ -64,8 +65,8 @@ export async function sendAuthEmail(params: {
   const from = authEmailFrom();
   if (!apiKey || !from) {
     if (!allowAuthEmailLogFallback) {
-      throw new Error(
-        "Auth email transport is not configured. Set RESEND_API_KEY and AUTH_EMAIL_FROM, or explicitly enable local log fallback with IDEAL_STAY_ALLOW_AUTH_EMAIL_LOG=true.",
+      throw APIError.internal(
+        "Email service is not configured. Set RESEND_API_KEY and AUTH_EMAIL_FROM, or enable local log fallback with IDEAL_STAY_ALLOW_AUTH_EMAIL_LOG=true.",
       );
     }
     console.log(`[auth-email:${params.kind}] ${params.to} -> ${link}`);

@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Booking, Listing, Referral } from '@/types';
 import type { AuthSessionUser } from '@/contexts/AuthContext';
 import { isBookedStay } from '@/lib/inquiry-state';
 import { getListing, listHostListings, listMyBookings, listPublicListings, listReferralRewards } from '@/lib/platform-client';
+
+const BOOKING_POLL_INTERVAL_MS = 15_000;
 
 interface PlatformDataState {
   listings: Listing[];
@@ -15,12 +17,24 @@ interface PlatformDataState {
   removeListing: (listingId: string) => void;
 }
 
+function applyBookings(
+  allBookings: Booking[],
+  userId: string,
+  setMyBookings: React.Dispatch<React.SetStateAction<Booking[]>>,
+  setHostBookings: React.Dispatch<React.SetStateAction<Booking[]>>,
+) {
+  setMyBookings(allBookings.filter((booking) => booking.guestId === userId));
+  setHostBookings(allBookings.filter((booking) => booking.hostId === userId));
+}
+
 export function usePlatformData(user: AuthSessionUser | null): PlatformDataState {
   const [listings, setListings] = useState<Listing[]>([]);
   const [myListings, setMyListings] = useState<Listing[]>([]);
   const [myBookings, setMyBookings] = useState<Booking[]>([]);
   const [hostBookings, setHostBookings] = useState<Booking[]>([]);
   const [referrals, setReferrals] = useState<Referral[]>([]);
+  const userRef = useRef(user);
+  userRef.current = user;
 
   useEffect(() => {
     let cancelled = false;
@@ -52,14 +66,43 @@ export function usePlatformData(user: AuthSessionUser | null): PlatformDataState
       }
 
       setMyListings(hostListings);
-      setMyBookings(sessionBookings.filter((booking) => booking.guestId === user.id));
-      setHostBookings(sessionBookings.filter((booking) => booking.hostId === user.id));
+      applyBookings(sessionBookings, user.id, setMyBookings, setHostBookings);
     }
 
     void loadData();
 
     return () => {
       cancelled = true;
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    const refreshBookings = async () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return;
+      }
+      const currentUser = userRef.current;
+      if (!currentUser) {
+        return;
+      }
+      try {
+        const latestBookings = await listMyBookings();
+        applyBookings(latestBookings, currentUser.id, setMyBookings, setHostBookings);
+      } catch (error) {
+        console.warn('Failed to refresh bookings:', error);
+      }
+    };
+
+    const interval = window.setInterval(() => {
+      void refreshBookings();
+    }, BOOKING_POLL_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(interval);
     };
   }, [user]);
 

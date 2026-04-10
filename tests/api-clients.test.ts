@@ -270,6 +270,7 @@ test('getListing and saveListing use the canonical Encore listing contract', asy
     type: 'house',
     pricePerNight: 2200,
     discountPercent: 5,
+    breakageDeposit: null,
     adults: 4,
     children: 2,
     bedrooms: 2,
@@ -318,7 +319,8 @@ test('updateBookingStatus sends the booking status patch to the correct endpoint
         adults: 2,
         children: 1,
         totalPrice: 3200,
-        status: 'awaiting_guest_payment',
+        inquiryState: 'APPROVED',
+        paymentState: 'INITIATED',
         paymentMethod: 'bank_transfer',
         paymentInstructions: 'Pay within 24 hours.',
         createdAt: '2026-03-30T09:00:00.000Z',
@@ -327,15 +329,15 @@ test('updateBookingStatus sends the booking status patch to the correct endpoint
     }),
   );
 
-  const booking = await updateBookingStatus('booking-1', 'awaiting_guest_payment');
+  const booking = await updateBookingStatus('booking-1', 'APPROVED');
 
   assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/bookings/booking-1/status`);
   assert.equal(fetchCalls[0]?.init?.method, 'PATCH');
   assert.deepEqual(JSON.parse(String(fetchCalls[0]?.init?.body)), {
     id: 'booking-1',
-    status: 'awaiting_guest_payment',
+    status: 'APPROVED',
   });
-  assert.equal(booking.status, 'awaiting_guest_payment');
+  assert.equal(booking.inquiryState, 'APPROVED');
   assert.equal(booking.paymentInstructions, 'Pay within 24 hours.');
 });
 
@@ -352,7 +354,8 @@ test('submitPaymentProof posts the guest payment proof to the booking payment en
         adults: 2,
         children: 0,
         totalPrice: 4100,
-        status: 'payment_submitted',
+        inquiryState: 'APPROVED',
+        paymentState: 'INITIATED',
         paymentMethod: 'bank_transfer',
         paymentReference: 'IDEAL-4100',
         paymentProofUrl: 'https://cdn.example.com/payment-proof.jpg',
@@ -373,10 +376,12 @@ test('submitPaymentProof posts the guest payment proof to the booking payment en
   assert.equal(fetchCalls[0]?.init?.method, 'POST');
   assert.deepEqual(JSON.parse(String(fetchCalls[0]?.init?.body)), {
     paymentReference: 'IDEAL-4100',
-    paymentProof: null,
+    paymentProofFilename: null,
+    paymentProofContentType: null,
+    paymentProofDataBase64: null,
     paymentProofUrl: 'https://cdn.example.com/payment-proof.jpg',
   });
-  assert.equal(booking.status, 'payment_submitted');
+  assert.equal(booking.inquiryState, 'APPROVED');
   assert.equal(booking.paymentReference, 'IDEAL-4100');
   assert.equal(booking.paymentProofUrl, 'https://cdn.example.com/payment-proof.jpg');
 });

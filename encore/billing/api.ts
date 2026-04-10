@@ -509,19 +509,27 @@ async function activatePlanFromCheckout(session: CheckoutSessionRow) {
   `;
 
   if (!existingSubscription) {
-    await platformEvents.publish({
-      type: "subscription.changed",
-      aggregateId: subscriptionId,
-      actorId: session.user_id,
-      occurredAt: now.toISOString(),
-      payload: JSON.stringify({ plan: session.host_plan }),
-    });
+    try {
+      await platformEvents.publish({
+        type: "subscription.changed",
+        aggregateId: subscriptionId,
+        actorId: session.user_id,
+        occurredAt: now.toISOString(),
+        payload: JSON.stringify({ plan: session.host_plan }),
+      });
+    } catch (error) {
+      console.error("Failed to publish subscription.changed event:", error);
+    }
   }
 
-  await rewardSubscriptionReferralConversion({
-    referredUserId: session.user_id,
-    sourceSubscriptionId: subscriptionId,
-  });
+  try {
+    await rewardSubscriptionReferralConversion({
+      referredUserId: session.user_id,
+      sourceSubscriptionId: subscriptionId,
+    });
+  } catch (error) {
+    console.error("Failed to apply referral reward for subscription:", error);
+  }
 }
 
 async function creditWalletFromCheckout(session: CheckoutSessionRow) {

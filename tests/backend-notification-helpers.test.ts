@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import {
   buildBookingRequestedNotification,
-  buildBookingStatusChangedNotification,
+  buildInquiryStatusChangedNotification,
   buildCheckoutStatusChangedNotification,
   buildContentCreditsPurchasedNotification,
   buildKycReviewedNotification,
@@ -36,8 +36,8 @@ test('booking notification builders target the right inbox paths', () => {
       listingTitle: 'Sea Point Stay',
     }),
     {
-      title: 'Payment proof submitted',
-      message: 'A guest submitted payment proof for Sea Point Stay.',
+      title: 'Payment submitted',
+      message: 'A guest completed the payment step for Sea Point Stay.',
       type: 'info',
       target: 'host-1',
       actionPath: '/host/enquiries',
@@ -45,16 +45,16 @@ test('booking notification builders target the right inbox paths', () => {
   );
 });
 
-test('booking status builder distinguishes success and warning states', () => {
+test('inquiry status builder distinguishes success and warning states', () => {
   assert.deepEqual(
-    buildBookingStatusChangedNotification({
+    buildInquiryStatusChangedNotification({
       guestId: 'guest-1',
-      status: 'confirmed',
+      inquiryState: 'APPROVED',
       listingTitle: 'Sea Point Stay',
     }),
     {
-      title: 'Booking updated',
-      message: 'Your booking for Sea Point Stay is confirmed.',
+      title: 'Inquiry updated',
+      message: 'Sea Point Stay is ready for payment.',
       type: 'success',
       target: 'guest-1',
       actionPath: '/guest',
@@ -62,14 +62,14 @@ test('booking status builder distinguishes success and warning states', () => {
   );
 
   assert.deepEqual(
-    buildBookingStatusChangedNotification({
+    buildInquiryStatusChangedNotification({
       guestId: 'guest-1',
-      status: 'declined',
+      inquiryState: 'DECLINED',
       listingTitle: 'Sea Point Stay',
     }),
     {
-      title: 'Booking updated',
-      message: 'Your booking for Sea Point Stay was declined.',
+      title: 'Inquiry updated',
+      message: 'Your inquiry for Sea Point Stay was declined.',
       type: 'warning',
       target: 'guest-1',
       actionPath: '/guest',
@@ -177,7 +177,7 @@ test('review and billing notification builders produce actionable messages', () 
     }),
     {
       title: 'Payment failed',
-      message: 'Your professional plan subscription payment did not complete. Try again when you\'re ready.',
+      message: "Your professional plan subscription payment did not complete. Try again when you're ready.",
       type: 'error',
       target: 'host-1',
       actionPath: '/pricing',

@@ -22,7 +22,7 @@ const DEFAULT_SAFETY_SETTINGS = [
 function getGeminiApiKey(env = process.env) {
   const apiKey = `${env.GEMINI_API_KEY || ""}`.trim();
   if (!apiKey) {
-    throw APIError.unavailable("GEMINI_API_KEY is not configured.");
+    throw APIError.unavailable("Content generation service is not available. Please try again later.");
   }
   return apiKey;
 }
@@ -30,7 +30,7 @@ function getGeminiApiKey(env = process.env) {
 function getDeepSeekApiKey(env = process.env) {
   const apiKey = `${env.DEEPSEEK_API_KEY || ""}`.trim();
   if (!apiKey) {
-    throw APIError.unavailable("DEEPSEEK_API_KEY is not configured.");
+    throw APIError.unavailable("Content generation service is not available. Please try again later.");
   }
   return apiKey;
 }
