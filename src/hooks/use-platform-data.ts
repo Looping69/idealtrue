@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Booking, Listing, Referral } from '@/types';
 import type { AuthSessionUser } from '@/contexts/AuthContext';
+import { isBookedStay } from '@/lib/inquiry-state';
 import { getListing, listHostListings, listMyBookings, listPublicListings, listReferralRewards } from '@/lib/platform-client';
 
 interface PlatformDataState {
@@ -84,7 +85,7 @@ export function usePlatformData(user: AuthSessionUser | null): PlatformDataState
         return current.map((item) => item.id === updatedBooking.id ? updatedBooking : item);
       });
 
-      if (["confirmed", "completed", "cancelled", "declined"].includes(updatedBooking.status)) {
+      if (isBookedStay(updatedBooking) || ['DECLINED', 'EXPIRED'].includes(updatedBooking.inquiryState)) {
         void getListing(updatedBooking.listingId)
           .then((updatedListing) => {
             setListings((current) => current.map((item) => item.id === updatedListing.id ? updatedListing : item));

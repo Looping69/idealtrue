@@ -4,14 +4,15 @@ export type KycStatus = "none" | "pending" | "verified" | "rejected";
 export type ReferralTier = "bronze" | "silver" | "gold";
 export type AccountStatus = "active" | "suspended" | "deactivated";
 export type ListingStatus = "draft" | "pending" | "active" | "inactive" | "rejected" | "archived";
-export type BookingStatus =
-  | "pending"
-  | "awaiting_guest_payment"
-  | "payment_submitted"
-  | "confirmed"
-  | "cancelled"
-  | "completed"
-  | "declined";
+export type InquiryState =
+  | "PENDING"
+  | "VIEWED"
+  | "RESPONDED"
+  | "APPROVED"
+  | "DECLINED"
+  | "EXPIRED"
+  | "BOOKED";
+export type PaymentState = "UNPAID" | "INITIATED" | "COMPLETED" | "FAILED";
 export type ReviewStatus = "pending" | "approved" | "rejected";
 export type ReferralProgram = "guest" | "host";
 export type ReferralRewardStatus = "pending" | "earned" | "paid" | "rejected";
@@ -86,16 +87,33 @@ export interface BookingRecord {
   adults: number;
   children: number;
   totalPrice: number;
-  status: BookingStatus;
+  inquiryState: InquiryState;
+  paymentState: PaymentState;
   paymentMethod?: string | null;
   paymentInstructions?: string | null;
   paymentReference?: string | null;
   paymentProofKey?: string | null;
   paymentProofUrl?: string | null;
+  viewedAt?: string | null;
+  respondedAt?: string | null;
+  paymentUnlockedAt?: string | null;
   paymentSubmittedAt?: string | null;
   paymentConfirmedAt?: string | null;
+  expiresAt?: string | null;
+  bookedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface InquiryLedgerEventRecord {
+  id: string;
+  inquiryId: string;
+  event: "INQUIRY_CREATED" | "STATUS_CHANGED" | "PAYMENT_CHANGED";
+  fromState?: string | null;
+  toState?: string | null;
+  actor: "host" | "system" | "guest";
+  metadata?: string | null;
+  timestamp: string;
 }
 
 export interface MessageRecord {
@@ -161,11 +179,19 @@ export type DomainEvent =
       payload: { hostId: string; status: ListingStatus };
     }
   | {
-      type: "booking.requested" | "booking.confirmed" | "booking.cancelled";
+      type: "inquiry.created" | "inquiry.status_changed" | "inquiry.payment_changed";
       aggregateId: string;
       actorId: string;
       occurredAt: string;
-      payload: { listingId: string; guestId: string; hostId: string; status: BookingStatus };
+      payload: {
+        listingId: string;
+        listingTitle: string;
+        guestId: string;
+        hostId: string;
+        inquiryState: InquiryState;
+        paymentState: PaymentState;
+        actor: "host" | "system" | "guest";
+      };
     }
   | {
       type: "message.sent";

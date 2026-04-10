@@ -5,14 +5,24 @@ import { bookingEvidenceBucket } from "./storage";
 import { requireAuth, requireRole } from "../shared/auth";
 import { platformEvents } from "../analytics/events";
 import { getListing, replaceListingBlockedDates } from "../catalog/api";
-import { notifyBookingRequested, notifyBookingStatusChanged, notifyPaymentProofSubmitted } from "../ops/notifications";
-import type { BookingRecord, BookingStatus } from "../shared/domain";
+import { identityDB } from "../identity/db";
+import type { BookingRecord, InquiryLedgerEventRecord, InquiryState, PaymentState } from "../shared/domain";
 import {
   bookingOverlapsBlockedDates,
   computeBookingTotalPrice,
-  getBookingStatusTransitionError,
+  getInquiryStatusTransitionError,
   getPaymentProofSubmissionError,
+  getPaymentStateTransitionError,
 } from "./workflow";
+
+type LegacyBookingStatus =
+  | "pending"
+  | "awaiting_guest_payment"
+  | "payment_submitted"
+  | "confirmed"
+  | "cancelled"
+  | "completed"
+  | "declined";
 
 type BookingRow = {
   id: string;
@@ -24,16 +34,40 @@ type BookingRow = {
   adults: number;
   children: number;
   total_price: number;
-  status: BookingStatus;
+  status: LegacyBookingStatus;
+  inquiry_state: InquiryState;
+  payment_state: PaymentState;
   payment_method: string | null;
   payment_instructions: string | null;
   payment_reference: string | null;
   payment_proof_key: string | null;
   payment_proof_url: string | null;
+  viewed_at: string | null;
+  responded_at: string | null;
+  payment_unlocked_at: string | null;
   payment_submitted_at: string | null;
   payment_confirmed_at: string | null;
+  expires_at: string | null;
+  booked_at: string | null;
   created_at: string;
   updated_at: string;
+};
+
+type InquiryLedgerRow = {
+  id: string;
+  inquiry_id: string;
+  event: InquiryLedgerEventRecord["event"];
+  from_state: string | null;
+  to_state: string | null;
+  actor: InquiryLedgerEventRecord["actor"];
+  metadata: string;
+  created_at: string;
+};
+
+type HostPaymentDetailsRow = {
+  payment_method: string | null;
+  payment_instructions: string | null;
+  payment_reference_prefix: string | null;
 };
 
 interface CreateBookingParams {
@@ -48,7 +82,7 @@ interface CreateBookingParams {
 
 interface UpdateBookingStatusParams {
   id: string;
-  status: BookingStatus;
+  status: InquiryState;
 }
 
 interface SubmitPaymentProofParams {
@@ -58,15 +92,6 @@ interface SubmitPaymentProofParams {
   paymentProofContentType?: string | null;
   paymentProofDataBase64?: string | null;
   paymentProofUrl?: string | null;
-}
-
-export interface BookingAccessRecord extends BookingRecord {
-  paymentMethod?: string | null;
-  paymentInstructions?: string | null;
-  paymentReference?: string | null;
-  paymentProofUrl?: string | null;
-  paymentSubmittedAt?: string | null;
-  paymentConfirmedAt?: string | null;
 }
 
 function mapBooking(row: BookingRow): BookingRecord {
@@ -80,16 +105,35 @@ function mapBooking(row: BookingRow): BookingRecord {
     adults: row.adults,
     children: row.children,
     totalPrice: row.total_price,
-    status: row.status,
+    inquiryState: row.inquiry_state,
+    paymentState: row.payment_state,
     paymentMethod: row.payment_method,
     paymentInstructions: row.payment_instructions,
     paymentReference: row.payment_reference,
     paymentProofKey: row.payment_proof_key,
     paymentProofUrl: row.payment_proof_url,
+    viewedAt: row.viewed_at,
+    respondedAt: row.responded_at,
+    paymentUnlockedAt: row.payment_unlocked_at,
     paymentSubmittedAt: row.payment_submitted_at,
     paymentConfirmedAt: row.payment_confirmed_at,
+    expiresAt: row.expires_at,
+    bookedAt: row.booked_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function mapLedgerEvent(row: InquiryLedgerRow): InquiryLedgerEventRecord {
+  return {
+    id: row.id,
+    inquiryId: row.inquiry_id,
+    event: row.event,
+    fromState: row.from_state,
+    toState: row.to_state,
+    actor: row.actor,
+    metadata: row.metadata,
+    timestamp: row.created_at,
   };
 }
 
@@ -121,6 +165,33 @@ function decodeBase64Payload(dataBase64: string) {
   return buffer;
 }
 
+function deriveLegacyStatus(inquiryState: InquiryState, paymentState: PaymentState): LegacyBookingStatus {
+  if (inquiryState === "BOOKED") {
+    return "confirmed";
+  }
+  if (inquiryState === "DECLINED") {
+    return "declined";
+  }
+  if (inquiryState === "EXPIRED") {
+    return "cancelled";
+  }
+  if (inquiryState === "APPROVED" && paymentState === "INITIATED") {
+    return "awaiting_guest_payment";
+  }
+  if (inquiryState === "APPROVED" && paymentState === "FAILED") {
+    return "payment_submitted";
+  }
+  return "pending";
+}
+
+function buildHostPaymentReference(prefix: string | null, inquiryId: string) {
+  if (!prefix?.trim()) {
+    return null;
+  }
+
+  return `${prefix.trim().toUpperCase()}-${inquiryId.slice(0, 8).toUpperCase()}`;
+}
+
 async function resolvePaymentProofUrl(row: BookingRow) {
   if (row.payment_proof_key) {
     const signed = await bookingEvidenceBucket.signedDownloadUrl(row.payment_proof_key, { ttl: 900 });
@@ -130,7 +201,7 @@ async function resolvePaymentProofUrl(row: BookingRow) {
   return row.payment_proof_url;
 }
 
-async function mapBookingAccessRecord(row: BookingRow): Promise<BookingAccessRecord> {
+async function mapBookingAccessRecord(row: BookingRow): Promise<BookingRecord> {
   return {
     ...mapBooking(row),
     paymentProofUrl: await resolvePaymentProofUrl(row),
@@ -171,7 +242,8 @@ async function syncListingAvailabilityForBookings(listingId: string) {
       SELECT check_in, check_out
       FROM bookings
       WHERE listing_id = $1
-        AND status IN ('confirmed', 'completed')
+        AND inquiry_state = 'BOOKED'
+        AND payment_state = 'COMPLETED'
     `,
     listingId,
   );
@@ -185,11 +257,233 @@ async function syncListingAvailabilityForBookings(listingId: string) {
   await replaceListingBlockedDates(listingId, blockedDates);
 }
 
-export async function getBookingById(id: string) {
-  const row = await bookingDB.queryRow<BookingRow>`
+async function getHostPaymentDetails(hostId: string): Promise<HostPaymentDetailsRow> {
+  const host = await identityDB.queryRow<HostPaymentDetailsRow>`
+    SELECT payment_method, payment_instructions, payment_reference_prefix
+    FROM users
+    WHERE id = ${hostId}
+  `;
+
+  return host ?? {
+    payment_method: null,
+    payment_instructions: null,
+    payment_reference_prefix: null,
+  };
+}
+
+async function appendLedgerEvent(params: {
+  inquiryId: string;
+  event: InquiryLedgerEventRecord["event"];
+  fromState?: string | null;
+  toState?: string | null;
+  actor: InquiryLedgerEventRecord["actor"];
+  metadata?: Record<string, unknown>;
+  timestamp: string;
+}) {
+  const id = randomUUID();
+  await bookingDB.exec`
+    INSERT INTO inquiry_ledger (id, inquiry_id, event, from_state, to_state, actor, metadata, created_at)
+    VALUES (
+      ${id},
+      ${params.inquiryId},
+      ${params.event},
+      ${params.fromState ?? null},
+      ${params.toState ?? null},
+      ${params.actor},
+      ${JSON.stringify(params.metadata ?? {})}::jsonb,
+      ${params.timestamp}
+    )
+  `;
+
+  return id;
+}
+
+async function publishInquiryEvent(params: {
+  type: "inquiry.created" | "inquiry.status_changed" | "inquiry.payment_changed";
+  inquiry: BookingRow;
+  listingTitle: string;
+  actorId: string;
+  actor: "host" | "system" | "guest";
+  occurredAt: string;
+}) {
+  await platformEvents.publish({
+    type: params.type,
+    aggregateId: params.inquiry.id,
+    actorId: params.actorId,
+    occurredAt: params.occurredAt,
+    payload: JSON.stringify({
+      listingId: params.inquiry.listing_id,
+      listingTitle: params.listingTitle,
+      guestId: params.inquiry.guest_id,
+      hostId: params.inquiry.host_id,
+      inquiryState: params.inquiry.inquiry_state,
+      paymentState: params.inquiry.payment_state,
+      actor: params.actor,
+    }),
+  });
+}
+
+async function persistInquiryStateChange(params: {
+  inquiry: BookingRow;
+  nextInquiryState: InquiryState;
+  actorId: string;
+  actor: "host" | "system" | "guest";
+  now: string;
+  viewedAt?: string | null;
+  respondedAt?: string | null;
+  paymentUnlockedAt?: string | null;
+  paymentReference?: string | null;
+  expiresAt?: string | null;
+  bookedAt?: string | null;
+}) {
+  if (params.inquiry.inquiry_state === params.nextInquiryState) {
+    return params.inquiry;
+  }
+
+  const nextRow: BookingRow = {
+    ...params.inquiry,
+    inquiry_state: params.nextInquiryState,
+    status: deriveLegacyStatus(params.nextInquiryState, params.inquiry.payment_state),
+    viewed_at: params.viewedAt ?? params.inquiry.viewed_at,
+    responded_at: params.respondedAt ?? params.inquiry.responded_at,
+    payment_unlocked_at: params.paymentUnlockedAt ?? params.inquiry.payment_unlocked_at,
+    payment_reference: params.paymentReference ?? params.inquiry.payment_reference,
+    expires_at: params.expiresAt ?? params.inquiry.expires_at,
+    booked_at: params.bookedAt ?? params.inquiry.booked_at,
+    updated_at: params.now,
+  };
+
+  await bookingDB.exec`
+    UPDATE bookings
+    SET inquiry_state = ${nextRow.inquiry_state},
+        status = ${nextRow.status},
+        viewed_at = ${nextRow.viewed_at},
+        responded_at = ${nextRow.responded_at},
+        payment_unlocked_at = ${nextRow.payment_unlocked_at},
+        payment_reference = ${nextRow.payment_reference},
+        expires_at = ${nextRow.expires_at},
+        booked_at = ${nextRow.booked_at},
+        updated_at = ${nextRow.updated_at}
+    WHERE id = ${nextRow.id}
+  `;
+
+  await appendLedgerEvent({
+    inquiryId: nextRow.id,
+    event: "STATUS_CHANGED",
+    fromState: params.inquiry.inquiry_state,
+    toState: nextRow.inquiry_state,
+    actor: params.actor,
+    metadata: { paymentState: nextRow.payment_state },
+    timestamp: params.now,
+  });
+
+  await publishInquiryEvent({
+    type: "inquiry.status_changed",
+    inquiry: nextRow,
+    listingTitle: await resolveListingTitle(nextRow.listing_id),
+    actorId: params.actorId,
+    actor: params.actor,
+    occurredAt: params.now,
+  });
+
+  return nextRow;
+}
+
+async function persistPaymentStateChange(params: {
+  inquiry: BookingRow;
+  nextPaymentState: PaymentState;
+  actorId: string;
+  actor: "host" | "system" | "guest";
+  now: string;
+  paymentReference?: string | null;
+  paymentProofKey?: string | null;
+  paymentProofUrl?: string | null;
+  paymentSubmittedAt?: string | null;
+  paymentConfirmedAt?: string | null;
+}) {
+  if (params.inquiry.payment_state === params.nextPaymentState) {
+    return params.inquiry;
+  }
+
+  const nextRow: BookingRow = {
+    ...params.inquiry,
+    payment_state: params.nextPaymentState,
+    status: deriveLegacyStatus(params.inquiry.inquiry_state, params.nextPaymentState),
+    payment_reference: params.paymentReference ?? params.inquiry.payment_reference,
+    payment_proof_key: params.paymentProofKey ?? params.inquiry.payment_proof_key,
+    payment_proof_url: params.paymentProofUrl ?? params.inquiry.payment_proof_url,
+    payment_submitted_at: params.paymentSubmittedAt ?? params.inquiry.payment_submitted_at,
+    payment_confirmed_at: params.paymentConfirmedAt ?? params.inquiry.payment_confirmed_at,
+    updated_at: params.now,
+  };
+
+  await bookingDB.exec`
+    UPDATE bookings
+    SET payment_state = ${nextRow.payment_state},
+        status = ${nextRow.status},
+        payment_reference = ${nextRow.payment_reference},
+        payment_proof_key = ${nextRow.payment_proof_key},
+        payment_proof_url = ${nextRow.payment_proof_url},
+        payment_submitted_at = ${nextRow.payment_submitted_at},
+        payment_confirmed_at = ${nextRow.payment_confirmed_at},
+        updated_at = ${nextRow.updated_at}
+    WHERE id = ${nextRow.id}
+  `;
+
+  await appendLedgerEvent({
+    inquiryId: nextRow.id,
+    event: "PAYMENT_CHANGED",
+    fromState: params.inquiry.payment_state,
+    toState: nextRow.payment_state,
+    actor: params.actor,
+    metadata: { inquiryState: nextRow.inquiry_state },
+    timestamp: params.now,
+  });
+
+  await publishInquiryEvent({
+    type: "inquiry.payment_changed",
+    inquiry: nextRow,
+    listingTitle: await resolveListingTitle(nextRow.listing_id),
+    actorId: params.actorId,
+    actor: params.actor,
+    occurredAt: params.now,
+  });
+
+  return nextRow;
+}
+
+async function fetchBookingRow(id: string) {
+  return bookingDB.queryRow<BookingRow>`
     SELECT * FROM bookings WHERE id = ${id}
   `;
+}
+
+export async function getBookingById(id: string) {
+  const row = await fetchBookingRow(id);
   return row ? mapBookingAccessRecord(row) : null;
+}
+
+export async function recordHostInquiryResponseFromMessage(bookingId: string, actorId: string) {
+  const existing = await fetchBookingRow(bookingId);
+  if (!existing) {
+    return null;
+  }
+
+  const transitionError = getInquiryStatusTransitionError(existing.inquiry_state, "RESPONDED", "host");
+  if (transitionError) {
+    return null;
+  }
+
+  const now = new Date().toISOString();
+  return persistInquiryStateChange({
+    inquiry: existing,
+    nextInquiryState: "RESPONDED",
+    actorId,
+    actor: "host",
+    now,
+    respondedAt: now,
+    viewedAt: existing.viewed_at ?? now,
+  });
 }
 
 export const createBooking = api<CreateBookingParams, { booking: BookingRecord }>(
@@ -227,60 +521,56 @@ export const createBooking = api<CreateBookingParams, { booking: BookingRecord }
     }
 
     const serverTotalPrice = computeBookingTotalPrice(listing.pricePerNight, parsedCheckIn, parsedCheckOut);
-
+    const hostPaymentDetails = await getHostPaymentDetails(listing.hostId);
     const id = randomUUID();
     const now = new Date().toISOString();
 
     await bookingDB.exec`
       INSERT INTO bookings (
         id, listing_id, guest_id, host_id, check_in, check_out, adults, children,
-        total_price, status, created_at, updated_at
+        total_price, status, inquiry_state, payment_state, payment_method, payment_instructions, created_at, updated_at
       )
       VALUES (
-        ${id}, ${params.listingId}, ${auth.userID}, ${listing.hostId}, ${params.checkIn},
-        ${params.checkOut}, ${params.adults}, ${params.children}, ${serverTotalPrice},
-        ${"pending"}, ${now}, ${now}
+        ${id},
+        ${params.listingId},
+        ${auth.userID},
+        ${listing.hostId},
+        ${params.checkIn},
+        ${params.checkOut},
+        ${params.adults},
+        ${params.children},
+        ${serverTotalPrice},
+        ${"pending"},
+        ${"PENDING"},
+        ${"UNPAID"},
+        ${hostPaymentDetails.payment_method},
+        ${hostPaymentDetails.payment_instructions},
+        ${now},
+        ${now}
       )
     `;
 
-    await platformEvents.publish({
-      type: "booking.requested",
-      aggregateId: id,
-      actorId: auth.userID,
-      occurredAt: now,
-      payload: JSON.stringify({
-        listingId: params.listingId,
-        guestId: auth.userID,
-        hostId: listing.hostId,
-        status: "pending",
-      }),
+    await appendLedgerEvent({
+      inquiryId: id,
+      event: "INQUIRY_CREATED",
+      toState: "PENDING",
+      actor: "guest",
+      metadata: { paymentState: "UNPAID" },
+      timestamp: now,
     });
 
-    try {
-      await notifyBookingRequested({
-        hostId: listing.hostId,
-        listingTitle: listing.title,
-        bookingId: id,
-      });
-    } catch (error) {
-      console.error("Failed to create booking notification:", error);
-    }
+    const created = (await fetchBookingRow(id))!;
+    await publishInquiryEvent({
+      type: "inquiry.created",
+      inquiry: created,
+      listingTitle: listing.title,
+      actorId: auth.userID,
+      actor: "guest",
+      occurredAt: now,
+    });
 
     return {
-      booking: {
-        id,
-        listingId: params.listingId,
-        guestId: auth.userID,
-        hostId: listing.hostId,
-        checkIn: params.checkIn,
-        checkOut: params.checkOut,
-        adults: params.adults,
-        children: params.children,
-        totalPrice: serverTotalPrice,
-        status: "pending",
-        createdAt: now,
-        updatedAt: now,
-      },
+      booking: await mapBookingAccessRecord(created),
     };
   },
 );
@@ -315,70 +605,117 @@ export const listAdminBookings = api<void, { bookings: BookingRecord[] }>(
   },
 );
 
+export const listInquiryLedger = api<{ id: string }, { events: InquiryLedgerEventRecord[] }>(
+  { expose: true, method: "GET", path: "/bookings/:id/ledger", auth: true },
+  async ({ id }) => {
+    const auth = requireAuth();
+    const existing = await fetchBookingRow(id);
+    if (!existing) {
+      throw APIError.notFound("Inquiry not found.");
+    }
+    if (![existing.guest_id, existing.host_id].includes(auth.userID) && !["admin", "support"].includes(auth.role)) {
+      throw APIError.permissionDenied("You cannot read this inquiry ledger.");
+    }
+
+    const rows = await bookingDB.rawQueryAll<InquiryLedgerRow>(
+      `
+      SELECT id, inquiry_id, event, from_state, to_state, actor, metadata::text AS metadata, created_at
+      FROM inquiry_ledger
+      WHERE inquiry_id = $1
+      ORDER BY created_at ASC
+      `,
+      id,
+    );
+
+    return { events: rows.map(mapLedgerEvent) };
+  },
+);
+
+export const markInquiryViewed = api<{ id: string }, { booking: BookingRecord }>(
+  { expose: true, method: "POST", path: "/bookings/:id/view", auth: true },
+  async ({ id }) => {
+    const auth = requireRole("host", "admin", "support");
+    const existing = await fetchBookingRow(id);
+    if (!existing) throw APIError.notFound("Inquiry not found.");
+    if (existing.host_id !== auth.userID && !["admin", "support"].includes(auth.role)) {
+      throw APIError.permissionDenied("You cannot update this inquiry.");
+    }
+
+    if (existing.inquiry_state !== "PENDING") {
+      return { booking: await mapBookingAccessRecord(existing) };
+    }
+
+    const now = new Date().toISOString();
+    const updated = await persistInquiryStateChange({
+      inquiry: existing,
+      nextInquiryState: "VIEWED",
+      actorId: auth.userID,
+      actor: "host",
+      now,
+      viewedAt: now,
+    });
+
+    return { booking: await mapBookingAccessRecord(updated) };
+  },
+);
+
 export const updateBookingStatus = api<UpdateBookingStatusParams, { booking: BookingRecord }>(
   { expose: true, method: "PATCH", path: "/bookings/:id/status", auth: true },
   async (params) => {
-    const auth = requireRole("host", "admin");
-    const existing = await bookingDB.queryRow<BookingRow>`
-      SELECT * FROM bookings WHERE id = ${params.id}
-    `;
-    if (!existing) throw APIError.notFound("Booking not found.");
-    if (existing.host_id !== auth.userID && auth.role !== "admin") {
-      throw APIError.permissionDenied("You cannot update this booking.");
+    const auth = requireRole("host", "admin", "support");
+    const existing = await fetchBookingRow(params.id);
+    if (!existing) throw APIError.notFound("Inquiry not found.");
+    if (existing.host_id !== auth.userID && !["admin", "support"].includes(auth.role)) {
+      throw APIError.permissionDenied("You cannot update this inquiry.");
     }
 
     const nextStatus = params.status;
-    const transitionError = getBookingStatusTransitionError(existing.status, nextStatus);
+    const transitionError = getInquiryStatusTransitionError(existing.inquiry_state, nextStatus, "host");
     if (transitionError) {
       throw APIError.failedPrecondition(transitionError);
     }
 
     const now = new Date().toISOString();
-    const paymentConfirmedAt = nextStatus === "confirmed" ? now : existing.payment_confirmed_at;
-    await bookingDB.exec`
-      UPDATE bookings
-      SET status = ${nextStatus},
-          payment_confirmed_at = ${paymentConfirmedAt},
-          updated_at = ${now}
-      WHERE id = ${params.id}
-    `;
+    const hostPaymentDetails = await getHostPaymentDetails(existing.host_id);
+    const paymentReference =
+      nextStatus === "APPROVED"
+        ? existing.payment_reference ?? buildHostPaymentReference(hostPaymentDetails.payment_reference_prefix, existing.id)
+        : existing.payment_reference;
 
-    if (["confirmed", "completed", "cancelled", "declined"].includes(nextStatus)) {
+    let updated = await persistInquiryStateChange({
+      inquiry: existing,
+      nextInquiryState: nextStatus,
+      actorId: auth.userID,
+      actor: "host",
+      now,
+      viewedAt: existing.viewed_at ?? (nextStatus === "VIEWED" || nextStatus === "RESPONDED" || nextStatus === "APPROVED" || nextStatus === "DECLINED" ? now : existing.viewed_at),
+      respondedAt: nextStatus === "RESPONDED" ? now : existing.responded_at,
+      paymentUnlockedAt: nextStatus === "APPROVED" ? now : existing.payment_unlocked_at,
+      paymentReference,
+    });
+
+    if (nextStatus === "APPROVED") {
+      const paymentTransitionError = getPaymentStateTransitionError(updated.inquiry_state, updated.payment_state, "INITIATED", "host");
+      if (paymentTransitionError) {
+        throw APIError.failedPrecondition(paymentTransitionError);
+      }
+
+      updated = await persistPaymentStateChange({
+        inquiry: updated,
+        nextPaymentState: "INITIATED",
+        actorId: auth.userID,
+        actor: "system",
+        now,
+        paymentReference,
+      });
+    }
+
+    if (nextStatus === "BOOKED") {
       await syncListingAvailabilityForBookings(existing.listing_id);
     }
 
-    if (nextStatus === "confirmed" || nextStatus === "cancelled") {
-      await platformEvents.publish({
-        type: nextStatus === "confirmed" ? "booking.confirmed" : "booking.cancelled",
-        aggregateId: existing.id,
-        actorId: auth.userID,
-        occurredAt: now,
-        payload: JSON.stringify({
-          listingId: existing.listing_id,
-          guestId: existing.guest_id,
-          hostId: existing.host_id,
-          status: nextStatus,
-        }),
-      });
-    }
-
-    try {
-      await notifyBookingStatusChanged({
-        guestId: existing.guest_id,
-        status: nextStatus as "awaiting_guest_payment" | "confirmed" | "cancelled" | "completed" | "declined",
-        listingTitle: await resolveListingTitle(existing.listing_id),
-      });
-    } catch (error) {
-      console.error("Failed to create booking status notification:", error);
-    }
-
     return {
-      booking: await mapBookingAccessRecord({
-        ...existing,
-        status: nextStatus,
-        payment_confirmed_at: paymentConfirmedAt,
-        updated_at: now,
-      }),
+      booking: await mapBookingAccessRecord(updated),
     };
   },
 );
@@ -387,16 +724,15 @@ export const submitPaymentProof = api<SubmitPaymentProofParams, { booking: Booki
   { expose: true, method: "POST", path: "/bookings/:id/payment-proof", auth: true },
   async (params) => {
     const auth = requireAuth();
-    const existing = await bookingDB.queryRow<BookingRow>`
-      SELECT * FROM bookings WHERE id = ${params.id}
-    `;
-    if (!existing) throw APIError.notFound("Booking not found.");
+    const existing = await fetchBookingRow(params.id);
+    if (!existing) throw APIError.notFound("Inquiry not found.");
     if (existing.guest_id !== auth.userID) {
-      throw APIError.permissionDenied("Only the guest can submit payment proof.");
+      throw APIError.permissionDenied("Only the guest can complete payment for this inquiry.");
     }
-    const paymentProofError = getPaymentProofSubmissionError(existing.status);
-    if (paymentProofError) {
-      throw APIError.failedPrecondition(paymentProofError);
+
+    const paymentError = getPaymentProofSubmissionError(existing.inquiry_state, existing.payment_state);
+    if (paymentError) {
+      throw APIError.failedPrecondition(paymentError);
     }
 
     let paymentProofKey = existing.payment_proof_key;
@@ -426,36 +762,37 @@ export const submitPaymentProof = api<SubmitPaymentProofParams, { booking: Booki
     }
 
     const now = new Date().toISOString();
-    await bookingDB.exec`
-      UPDATE bookings
-      SET status = ${"payment_submitted"},
-          payment_reference = ${params.paymentReference ?? existing.payment_reference},
-          payment_proof_key = ${paymentProofKey},
-          payment_proof_url = ${paymentProofUrl},
-          payment_submitted_at = ${now},
-          updated_at = ${now}
-      WHERE id = ${params.id}
-    `;
-
-    try {
-      await notifyPaymentProofSubmitted({
-        hostId: existing.host_id,
-        listingTitle: await resolveListingTitle(existing.listing_id),
-      });
-    } catch (error) {
-      console.error("Failed to create payment proof notification:", error);
+    const paymentTransitionError = getPaymentStateTransitionError(existing.inquiry_state, existing.payment_state, "COMPLETED", "guest");
+    if (paymentTransitionError) {
+      throw APIError.failedPrecondition(paymentTransitionError);
     }
 
+    let updated = await persistPaymentStateChange({
+      inquiry: existing,
+      nextPaymentState: "COMPLETED",
+      actorId: auth.userID,
+      actor: "guest",
+      now,
+      paymentReference: params.paymentReference ?? existing.payment_reference,
+      paymentProofKey,
+      paymentProofUrl,
+      paymentSubmittedAt: now,
+      paymentConfirmedAt: now,
+    });
+
+    updated = await persistInquiryStateChange({
+      inquiry: updated,
+      nextInquiryState: "BOOKED",
+      actorId: auth.userID,
+      actor: "system",
+      now,
+      bookedAt: now,
+    });
+
+    await syncListingAvailabilityForBookings(existing.listing_id);
+
     return {
-      booking: await mapBookingAccessRecord({
-        ...existing,
-        status: "payment_submitted",
-        payment_reference: params.paymentReference ?? existing.payment_reference,
-        payment_proof_key: paymentProofKey,
-        payment_proof_url: paymentProofUrl,
-        payment_submitted_at: now,
-        updated_at: now,
-      }),
+      booking: await mapBookingAccessRecord(updated),
     };
   },
 );

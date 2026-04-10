@@ -5,9 +5,10 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { TrendingUp, Users, Calendar, DollarSign } from 'lucide-react';
 import { format, subDays, isAfter } from 'date-fns';
 import { formatRand } from '@/lib/currency';
+import { isBookedStay } from '@/lib/inquiry-state';
 
 export default function HostReports({ bookings, listings }: { bookings: Booking[], listings: Listing[] }) {
-  const confirmedBookings = bookings.filter(b => b.status === 'confirmed' || b.status === 'completed');
+  const confirmedBookings = bookings.filter(isBookedStay);
   
   const totalRevenue = confirmedBookings.reduce((sum, b) => sum + b.totalPrice, 0);
   const totalGuests = confirmedBookings.length; // Simplified, assuming 1 guest per booking for now

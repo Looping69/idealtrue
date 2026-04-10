@@ -41,6 +41,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { formatRand } from '@/lib/currency';
+import { getInquiryBadgeLabel, isBookedStay } from '@/lib/inquiry-state';
 import type {
   Booking,
   Listing,
@@ -209,8 +210,8 @@ export function OverviewSection({
                       <p className="text-xs text-slate-500">{new Date(enquiry.createdAt).toLocaleDateString()}</p>
                     </div>
                   </div>
-                  <Badge variant={enquiry.status === 'confirmed' ? 'success' : 'warning'} className="text-[10px] uppercase">
-                    {enquiry.status}
+                  <Badge variant={isBookedStay(enquiry) ? 'success' : 'warning'} className="text-[10px] uppercase">
+                    {getInquiryBadgeLabel(enquiry)}
                   </Badge>
                 </div>
               );
@@ -688,8 +689,8 @@ export function EnquiriesSection({
                     <td className="px-6 py-4"><p className="text-xs text-slate-500">{new Date(booking.createdAt).toLocaleString()}</p></td>
                     <td className="px-6 py-4"><p className="text-sm font-bold">{formatRand(booking.totalPrice)}</p></td>
                     <td className="px-6 py-4 text-right">
-                      <Badge variant={booking.status === 'confirmed' ? 'success' : booking.status === 'pending' ? 'warning' : 'neutral'} className="text-[10px] uppercase">
-                        {booking.status}
+                      <Badge variant={isBookedStay(booking) ? 'success' : booking.inquiryState === 'PENDING' ? 'warning' : 'neutral'} className="text-[10px] uppercase">
+                        {getInquiryBadgeLabel(booking)}
                       </Badge>
                     </td>
                   </tr>

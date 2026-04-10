@@ -77,8 +77,8 @@ export const createReview = api<CreateReviewParams, { review: ReviewRecord }>(
     if (booking.hostId !== params.hostId || booking.listingId !== params.listingId) {
       throw APIError.failedPrecondition("Review does not match the booking.");
     }
-    if (booking.status !== "completed") {
-      throw APIError.failedPrecondition("Reviews can only be submitted after the stay is completed.");
+    if (booking.inquiryState !== "BOOKED" || booking.paymentState !== "COMPLETED") {
+      throw APIError.failedPrecondition("Reviews can only be submitted after the stay is confirmed and paid.");
     }
     const scores = [params.cleanliness, params.accuracy, params.communication, params.location, params.value];
     if (scores.some((score) => !Number.isInteger(score) || score < 1 || score > 5)) {

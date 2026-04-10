@@ -1,4 +1,4 @@
-import type { BookingStatus } from "../shared/domain";
+import type { InquiryState, PaymentState } from "../shared/domain";
 
 export function normalizeDateOnly(value: string) {
   return value.slice(0, 10);
@@ -22,28 +22,103 @@ export function bookingOverlapsBlockedDates(checkIn: Date, checkOut: Date, block
   return blocked.some((blockedDate) => blockedDate >= checkInDay && blockedDate < checkOutDay);
 }
 
-export function getBookingStatusTransitionError(current: BookingStatus, next: BookingStatus) {
-  if (!["awaiting_guest_payment", "confirmed", "cancelled", "completed", "declined"].includes(next)) {
-    return "Hosts can only move bookings through the payment and completion workflow.";
+export function getInquiryStatusTransitionError(current: InquiryState, next: InquiryState, actor: "host" | "guest" | "system") {
+  if (current === next) {
+    return null;
   }
-  if (next === "awaiting_guest_payment" && current !== "pending") {
-    return "Payment can only be requested for pending bookings.";
+
+  if (current === "BOOKED") {
+    return "Booked inquiries are immutable. Start a new inquiry version instead of mutating the confirmed one.";
   }
-  if (next === "confirmed" && !["awaiting_guest_payment", "payment_submitted"].includes(current)) {
-    return "Bookings can only be confirmed after the payment step has started.";
+
+  if (current === "DECLINED" || current === "EXPIRED") {
+    return "Closed inquiries cannot be changed again.";
   }
-  if (next === "completed" && current !== "confirmed") {
-    return "Only confirmed bookings can be completed.";
+
+  if (actor === "guest" && next !== "BOOKED") {
+    return "Guests cannot directly change inquiry status.";
   }
-  if (["cancelled", "declined"].includes(next) && ["completed", "cancelled", "declined"].includes(current)) {
-    return "Closed bookings cannot be changed again.";
+
+  if (actor === "host") {
+    if (!["VIEWED", "RESPONDED", "APPROVED", "DECLINED"].includes(next)) {
+      return "Hosts can only view, respond to, approve, or decline an inquiry.";
+    }
+    if ((next === "VIEWED" || next === "RESPONDED") && !["PENDING", "VIEWED"].includes(current)) {
+      return "Only pending inquiries can move into the host-response flow.";
+    }
+    if ((next === "APPROVED" || next === "DECLINED") && !["PENDING", "VIEWED", "RESPONDED"].includes(current)) {
+      return "Only unresolved inquiries can be approved or declined.";
+    }
+  }
+
+  if (actor === "system") {
+    if (next === "BOOKED" && current !== "APPROVED") {
+      return "Only approved inquiries can be booked.";
+    }
+    if (next === "EXPIRED" && ["DECLINED", "BOOKED"].includes(current)) {
+      return "Closed inquiries cannot expire again.";
+    }
+  }
+
+  return null;
+}
+
+export function getPaymentStateTransitionError(inquiryState: InquiryState, current: PaymentState, next: PaymentState, actor: "host" | "guest" | "system") {
+  if (current === next) {
+    return null;
+  }
+
+  if (inquiryState !== "APPROVED" && next === "INITIATED") {
+    return "Payment can only be unlocked after the host approves the inquiry.";
+  }
+
+  if (next === "COMPLETED" && inquiryState !== "APPROVED") {
+    return "Payment can only complete against an approved inquiry.";
+  }
+
+  if (actor === "guest" && !["INITIATED", "COMPLETED", "FAILED"].includes(next)) {
+    return "Guests can only interact with the active payment flow.";
+  }
+
+  if (actor === "host" && next !== "INITIATED") {
+    return "Hosts can only unlock payment. They cannot directly mark guest payments complete.";
+  }
+
+  if (next === "COMPLETED" && current !== "INITIATED") {
+    return "Payment must be initiated before it can complete.";
+  }
+
+  if (next === "FAILED" && current === "COMPLETED") {
+    return "Completed payments cannot be failed retroactively.";
+  }
+
+  return null;
+}
+
+export function getPaymentProofSubmissionError(inquiryState: InquiryState, paymentState: PaymentState) {
+  if (inquiryState !== "APPROVED" || paymentState !== "INITIATED") {
+    return "Payment is only available after approval and while the payment flow is active.";
   }
   return null;
 }
 
-export function getPaymentProofSubmissionError(status: BookingStatus) {
-  if (!["awaiting_guest_payment", "payment_submitted"].includes(status)) {
-    return "Payment proof can only be submitted after the host requests payment.";
+export function getInquiryStateLabel(state: InquiryState) {
+  switch (state) {
+    case "PENDING":
+      return "Awaiting host response";
+    case "VIEWED":
+      return "Host has viewed the inquiry";
+    case "RESPONDED":
+      return "Host responded";
+    case "APPROVED":
+      return "Ready for payment";
+    case "DECLINED":
+      return "Inquiry declined";
+    case "EXPIRED":
+      return "Inquiry expired";
+    case "BOOKED":
+      return "Confirmed stay";
+    default:
+      return state;
   }
-  return null;
 }

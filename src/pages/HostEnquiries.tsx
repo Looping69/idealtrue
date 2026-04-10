@@ -5,8 +5,9 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { MessageSquare, CheckCircle2, XCircle, Clock, CalendarDays, User } from 'lucide-react';
 import { format } from 'date-fns';
-import { updateBookingStatus } from '@/lib/platform-client';
+import { markInquiryViewed, updateBookingStatus } from '@/lib/platform-client';
 import { formatRand } from '@/lib/currency';
+import { isPendingHostDecision } from '@/lib/inquiry-state';
 
 export default function HostEnquiries({ 
   bookings, 
@@ -21,9 +22,9 @@ export default function HostEnquiries({
 }) {
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
   
-  const pendingBookings = bookings.filter(b => b.status === 'pending');
+  const pendingBookings = bookings.filter(isPendingHostDecision);
 
-  const handleBookingAction = async (booking: Booking, action: 'awaiting_guest_payment' | 'cancelled') => {
+  const handleBookingAction = async (booking: Booking, action: 'APPROVED' | 'DECLINED') => {
     setIsProcessing(booking.id);
     try {
       const updatedBooking = await updateBookingStatus(booking.id, action);
@@ -82,24 +83,30 @@ export default function HostEnquiries({
                   <Button 
                     variant="outline" 
                     className="flex-1 md:flex-none"
-                    onClick={() => onChat(booking)}
+                    onClick={async () => {
+                      if (booking.inquiryState === 'PENDING') {
+                        const viewedBooking = await markInquiryViewed(booking.id);
+                        onBookingUpdated(viewedBooking);
+                      }
+                      onChat(booking);
+                    }}
                   >
                     <MessageSquare className="w-4 h-4 mr-2" /> Message
                   </Button>
                   <Button 
                     variant="outline" 
                     className="flex-1 md:flex-none text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                    onClick={() => handleBookingAction(booking, 'cancelled')}
+                    onClick={() => handleBookingAction(booking, 'DECLINED')}
                     disabled={isProcessing === booking.id}
                   >
                     <XCircle className="w-4 h-4 mr-2" /> Decline
                   </Button>
                     <Button 
                       className="flex-1 md:flex-none bg-green-600 hover:bg-green-700 text-white"
-                    onClick={() => handleBookingAction(booking, 'awaiting_guest_payment')}
+                    onClick={() => handleBookingAction(booking, 'APPROVED')}
                     disabled={isProcessing === booking.id}
                   >
-                    <CheckCircle2 className="w-4 h-4 mr-2" /> Approve & Request Payment
+                    <CheckCircle2 className="w-4 h-4 mr-2" /> Approve
                   </Button>
                 </div>
               </div>

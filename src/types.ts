@@ -3,6 +3,8 @@ export type ReferralTier = 'bronze' | 'silver' | 'gold';
 export type KycStatus = 'none' | 'pending' | 'verified' | 'rejected';
 export type HostPlan = 'standard' | 'professional' | 'premium';
 export type AccountStatus = 'active' | 'suspended' | 'deactivated';
+export type InquiryState = 'PENDING' | 'VIEWED' | 'RESPONDED' | 'APPROVED' | 'DECLINED' | 'EXPIRED' | 'BOOKED';
+export type PaymentState = 'UNPAID' | 'INITIATED' | 'COMPLETED' | 'FAILED';
 
 export interface UserProfile {
   id: string;
@@ -84,14 +86,21 @@ export interface Booking {
     adults: number;
     children: number;
   };
-  status: 'pending' | 'awaiting_guest_payment' | 'payment_submitted' | 'confirmed' | 'cancelled' | 'completed' | 'declined';
+  inquiryState: InquiryState;
+  paymentState: PaymentState;
   paymentMethod?: string | null;
   paymentInstructions?: string | null;
   paymentReference?: string | null;
   paymentProofUrl?: string | null;
+  viewedAt?: string | null;
+  respondedAt?: string | null;
+  paymentUnlockedAt?: string | null;
   paymentSubmittedAt?: string | null;
   paymentConfirmedAt?: string | null;
+  expiresAt?: string | null;
+  bookedAt?: string | null;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface SocialPost {

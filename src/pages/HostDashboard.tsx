@@ -21,6 +21,7 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { updateBookingStatus } from '@/lib/platform-client';
 import { formatRand } from '@/lib/currency';
+import { getInquiryBadgeLabel, isBookedStay, isPendingHostDecision } from '@/lib/inquiry-state';
 
 export default function HostDashboard({ 
   profile,
@@ -45,9 +46,9 @@ export default function HostDashboard({
   }, [bookings]);
 
   const activeListings = listings.filter(l => l.status === 'active');
-  const pendingBookings = localBookings.filter(b => b.status === 'pending');
+  const pendingBookings = localBookings.filter(isPendingHostDecision);
   const totalRevenue = localBookings
-    .filter(b => b.status === 'confirmed' || b.status === 'completed')
+    .filter(isBookedStay)
     .reduce((sum, b) => sum + b.totalPrice, 0);
 
   return (
@@ -176,15 +177,11 @@ export default function HostDashboard({
           <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
             {localBookings.slice(0, 5).map(booking => {
               const listing = listings.find(l => l.id === booking.listingId);
-              const bookingLabel = booking.status === 'awaiting_guest_payment'
-                ? 'Awaiting Payment'
-                : booking.status === 'payment_submitted'
-                  ? 'Proof Submitted'
-                  : booking.status;
+              const bookingLabel = getInquiryBadgeLabel(booking);
               return (
                 <Card key={booking.id} className="p-4">
                   <div className="flex justify-between items-start mb-2">
-                    <Badge variant={booking.status === 'confirmed' ? 'success' : booking.status === 'pending' || booking.status === 'awaiting_guest_payment' || booking.status === 'payment_submitted' ? 'warning' : 'secondary'}>
+                    <Badge variant={isBookedStay(booking) ? 'success' : isPendingHostDecision(booking) || booking.inquiryState === 'APPROVED' ? 'warning' : 'secondary'}>
                       {bookingLabel}
                     </Badge>
                     <span className="text-xs font-mono text-outline-variant">#{booking.id.slice(0, 8)}</span>
@@ -202,19 +199,19 @@ export default function HostDashboard({
                     </div>
                     <div className="flex gap-2">
                       <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => onChat(booking)}>Message</Button>
-                      {booking.status === 'pending' ? (
+                      {isPendingHostDecision(booking) ? (
                         <div className="flex gap-2">
                           <button 
                             onClick={async () => {
                               try {
-                                const updatedBooking = await updateBookingStatus(booking.id, 'awaiting_guest_payment');
+                                const updatedBooking = await updateBookingStatus(booking.id, 'APPROVED');
                                 setLocalBookings((current) => current.map((item) => item.id === booking.id ? updatedBooking : item));
                                 onBookingUpdated(updatedBooking);
 
-                                toast.success('Booking approved and moved to payment.');
+                                toast.success('Inquiry approved. Payment is now unlocked for the guest.');
                               } catch (error) {
-                                console.error('Failed to confirm booking:', error);
-                                toast.error('Failed to confirm booking.');
+                                console.error('Failed to approve inquiry:', error);
+                                toast.error('Failed to approve inquiry.');
                               }
                             }}
                             className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
@@ -224,14 +221,14 @@ export default function HostDashboard({
                           <button 
                             onClick={async () => {
                               try {
-                                const updatedBooking = await updateBookingStatus(booking.id, 'cancelled');
+                                const updatedBooking = await updateBookingStatus(booking.id, 'DECLINED');
                                 setLocalBookings((current) => current.map((item) => item.id === booking.id ? updatedBooking : item));
                                 onBookingUpdated(updatedBooking);
 
-                                toast.info('Booking request declined.');
+                                toast.info('Inquiry declined.');
                               } catch (error) {
-                                console.error('Failed to decline booking:', error);
-                                toast.error('Failed to decline booking.');
+                                console.error('Failed to decline inquiry:', error);
+                                toast.error('Failed to decline inquiry.');
                               }
                             }}
                             className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
@@ -239,34 +236,11 @@ export default function HostDashboard({
                             Decline
                           </button>
                         </div>
-                      ) : booking.status === 'payment_submitted' ? (
+                      ) : booking.inquiryState === 'APPROVED' ? (
                         <div className="flex gap-2">
-                          {booking.paymentProofUrl && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-[10px]"
-                              onClick={() => window.open(booking.paymentProofUrl || undefined, '_blank', 'noopener,noreferrer')}
-                            >
-                              View Proof
-                            </Button>
-                          )}
-                          <button
-                            onClick={async () => {
-                              try {
-                                const updatedBooking = await updateBookingStatus(booking.id, 'confirmed');
-                                setLocalBookings((current) => current.map((item) => item.id === booking.id ? updatedBooking : item));
-                                onBookingUpdated(updatedBooking);
-                                toast.success('Payment marked as received.');
-                              } catch (error) {
-                                console.error('Failed to confirm payment:', error);
-                                toast.error('Failed to confirm payment.');
-                              }
-                            }}
-                            className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-                          >
-                            Mark Paid
-                          </button>
+                          <span className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                            Waiting for guest payment
+                          </span>
                         </div>
                       ) : (
                         <Button size="sm" variant="ghost" onClick={() => navigate('/host/enquiries')}>Details</Button>

@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { updateListingBlockedDates } from '../lib/platform-client';
 import { format, eachDayOfInterval, isSameDay, parseISO } from 'date-fns';
 import { CalendarDays, AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
+import { isBookedStay } from '@/lib/inquiry-state';
 
 export default function HostAvailability({
   listings,
@@ -28,7 +29,7 @@ export default function HostAvailability({
     
     const listingBookings = bookings.filter(b => 
       b.listingId === selectedListingId && 
-      (b.status === 'confirmed' || b.status === 'completed')
+      isBookedStay(b)
     );
 
     const dates: Date[] = [];

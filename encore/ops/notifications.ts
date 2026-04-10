@@ -3,12 +3,16 @@ import { opsDB } from "./db";
 import {
   buildAccountStatusChangedNotification,
   buildBookingRequestedNotification,
-  buildBookingStatusChangedNotification,
   buildCheckoutStatusChangedNotification,
   buildContentCreditsPurchasedNotification,
+  buildInquiryApprovedNotification,
+  buildInquiryStatusChangedNotification,
   buildKycReviewedNotification,
   buildListingReviewedNotification,
   buildMessageReceivedNotification,
+  buildPaymentCompletedNotification,
+  buildPaymentFailedNotification,
+  buildPaymentInitiatedNotification,
   buildPaymentProofSubmittedNotification,
   buildReferralRewardEarnedNotification,
   buildSubscriptionActivatedNotification,
@@ -70,12 +74,19 @@ export async function notifyBookingRequested(params: {
   return createNotification(buildBookingRequestedNotification(params));
 }
 
-export async function notifyBookingStatusChanged(params: {
+export async function notifyInquiryStatusChanged(params: {
   guestId: string;
-  status: "awaiting_guest_payment" | "confirmed" | "cancelled" | "completed" | "declined";
+  inquiryState: "VIEWED" | "RESPONDED" | "APPROVED" | "DECLINED" | "EXPIRED" | "BOOKED";
   listingTitle: string;
 }) {
-  return createNotification(buildBookingStatusChangedNotification(params));
+  return createNotification(buildInquiryStatusChangedNotification(params));
+}
+
+export async function notifyInquiryApproved(params: {
+  guestId: string;
+  listingTitle: string;
+}) {
+  return createNotification(buildInquiryApprovedNotification(params));
 }
 
 export async function notifyPaymentProofSubmitted(params: {
@@ -83,6 +94,33 @@ export async function notifyPaymentProofSubmitted(params: {
   listingTitle: string;
 }) {
   return createNotification(buildPaymentProofSubmittedNotification(params));
+}
+
+export async function notifyPaymentInitiated(params: {
+  guestId: string;
+  listingTitle: string;
+}) {
+  return createNotification(buildPaymentInitiatedNotification(params));
+}
+
+export async function notifyPaymentFailed(params: {
+  guestId: string;
+  listingTitle: string;
+}) {
+  return createNotification(buildPaymentFailedNotification(params));
+}
+
+export async function notifyPaymentCompleted(params: {
+  guestId: string;
+  hostId: string;
+  listingTitle: string;
+}) {
+  const [guestNotification, hostNotification] = await Promise.all([
+    createNotification(buildPaymentCompletedNotification({ target: params.guestId, listingTitle: params.listingTitle, isHost: false })),
+    createNotification(buildPaymentCompletedNotification({ target: params.hostId, listingTitle: params.listingTitle, isHost: true })),
+  ]);
+
+  return { guestNotification, hostNotification };
 }
 
 export async function notifyMessageReceived(params: {

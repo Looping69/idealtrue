@@ -115,12 +115,25 @@ export async function createBooking(params: {
   return mapEncoreBooking(response.booking);
 }
 
-export async function updateBookingStatus(id: string, status: 'awaiting_guest_payment' | 'confirmed' | 'cancelled' | 'completed') {
+export async function updateBookingStatus(id: string, status: 'VIEWED' | 'RESPONDED' | 'APPROVED' | 'DECLINED' | 'EXPIRED' | 'BOOKED') {
   const response = await encoreRequest<{ booking: EncoreBooking }>(
     `/bookings/${id}/status`,
     {
       method: 'PATCH',
       body: JSON.stringify({ id, status }),
+    },
+    { auth: true },
+  );
+
+  return mapEncoreBooking(response.booking);
+}
+
+export async function markInquiryViewed(id: string) {
+  const response = await encoreRequest<{ booking: EncoreBooking }>(
+    `/bookings/${id}/view`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ id }),
     },
     { auth: true },
   );
@@ -140,7 +153,9 @@ export async function submitPaymentProof(params: {
       method: 'POST',
       body: JSON.stringify({
         paymentReference: params.paymentReference ?? null,
-        paymentProof: params.paymentProof ?? null,
+        paymentProofFilename: params.paymentProof?.filename ?? null,
+        paymentProofContentType: params.paymentProof?.contentType ?? null,
+        paymentProofDataBase64: params.paymentProof?.dataBase64 ?? null,
         paymentProofUrl: params.paymentProofUrl ?? null,
       }),
     },

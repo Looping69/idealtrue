@@ -92,13 +92,19 @@ export interface EncoreBooking {
   adults: number;
   children: number;
   totalPrice: number;
-  status: Booking['status'];
+  inquiryState: Booking['inquiryState'];
+  paymentState: Booking['paymentState'];
   paymentMethod?: string | null;
   paymentInstructions?: string | null;
   paymentReference?: string | null;
   paymentProofUrl?: string | null;
+  viewedAt?: string | null;
+  respondedAt?: string | null;
+  paymentUnlockedAt?: string | null;
   paymentSubmittedAt?: string | null;
   paymentConfirmedAt?: string | null;
+  expiresAt?: string | null;
+  bookedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -298,14 +304,21 @@ export function mapEncoreBooking(booking: EncoreBooking): Booking {
       adults: booking.adults,
       children: booking.children,
     },
-    status: booking.status === 'declined' ? 'cancelled' : booking.status,
+    inquiryState: booking.inquiryState,
+    paymentState: booking.paymentState,
     paymentMethod: booking.paymentMethod || null,
     paymentInstructions: booking.paymentInstructions || null,
     paymentReference: booking.paymentReference || null,
     paymentProofUrl: booking.paymentProofUrl || null,
+    viewedAt: booking.viewedAt || null,
+    respondedAt: booking.respondedAt || null,
+    paymentUnlockedAt: booking.paymentUnlockedAt || null,
     paymentSubmittedAt: booking.paymentSubmittedAt || null,
     paymentConfirmedAt: booking.paymentConfirmedAt || null,
+    expiresAt: booking.expiresAt || null,
+    bookedAt: booking.bookedAt || null,
     createdAt: booking.createdAt,
+    updatedAt: booking.updatedAt,
   };
 }
 

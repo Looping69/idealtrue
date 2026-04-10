@@ -127,7 +127,7 @@ export default function SearchFilterBar({ onChange, onModeChange, onSendMessage,
           listing.province?.toLowerCase().includes(normalizedQuery),
         );
 
-        const listingSuggestions: { label: string; type: "listing"; icon: LucideIcon }[] = [];
+        const listingSuggestions: { label: string; type: "listing"; icon: LucideIcon; listingId: string; blockedDates: string[] }[] = [];
         const provinces = new Set<string>();
 
         (data || []).forEach((p: any) => {

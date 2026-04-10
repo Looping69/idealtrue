@@ -5,7 +5,7 @@ import { chatAttachmentBucket } from "./storage";
 import { APIError } from "encore.dev/api";
 import { requireAuth } from "../shared/auth";
 import { platformEvents } from "../analytics/events";
-import { getBookingById } from "../booking/api";
+import { getBookingById, recordHostInquiryResponseFromMessage } from "../booking/api";
 import { getListing } from "../catalog/api";
 import { notifyMessageReceived } from "../ops/notifications";
 import type { MessageRecord } from "../shared/domain";
@@ -86,6 +86,10 @@ export const sendMessage = api<SendMessageParams, { message: MessageRecord }>(
       INSERT INTO messages (id, booking_id, sender_id, receiver_id, text, is_system, suggestion_type, attachment_url, created_at)
       VALUES (${id}, ${params.bookingId}, ${auth.userID}, ${params.receiverId}, ${params.text}, ${params.isSystem ?? false}, ${params.suggestionType ?? null}, ${params.attachmentUrl ?? null}, ${now})
     `;
+
+    if (!params.isSystem && auth.userID === booking.hostId) {
+      await recordHostInquiryResponseFromMessage(params.bookingId, auth.userID);
+    }
 
     await platformEvents.publish({
       type: "message.sent",

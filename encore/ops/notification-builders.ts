@@ -22,23 +22,84 @@ export function buildBookingRequestedNotification(params: {
   };
 }
 
-export function buildBookingStatusChangedNotification(params: {
+export function buildInquiryStatusChangedNotification(params: {
   guestId: string;
-  status: "awaiting_guest_payment" | "confirmed" | "cancelled" | "completed" | "declined";
+  inquiryState: "VIEWED" | "RESPONDED" | "APPROVED" | "DECLINED" | "EXPIRED" | "BOOKED";
   listingTitle: string;
 }): NotificationInput {
   const statusMessage = {
-    awaiting_guest_payment: `Payment has been requested for ${params.listingTitle}.`,
-    confirmed: `Your booking for ${params.listingTitle} is confirmed.`,
-    cancelled: `Your booking for ${params.listingTitle} was cancelled.`,
-    completed: `Your stay at ${params.listingTitle} was marked complete.`,
-    declined: `Your booking for ${params.listingTitle} was declined.`,
-  }[params.status];
+    VIEWED: `Your inquiry for ${params.listingTitle} has been viewed.`,
+    RESPONDED: `The host responded to your inquiry for ${params.listingTitle}.`,
+    APPROVED: `${params.listingTitle} is ready for payment.`,
+    DECLINED: `Your inquiry for ${params.listingTitle} was declined.`,
+    EXPIRED: `Your inquiry for ${params.listingTitle} expired before it was confirmed.`,
+    BOOKED: `Your stay at ${params.listingTitle} is confirmed.`,
+  }[params.inquiryState];
 
   return {
-    title: "Booking updated",
+    title: "Inquiry updated",
     message: statusMessage,
-    type: params.status === "confirmed" ? "success" : params.status === "cancelled" || params.status === "declined" ? "warning" : "info",
+    type:
+      params.inquiryState === "BOOKED" || params.inquiryState === "APPROVED"
+        ? "success"
+        : params.inquiryState === "DECLINED" || params.inquiryState === "EXPIRED"
+          ? "warning"
+          : "info",
+    target: params.guestId,
+    actionPath: "/guest",
+  };
+}
+
+export function buildInquiryApprovedNotification(params: {
+  guestId: string;
+  listingTitle: string;
+}): NotificationInput {
+  return {
+    title: "Payment unlocked",
+    message: `${params.listingTitle} is approved and ready for payment.`,
+    type: "success",
+    target: params.guestId,
+    actionPath: "/guest",
+  };
+}
+
+export function buildPaymentCompletedNotification(params: {
+  target: string;
+  listingTitle: string;
+  isHost: boolean;
+}): NotificationInput {
+  return {
+    title: "Booking confirmed",
+    message: params.isHost
+      ? `Payment completed for ${params.listingTitle}. The stay is now booked.`
+      : `Payment completed for ${params.listingTitle}. Your stay is confirmed.`,
+    type: "success",
+    target: params.target,
+    actionPath: params.isHost ? "/host/enquiries" : "/guest",
+  };
+}
+
+export function buildPaymentInitiatedNotification(params: {
+  guestId: string;
+  listingTitle: string;
+}): NotificationInput {
+  return {
+    title: "Payment ready",
+    message: `${params.listingTitle} has been approved. You can complete payment now.`,
+    type: "info",
+    target: params.guestId,
+    actionPath: "/guest",
+  };
+}
+
+export function buildPaymentFailedNotification(params: {
+  guestId: string;
+  listingTitle: string;
+}): NotificationInput {
+  return {
+    title: "Payment failed",
+    message: `Payment for ${params.listingTitle} failed. You can retry while the inquiry remains approved.`,
+    type: "warning",
     target: params.guestId,
     actionPath: "/guest",
   };
@@ -49,8 +110,8 @@ export function buildPaymentProofSubmittedNotification(params: {
   listingTitle: string;
 }): NotificationInput {
   return {
-    title: "Payment proof submitted",
-    message: `A guest submitted payment proof for ${params.listingTitle}.`,
+    title: "Payment submitted",
+    message: `A guest completed the payment step for ${params.listingTitle}.`,
     type: "info",
     target: params.hostId,
     actionPath: "/host/enquiries",
