@@ -105,6 +105,9 @@ export default function CreateListing() {
   const [plan, setPlan] = useState<'standard' | 'professional' | 'premium'>('standard');
   const [checkingLimit, setCheckingLimit] = useState(true);
   const [canCreate, setCanCreate] = useState(true);
+  const nightlyRate = Number(formData.pricePerNight) || 0;
+  const discountAmount = Math.round(nightlyRate * (Number(formData.discount) / 100));
+  const estimatedNightlyEarnings = Math.max(0, Math.round(nightlyRate - discountAmount));
 
   const checkLimits = useCallback(async () => {
     if (!profile || !user) {
@@ -937,20 +940,16 @@ export default function CreateListing() {
                   </div>
 
                   <div className="mt-8 pt-6 border-t border-outline-variant space-y-3">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-on-surface-variant">Service Fee (3%)</span>
-                      <span className="font-medium">R{Math.round(Number(formData.pricePerNight) * 0.03)}</span>
-                    </div>
                     {Number(formData.discount) > 0 && (
                       <div className="flex justify-between text-sm">
                         <span className="text-on-surface-variant">Discount Applied</span>
-                        <span className="font-medium text-red-500">-R{Math.round(Number(formData.pricePerNight) * (Number(formData.discount) / 100))}</span>
+                        <span className="font-medium text-red-500">-R{discountAmount}</span>
                       </div>
                     )}
                     <div className="flex justify-between text-sm">
-                      <span className="text-on-surface font-bold">You earn approx.</span>
+                      <span className="text-on-surface font-bold">Nightly earnings</span>
                       <span className="font-bold text-green-600 text-lg">
-                        R{Math.round(Number(formData.pricePerNight) * (1 - (Number(formData.discount) / 100)) * 0.97)}
+                        R{estimatedNightlyEarnings}
                       </span>
                     </div>
                     {formData.hasBreakageDeposit && Number(formData.breakageDeposit) > 0 && (

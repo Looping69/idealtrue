@@ -34,6 +34,7 @@ type BookingRow = {
   adults: number;
   children: number;
   total_price: number;
+  breakage_deposit: number | null;
   status: LegacyBookingStatus;
   inquiry_state: InquiryState;
   payment_state: PaymentState;
@@ -78,6 +79,7 @@ interface CreateBookingParams {
   adults: number;
   children: number;
   totalPrice?: number;
+  breakageDeposit?: number | null;
 }
 
 interface UpdateBookingStatusParams {
@@ -105,6 +107,7 @@ function mapBooking(row: BookingRow): BookingRecord {
     adults: row.adults,
     children: row.children,
     totalPrice: row.total_price,
+    breakageDeposit: row.breakage_deposit,
     inquiryState: row.inquiry_state,
     paymentState: row.payment_state,
     paymentMethod: row.payment_method,
@@ -521,6 +524,10 @@ export const createBooking = api<CreateBookingParams, { booking: BookingRecord }
     }
 
     const serverTotalPrice = computeBookingTotalPrice(listing.pricePerNight, parsedCheckIn, parsedCheckOut);
+    const serverBreakageDeposit = listing.breakageDeposit ?? null;
+    if ((params.breakageDeposit ?? null) !== serverBreakageDeposit) {
+      throw APIError.failedPrecondition("Listing breakage deposit changed. Please refresh the listing and try again.");
+    }
     const hostPaymentDetails = await getHostPaymentDetails(listing.hostId);
     const id = randomUUID();
     const now = new Date().toISOString();
@@ -528,7 +535,7 @@ export const createBooking = api<CreateBookingParams, { booking: BookingRecord }
     await bookingDB.exec`
       INSERT INTO bookings (
         id, listing_id, guest_id, host_id, check_in, check_out, adults, children,
-        total_price, status, inquiry_state, payment_state, payment_method, payment_instructions, created_at, updated_at
+        total_price, breakage_deposit, status, inquiry_state, payment_state, payment_method, payment_instructions, created_at, updated_at
       )
       VALUES (
         ${id},
@@ -540,6 +547,7 @@ export const createBooking = api<CreateBookingParams, { booking: BookingRecord }
         ${params.adults},
         ${params.children},
         ${serverTotalPrice},
+        ${serverBreakageDeposit},
         ${"pending"},
         ${"PENDING"},
         ${"UNPAID"},

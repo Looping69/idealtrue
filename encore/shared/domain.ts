@@ -87,6 +87,7 @@ export interface BookingRecord {
   adults: number;
   children: number;
   totalPrice: number;
+  breakageDeposit?: number | null;
   inquiryState: InquiryState;
   paymentState: PaymentState;
   paymentMethod?: string | null;

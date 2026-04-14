@@ -92,6 +92,7 @@ export interface EncoreBooking {
   adults: number;
   children: number;
   totalPrice: number;
+  breakageDeposit?: number | null;
   inquiryState: Booking['inquiryState'];
   paymentState: Booking['paymentState'];
   paymentMethod?: string | null;
@@ -300,6 +301,7 @@ export function mapEncoreBooking(booking: EncoreBooking): Booking {
     checkIn: booking.checkIn,
     checkOut: booking.checkOut,
     totalPrice: booking.totalPrice,
+    breakageDeposit: booking.breakageDeposit ?? null,
     guests: {
       adults: booking.adults,
       children: booking.children,

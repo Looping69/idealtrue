@@ -82,6 +82,7 @@ export interface Booking {
   checkIn: string;
   checkOut: string;
   totalPrice: number;
+  breakageDeposit?: number | null;
   guests: {
     adults: number;
     children: number;

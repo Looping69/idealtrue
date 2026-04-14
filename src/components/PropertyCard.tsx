@@ -4,6 +4,7 @@ import { Star, Heart } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "./ui/use-toast";
 import { cn } from "@/lib/utils";
+import { formatRand } from "@/lib/currency";
 
 interface PropertyCardProps {
   listing: Listing;
@@ -143,6 +144,16 @@ export default function PropertyCard({ listing, onClick, showBorder = false, com
                 night
               </span>
             </div>
+            {listing.breakageDeposit != null && listing.breakageDeposit > 0 && (
+              <p
+                className={cn(
+                  "text-on-surface-variant",
+                  compact ? "text-[9px]" : "text-[10px] sm:text-xs",
+                )}
+              >
+                Refundable deposit {formatRand(listing.breakageDeposit)}
+              </p>
+            )}
           </div>
         </div>
       </div>
