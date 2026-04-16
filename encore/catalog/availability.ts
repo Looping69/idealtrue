@@ -8,6 +8,7 @@ export interface AvailabilityBlockInput {
   startsOn: string;
   endsOn: string;
   nights: string[];
+  note?: string | null;
   bookingId?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -66,6 +67,47 @@ export function buildSingleNightInterval(dateKey: string) {
   };
 }
 
+export function buildIntervalsFromDateKeys(dateKeys: string[]) {
+  const normalized = Array.from(new Set((dateKeys ?? []).map(normalizeAvailabilityDateKey))).sort();
+  if (normalized.length === 0) {
+    return [];
+  }
+
+  const intervals: Array<{ startsOn: string; endsOn: string; nights: string[] }> = [];
+  let currentNights = [normalized[0]!];
+
+  for (let index = 1; index < normalized.length; index += 1) {
+    const nextDateKey = normalized[index]!;
+    const previousDateKey = currentNights[currentNights.length - 1]!;
+    const previousDate = toUtcDateOnly(previousDateKey);
+    previousDate.setUTCDate(previousDate.getUTCDate() + 1);
+    const expectedNext = previousDate.toISOString().slice(0, 10);
+
+    if (nextDateKey === expectedNext) {
+      currentNights.push(nextDateKey);
+      continue;
+    }
+
+    intervals.push({
+      startsOn: currentNights[0]!,
+      endsOn: expectedNext,
+      nights: [...currentNights],
+    });
+    currentNights = [nextDateKey];
+  }
+
+  const lastNight = currentNights[currentNights.length - 1]!;
+  const lastNightDate = toUtcDateOnly(lastNight);
+  lastNightDate.setUTCDate(lastNightDate.getUTCDate() + 1);
+  intervals.push({
+    startsOn: currentNights[0]!,
+    endsOn: lastNightDate.toISOString().slice(0, 10),
+    nights: [...currentNights],
+  });
+
+  return intervals;
+}
+
 export function buildBlockedDatesFromAvailability(blocks: Pick<AvailabilityBlockInput, "nights">[]) {
   return Array.from(new Set(blocks.flatMap((block) => block.nights.map(normalizeAvailabilityDateKey)))).sort();
 }
@@ -112,6 +154,7 @@ export function toAvailabilityBlockRecord(block: AvailabilityBlockInput): Listin
     startsOn: block.startsOn,
     endsOn: block.endsOn,
     nights: block.nights.map(normalizeAvailabilityDateKey),
+    note: block.note ?? null,
     bookingId: block.bookingId ?? null,
     createdAt: block.createdAt,
     updatedAt: block.updatedAt,

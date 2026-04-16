@@ -58,9 +58,11 @@ This is now an Encore-first repo, not a Firebase bridge with new paint.
 
 - listing availability now uses a durable ledger of availability blocks, not just a fragile `blocked_dates` array
 - host manual blocks, approved enquiry holds, and confirmed booked stays are tracked separately in Encore `catalog`
+- manual host blocks are now stored as interval records with optional notes, not just flat date arrays
 - stay dates are end-exclusive for occupancy logic, so checkout day is not treated as a blocked overnight
 - the frontend uses shared availability logic in [`src/lib/listing-availability.ts`](/C:/Git%20Repos/IdealTrue/src/lib/listing-availability.ts) so explore filtering and booking validation stay consistent
 - the host enquiries screen is now treated as a workflow board with `Needs Response`, `Awaiting Guest Payment`, `Awaiting Payment Confirmation`, `Confirmed Stays`, and `Closed Loop` buckets
+- the host availability calendar now supports bulk range actions, notes on manual block intervals, selected-day inspection, and backend summary tracking instead of only single-day toggles
 
 See [`docs/booking-and-enquiry-workflow.md`](/C:/Git%20Repos/IdealTrue/docs/booking-and-enquiry-workflow.md) for the full workflow and operational expectations.
 

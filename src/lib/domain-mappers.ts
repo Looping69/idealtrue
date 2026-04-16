@@ -4,6 +4,7 @@ import type {
   HostPlan,
   KycStatus,
   Listing,
+  ListingAvailabilitySummary,
   Notification,
   PlatformSettings,
   Referral,
@@ -82,6 +83,14 @@ export interface EncoreListing {
   rejectionReason?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface EncoreListingAvailabilitySummary {
+  listingId: string;
+  manualBlockCount: number;
+  manualBlockedDates: string[];
+  lockedDates: string[];
+  upcomingBlocks: Listing['availabilityBlocks'];
 }
 
 export interface EncoreBooking {
@@ -293,6 +302,16 @@ export function mapEncoreListing(listing: EncoreListing): Listing {
     blockedDates: listing.blockedDates || [],
     manualBlockedDates: listing.manualBlockedDates || [],
     availabilityBlocks: listing.availabilityBlocks || [],
+  };
+}
+
+export function mapEncoreListingAvailabilitySummary(summary: EncoreListingAvailabilitySummary): ListingAvailabilitySummary {
+  return {
+    listingId: summary.listingId,
+    manualBlockCount: summary.manualBlockCount,
+    manualBlockedDates: summary.manualBlockedDates || [],
+    lockedDates: summary.lockedDates || [],
+    upcomingBlocks: summary.upcomingBlocks || [],
   };
 }
 

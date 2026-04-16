@@ -1,13 +1,15 @@
 import { encoreRequest } from './encore-client';
 import type { SerializedImageAsset } from './media-client';
-import type { Booking, Listing, Referral, Review } from '@/types';
+import type { Booking, Listing, ListingAvailabilityManualBlockInput, ListingAvailabilitySummary, Referral, Review } from '@/types';
 import {
   mapEncoreBooking,
   mapEncoreListing,
+  mapEncoreListingAvailabilitySummary,
   mapEncoreReferralReward,
   mapEncoreReview,
   type EncoreBooking,
   type EncoreListing,
+  type EncoreListingAvailabilitySummary,
   type EncoreReferralReward,
   type EncoreReview,
   type SaveListingInput,
@@ -63,6 +65,31 @@ export async function updateListingBlockedDates(listingId: string, blockedDates:
     { auth: true },
   );
   return mapEncoreListing(response.listing);
+}
+
+export async function updateListingAvailabilityBlocks(listingId: string, manualBlocks: ListingAvailabilityManualBlockInput[]) {
+  const response = await encoreRequest<{ listing: EncoreListing; summary: EncoreListingAvailabilitySummary }>(
+    '/host/listings/availability/blocks',
+    {
+      method: 'PUT',
+      body: JSON.stringify({ listingId, manualBlocks }),
+    },
+    { auth: true },
+  );
+
+  return {
+    listing: mapEncoreListing(response.listing),
+    summary: mapEncoreListingAvailabilitySummary(response.summary),
+  };
+}
+
+export async function getListingAvailabilitySummary(listingId: string): Promise<ListingAvailabilitySummary> {
+  const response = await encoreRequest<{ summary: EncoreListingAvailabilitySummary }>(
+    `/host/listings/${encodeURIComponent(listingId)}/availability-summary`,
+    {},
+    { auth: true },
+  );
+  return mapEncoreListingAvailabilitySummary(response.summary);
 }
 
 export async function saveListing(input: SaveListingInput) {

@@ -5,6 +5,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { catalogDB } from "./db";
 import {
   buildBlockedDatesFromAvailability,
+  buildIntervalsFromDateKeys,
   buildManualBlockedDates,
   buildSingleNightInterval,
   enumerateAvailabilityNights,
@@ -24,7 +25,9 @@ import { platformEvents } from "../analytics/events";
 import { reviewsDB } from "../reviews/db";
 import type {
   AvailabilityBlockSource,
+  ListingAvailabilityManualBlockInput,
   ListingAvailabilityBlockRecord,
+  ListingAvailabilitySummaryRecord,
   ListingRecord,
   ListingStatus,
 } from "../shared/domain";
@@ -71,6 +74,7 @@ type AvailabilityBlockRow = {
   starts_on: string;
   ends_on: string;
   nights: string[];
+  note: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -343,6 +347,11 @@ interface UpdateAvailabilityParams {
   blockedDates: string[];
 }
 
+interface UpdateAvailabilityBlocksParams {
+  listingId: string;
+  manualBlocks: ListingAvailabilityManualBlockInput[];
+}
+
 interface BookingAvailabilitySnapshotItem {
   bookingId: string;
   checkIn: string;
@@ -367,6 +376,7 @@ function toAvailabilityBlockInput(row: AvailabilityBlockRow): AvailabilityBlockI
     startsOn: normalizeAvailabilityDateKey(row.starts_on),
     endsOn: normalizeAvailabilityDateKey(row.ends_on),
     nights: (row.nights ?? []).map(normalizeAvailabilityDateKey),
+    note: row.note ?? null,
     bookingId: row.source_type === "MANUAL" ? null : row.source_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -375,7 +385,7 @@ function toAvailabilityBlockInput(row: AvailabilityBlockRow): AvailabilityBlockI
 
 async function listAvailabilityBlockInputs(listingId: string) {
   const rows = await catalogDB.queryAll<AvailabilityBlockRow>`
-    SELECT id, listing_id, source_type, source_id, starts_on::text, ends_on::text, nights, created_at, updated_at
+    SELECT id, listing_id, source_type, source_id, starts_on::text, ends_on::text, nights, note, created_at, updated_at
     FROM listing_availability_blocks
     WHERE listing_id = ${listingId}
     ORDER BY starts_on ASC, source_type ASC, created_at ASC
@@ -392,7 +402,7 @@ async function insertManualAvailabilityDates(listingId: string, dates: string[])
     const now = new Date().toISOString();
     await catalogDB.exec`
       INSERT INTO listing_availability_blocks (
-        id, listing_id, source_type, source_id, starts_on, ends_on, nights, created_at, updated_at
+        id, listing_id, source_type, source_id, starts_on, ends_on, nights, note, created_at, updated_at
       )
       VALUES (
         ${randomUUID()},
@@ -402,6 +412,35 @@ async function insertManualAvailabilityDates(listingId: string, dates: string[])
         ${interval.startsOn},
         ${interval.endsOn},
         ${interval.nights},
+        ${null},
+        ${now},
+        ${now}
+      )
+    `;
+  }
+}
+
+async function insertManualAvailabilityBlocks(listingId: string, manualBlocks: ListingAvailabilityManualBlockInput[]) {
+  for (const manualBlock of manualBlocks) {
+    const startsOn = normalizeAvailabilityDateKey(manualBlock.startsOn);
+    const endsOn = normalizeAvailabilityDateKey(manualBlock.endsOn);
+    const nights = enumerateAvailabilityNights(startsOn, endsOn);
+    const now = new Date().toISOString();
+    const sourceId = nights.length === 1 ? nights[0]! : `${startsOn}:${endsOn}`;
+
+    await catalogDB.exec`
+      INSERT INTO listing_availability_blocks (
+        id, listing_id, source_type, source_id, starts_on, ends_on, nights, note, created_at, updated_at
+      )
+      VALUES (
+        ${randomUUID()},
+        ${listingId},
+        ${"MANUAL"},
+        ${sourceId},
+        ${startsOn},
+        ${endsOn},
+        ${nights},
+        ${manualBlock.note?.trim() || null},
         ${now},
         ${now}
       )
@@ -514,6 +553,29 @@ async function refreshListingBlockedDatesFromAvailability(listingId: string) {
   };
 }
 
+function buildAvailabilitySummaryRecord(
+  listingId: string,
+  availabilityBlocks: ListingAvailabilityBlockRecord[],
+): ListingAvailabilitySummaryRecord {
+  const manualBlocks = availabilityBlocks.filter((block) => block.sourceType === "MANUAL");
+  const lockedDates = availabilityBlocks
+    .filter((block) => block.sourceType !== "MANUAL")
+    .flatMap((block) => block.nights)
+    .map(normalizeAvailabilityDateKey);
+  const today = new Date().toISOString().slice(0, 10);
+
+  return {
+    listingId,
+    manualBlockCount: manualBlocks.length,
+    manualBlockedDates: buildManualBlockedDates(availabilityBlocks),
+    lockedDates: Array.from(new Set(lockedDates)).sort(),
+    upcomingBlocks: availabilityBlocks
+      .filter((block) => normalizeAvailabilityDateKey(block.endsOn) >= today)
+      .sort((left, right) => left.startsOn.localeCompare(right.startsOn))
+      .slice(0, 12),
+  };
+}
+
 async function getListingWithAvailability(row: ListingRow): Promise<ListingRecord> {
   const availabilityBlocks = await ensureListingAvailabilityHydrated(row);
   return mapListing(row, availabilityBlocks.map((block) => toAvailabilityBlockRecord(block)));
@@ -614,7 +676,13 @@ export async function replaceManualListingAvailability(listingId: string, blocke
       AND source_type = ${"MANUAL"}
   `;
 
-  await insertManualAvailabilityDates(listingId, normalizedBlockedDates);
+  const manualIntervals = buildIntervalsFromDateKeys(normalizedBlockedDates).map((interval) => ({
+    startsOn: interval.startsOn,
+    endsOn: interval.endsOn,
+    note: null,
+  }));
+
+  await insertManualAvailabilityBlocks(listingId, manualIntervals);
 
   const refreshed = await refreshListingBlockedDatesFromAvailability(listingId);
 
@@ -626,6 +694,97 @@ export async function replaceManualListingAvailability(listingId: string, blocke
       availabilityBlocks: refreshed.availabilityBlocks,
       updatedAt: refreshed.updatedAt,
     },
+  };
+}
+
+export async function replaceManualListingAvailabilityBlocks(
+  listingId: string,
+  manualBlocks: ListingAvailabilityManualBlockInput[],
+) {
+  const existing = await catalogDB.queryRow<ListingRow>`
+    SELECT * FROM listings WHERE id = ${listingId}
+  `;
+  if (!existing) {
+    throw APIError.notFound("Listing not found.");
+  }
+
+  const normalizedManualBlocks = manualBlocks.map((block) => {
+    const startsOn = normalizeAvailabilityDateKey(block.startsOn);
+    const endsOn = normalizeAvailabilityDateKey(block.endsOn);
+    return {
+      startsOn,
+      endsOn,
+      nights: enumerateAvailabilityNights(startsOn, endsOn),
+      note: block.note?.trim() || null,
+    };
+  });
+
+  const existingBlocks = await listAvailabilityBlockInputs(listingId);
+  const nonManualBlocks = existingBlocks.filter((block) => block.sourceType !== "MANUAL");
+  const manualCandidateBlocks: AvailabilityBlockInput[] = normalizedManualBlocks.map((block, index) => ({
+    id: `manual:${index}`,
+    listingId,
+    sourceType: "MANUAL",
+    sourceId: `${block.startsOn}:${block.endsOn}`,
+    startsOn: block.startsOn,
+    endsOn: block.endsOn,
+    nights: block.nights,
+    note: block.note,
+    bookingId: null,
+    createdAt: existing.created_at,
+    updatedAt: existing.updated_at,
+  }));
+
+  for (const manualBlock of normalizedManualBlocks) {
+    const manualConflict = findAvailabilityConflict(manualBlock.nights, nonManualBlocks);
+    if (manualConflict) {
+      const descriptor =
+        manualConflict.block.sourceType === "BOOKED" ? "a booked stay" : "an approved enquiry hold";
+      throw APIError.failedPrecondition(
+        `Manual availability cannot overlap ${descriptor} on ${manualConflict.conflictingNights.join(", ")}.`,
+      );
+    }
+  }
+
+  for (const candidate of manualCandidateBlocks) {
+    const conflictWithManual = findAvailabilityConflict(candidate.nights, manualCandidateBlocks, {
+      excludeSourceType: "MANUAL",
+      excludeSourceId: candidate.sourceId,
+    });
+
+    if (conflictWithManual) {
+      throw APIError.failedPrecondition(
+        `Manual availability intervals cannot overlap on ${conflictWithManual.conflictingNights.join(", ")}.`,
+      );
+    }
+  }
+
+  await catalogDB.exec`
+    DELETE FROM listing_availability_blocks
+    WHERE listing_id = ${listingId}
+      AND source_type = ${"MANUAL"}
+  `;
+
+  await insertManualAvailabilityBlocks(
+    listingId,
+    normalizedManualBlocks.map((block) => ({
+      startsOn: block.startsOn,
+      endsOn: block.endsOn,
+      note: block.note,
+    })),
+  );
+
+  const refreshed = await refreshListingBlockedDatesFromAvailability(listingId);
+
+  return {
+    listing: {
+      ...mapListing(existing, refreshed.availabilityBlocks),
+      blockedDates: refreshed.blockedDates,
+      manualBlockedDates: refreshed.manualBlockedDates,
+      availabilityBlocks: refreshed.availabilityBlocks,
+      updatedAt: refreshed.updatedAt,
+    },
+    summary: buildAvailabilitySummaryRecord(listingId, refreshed.availabilityBlocks),
   };
 }
 
@@ -1039,6 +1198,41 @@ export const updateListingAvailability = api<UpdateAvailabilityParams, { listing
     }
 
     return replaceManualListingAvailability(listingId, blockedDates);
+  },
+);
+
+export const updateListingAvailabilityBlocks = api<UpdateAvailabilityBlocksParams, { listing: ListingRecord; summary: ListingAvailabilitySummaryRecord }>(
+  { expose: true, method: "PUT", path: "/host/listings/availability/blocks", auth: true },
+  async ({ listingId, manualBlocks }) => {
+    const auth = requireRole("host", "admin", "support");
+    const isStaffOperator = auth.role === "admin" || auth.role === "support";
+    const existing = await catalogDB.queryRow<ListingRow>`
+      SELECT * FROM listings WHERE id = ${listingId}
+    `;
+    if (!existing) throw APIError.notFound("Listing not found.");
+    if (existing.host_id !== auth.userID && !isStaffOperator) {
+      throw APIError.permissionDenied("You cannot manage another host's availability.");
+    }
+
+    return replaceManualListingAvailabilityBlocks(listingId, manualBlocks ?? []);
+  },
+);
+
+export const getListingAvailabilitySummary = api<{ listingId: string }, { summary: ListingAvailabilitySummaryRecord }>(
+  { expose: true, method: "GET", path: "/host/listings/:listingId/availability-summary", auth: true },
+  async ({ listingId }) => {
+    const auth = requireRole("host", "admin", "support");
+    const isStaffOperator = auth.role === "admin" || auth.role === "support";
+    const existing = await catalogDB.queryRow<ListingRow>`
+      SELECT * FROM listings WHERE id = ${listingId}
+    `;
+    if (!existing) throw APIError.notFound("Listing not found.");
+    if (existing.host_id !== auth.userID && !isStaffOperator) {
+      throw APIError.permissionDenied("You cannot read another host's availability.");
+    }
+
+    const availabilityBlocks = await ensureListingAvailabilityHydrated(existing);
+    return { summary: buildAvailabilitySummaryRecord(listingId, availabilityBlocks) };
   },
 );
 

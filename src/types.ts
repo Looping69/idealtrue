@@ -15,9 +15,24 @@ export interface ListingAvailabilityBlock {
   startsOn: string;
   endsOn: string;
   nights: string[];
+  note?: string | null;
   bookingId?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ListingAvailabilityManualBlockInput {
+  startsOn: string;
+  endsOn: string;
+  note?: string | null;
+}
+
+export interface ListingAvailabilitySummary {
+  listingId: string;
+  manualBlockCount: number;
+  manualBlockedDates: string[];
+  lockedDates: string[];
+  upcomingBlocks: ListingAvailabilityBlock[];
 }
 
 export interface UserProfile {

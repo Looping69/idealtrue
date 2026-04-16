@@ -83,6 +83,41 @@ function AppContent() {
     }
   };
 
+  const handleBookingUpdated = (
+    updatedBooking: typeof myBookings[number],
+    options?: {
+      routeToFront?: string;
+      closePaymentProof?: boolean;
+      closeChat?: boolean;
+    },
+  ) => {
+    syncUpdatedBooking(updatedBooking);
+
+    if (selectedBookingForChat?.id === updatedBooking.id) {
+      setSelectedBookingForChat(updatedBooking);
+    }
+
+    if (bookingForPaymentProof?.id === updatedBooking.id) {
+      if (options?.closePaymentProof) {
+        setBookingForPaymentProof(null);
+      } else {
+        setBookingForPaymentProof(updatedBooking);
+      }
+    }
+
+    if (bookingToReview?.id === updatedBooking.id) {
+      setBookingToReview(updatedBooking);
+    }
+
+    if (options?.closeChat && selectedBookingForChat?.id === updatedBooking.id) {
+      setSelectedBookingForChat(null);
+    }
+
+    if (options?.routeToFront && location.pathname !== options.routeToFront) {
+      navigate(options.routeToFront);
+    }
+  };
+
   const handleListingSelected = (listing: typeof listings[number]) => {
     setSelectedListingForDetail(listing);
     if (location.pathname === '/') {
@@ -142,8 +177,8 @@ function AppContent() {
           onListingRemoved={handleListingRemoved}
           onListingSelected={handleListingSelected}
           onListingUpdated={handleListingUpdated}
-          onSelectedBookingForChat={setSelectedBookingForChat}
-          onSyncUpdatedBooking={syncUpdatedBooking}
+        onSelectedBookingForChat={setSelectedBookingForChat}
+          onSyncUpdatedBooking={handleBookingUpdated}
           profile={profile}
           referrals={referrals}
         />
@@ -162,7 +197,10 @@ function AppContent() {
               paymentProof,
               paymentProofUrl,
             });
-            syncUpdatedBooking(updatedBooking);
+            handleBookingUpdated(updatedBooking, {
+              routeToFront: '/guest',
+              closePaymentProof: true,
+            });
             toast.success('Payment proof submitted. The host can now confirm receipt.');
           } catch (error) {
             console.error('Failed to submit payment proof:', error);
@@ -203,7 +241,7 @@ function AppContent() {
                       children: bookingData.children,
                     });
 
-                    syncUpdatedBooking(nextBooking);
+                    handleBookingUpdated(nextBooking, { routeToFront: '/guest' });
                     toast.success('Booking request sent! The host will contact you shortly.');
                     handleListingDetailClose();
                   } catch (error) {

@@ -213,6 +213,7 @@ export default function HostDashboard({
                                 const updatedBooking = await updateBookingStatus(booking.id, 'APPROVED');
                                 setLocalBookings((current) => current.map((item) => item.id === booking.id ? updatedBooking : item));
                                 onBookingUpdated(updatedBooking);
+                                navigate('/host/enquiries');
 
                                 toast.success('Inquiry approved. Payment is now unlocked for the guest.');
                               } catch (error) {
@@ -230,6 +231,7 @@ export default function HostDashboard({
                                 const updatedBooking = await updateBookingStatus(booking.id, 'DECLINED');
                                 setLocalBookings((current) => current.map((item) => item.id === booking.id ? updatedBooking : item));
                                 onBookingUpdated(updatedBooking);
+                                navigate('/host/enquiries');
 
                                 toast.info('Inquiry declined.');
                               } catch (error) {

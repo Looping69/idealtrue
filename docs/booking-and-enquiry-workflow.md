@@ -68,14 +68,46 @@ Key host-screen expectations:
 - never enable payment confirmation if proof is inaccessible
 - retain closed enquiries for audit context instead of dropping them from view
 
+## Host availability calendar
+
+The host availability calendar is now expected to behave like an operational inventory tool, not just a date picker.
+
+`src/pages/HostAvailability.tsx` now supports:
+
+- per-listing availability metrics
+- manual day toggling in the calendar
+- bulk range block and reopen actions
+- range block notes for manual operational context
+- quick block presets for near-term shutdown windows
+- selected-day inspection showing the owning availability blocks
+- upcoming constraint tracking for future holds and booked stays
+- direct jump into the enquiry workflow when an inspected night is tied to an inquiry-driven block
+
+Important behavior rules:
+
+- manual host blocks can be added or removed freely
+- approved holds and booked stays are locked from manual editing
+- bulk actions skip locked dates instead of pretending they changed
+- manual blocks are now persisted as interval records, not one row per visible date
+- unchanged manual intervals preserve their notes; reshaped intervals are treated as new intervals
+- booked stays still follow end-exclusive occupancy rules
+
+Implementation note:
+
+- the frontend rule helpers for this surface live in `src/lib/host-availability.ts`
+- these helpers exist so date classification, range application, and locked-date handling can stay tested and reusable
+- the backend now exposes `PUT /host/listings/availability/blocks` for interval-based manual block persistence
+- the backend now exposes `GET /host/listings/:listingId/availability-summary` for server-computed host calendar metrics and upcoming constraints
+- manual availability blocks now support an optional `note` field in `listing_availability_blocks`
+
 ## Known limitations
 
 The workflow is stronger than before, but still incomplete in a few places:
 
-- no host notes field yet
 - no structured decline reason yet
 - no explicit dispute workflow yet
 - no backend-side SLA timestamps or last-actor metadata yet
 - off-platform payment confirmation still depends on host discipline
+- host availability still lacks recurring rules and import/export style controls
 
 Those gaps are product and data-model gaps, not just UI polish gaps.

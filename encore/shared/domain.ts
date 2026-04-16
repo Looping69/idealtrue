@@ -88,9 +88,24 @@ export interface ListingAvailabilityBlockRecord {
   startsOn: string;
   endsOn: string;
   nights: string[];
+  note?: string | null;
   bookingId?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ListingAvailabilityManualBlockInput {
+  startsOn: string;
+  endsOn: string;
+  note?: string | null;
+}
+
+export interface ListingAvailabilitySummaryRecord {
+  listingId: string;
+  manualBlockCount: number;
+  manualBlockedDates: string[];
+  lockedDates: string[];
+  upcomingBlocks: ListingAvailabilityBlockRecord[];
 }
 
 export interface BookingRecord {
