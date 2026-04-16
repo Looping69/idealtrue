@@ -4,7 +4,7 @@ import { summarizeReviews } from '@/services/content';
 import { X, Star, Loader2, MessageSquare, Calendar as CalendarIcon, Users, Minus, Plus } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { format, addDays, differenceInDays, isBefore, startOfToday } from 'date-fns';
+import { format, differenceInDays, isBefore, startOfToday } from 'date-fns';
 import { toast } from 'sonner';
 import Markdown from 'react-markdown';
 import { Calendar } from '@/components/ui/calendar';
@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { DateRange } from 'react-day-picker';
 import { listListingReviews } from '@/lib/platform-client';
 import { formatRand } from '@/lib/currency';
+import { isListingNightBlocked, stayOverlapsListingAvailability } from '@/lib/listing-availability';
 
 export default function ListingDetail({ 
   listing, 
@@ -24,17 +25,8 @@ export default function ListingDetail({
   onBook: (bookingData: { checkIn: Date, checkOut: Date, adults: number, children: number, totalPrice: number, breakageDeposit?: number | null }) => Promise<void> | void,
   currentUserId?: string
 }) {
-  const blockedDateKeys = new Set(listing.blockedDates ?? []);
-  const isDateBlocked = (date: Date) => blockedDateKeys.has(date.toISOString().slice(0, 10));
-  const rangeIncludesBlockedDates = (from?: Date, to?: Date) => {
-    if (!from || !to) return false;
-    for (let cursor = new Date(from); cursor < to; cursor = addDays(cursor, 1)) {
-      if (isDateBlocked(cursor)) {
-        return true;
-      }
-    }
-    return false;
-  };
+  const isDateBlocked = (date: Date) => isListingNightBlocked(listing, date);
+  const rangeIncludesBlockedDates = (from?: Date, to?: Date) => stayOverlapsListingAvailability(listing, from, to);
 
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loadingReviews, setLoadingReviews] = useState(true);

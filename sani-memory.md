@@ -9,3 +9,4 @@
 - Added a durable listing-availability ledger in `encore/catalog` so manual host blocks, approved enquiry holds, and booked stays are tracked separately instead of being flattened into one fragile `blocked_dates` array.
 - Tightened `encore/booking/api.ts` so booking creation and enquiry approval now fail closed on overlapping availability instead of relying on client-side honesty.
 - Updated `src/types.ts`, `src/lib/domain-mappers.ts`, and `src/pages/HostAvailability.tsx` so the host calendar distinguishes manual blocks from approved-payment holds and confirmed stays.
+- Added a shared frontend availability helper in `src/lib/listing-availability.ts` and switched `src/pages/ExploreView.tsx` plus `src/components/ListingDetail.tsx` to use end-exclusive stay overlap checks so booked nights are filtered out consistently without mis-handling checkout days.

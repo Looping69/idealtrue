@@ -9,7 +9,8 @@ import PropertyCard from '@/components/PropertyCard';
 import PropertyMap from '@/components/PropertyMap';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { eachDayOfInterval, format, startOfDay } from 'date-fns';
+import { startOfDay } from 'date-fns';
+import { stayOverlapsListingAvailability } from '@/lib/listing-availability';
 
 const DEFAULT_LISTING_FILTERS: ListingFilters = {
   minPrice: "",
@@ -69,14 +70,10 @@ export default function ExploreView({ listings, onBook }: { listings: Listing[],
       const requestedGuests = searchFilters.guests || 0;
       const matchesGuests = requestedGuests <= 1 || (listing.adults + listing.children) >= requestedGuests;
 
-      const matchesDateRange = !selectedFrom || !selectedTo || selectedTo < selectedFrom
-        ? true
-        : (() => {
-            const blockedDates = new Set((listing.blockedDates || []).map((date) => date.slice(0, 10)));
-            return eachDayOfInterval({ start: selectedFrom, end: selectedTo })
-              .map((date) => format(date, 'yyyy-MM-dd'))
-              .every((dateKey) => !blockedDates.has(dateKey));
-          })();
+      const matchesDateRange =
+        !selectedFrom || !selectedTo || selectedTo < selectedFrom
+          ? true
+          : !stayOverlapsListingAvailability(listing, selectedFrom, selectedTo);
 
       const matchesAmenities = filters.amenities.every(a => listing.amenities?.includes(a));
 
