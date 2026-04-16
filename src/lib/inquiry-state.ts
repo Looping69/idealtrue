@@ -1,6 +1,14 @@
 import type { Booking, InquiryState } from '@/types';
 
 type BookingStateSlice = Pick<Booking, 'inquiryState' | 'paymentState' | 'paymentSubmittedAt' | 'paymentConfirmedAt'>;
+type HostBookingSlice = BookingStateSlice & Pick<Booking, 'createdAt' | 'viewedAt' | 'respondedAt' | 'paymentUnlockedAt' | 'bookedAt' | 'expiresAt'>;
+
+export type HostInquiryBucket =
+  | 'needs_response'
+  | 'awaiting_guest_payment'
+  | 'payment_review'
+  | 'confirmed'
+  | 'closed';
 
 export function getInquiryDisplayState(booking: BookingStateSlice): InquiryState {
   if (booking.inquiryState === 'APPROVED' && booking.paymentState === 'COMPLETED') {
@@ -78,6 +86,46 @@ export function isBookedStay(booking: BookingStateSlice) {
 
 export function isAwaitingHostPaymentConfirmation(booking: BookingStateSlice) {
   return booking.inquiryState === 'APPROVED' && booking.paymentState === 'INITIATED' && !!booking.paymentSubmittedAt && !booking.paymentConfirmedAt;
+}
+
+export function isAwaitingGuestPayment(booking: BookingStateSlice) {
+  return booking.inquiryState === 'APPROVED' && booking.paymentState === 'INITIATED' && !booking.paymentSubmittedAt;
+}
+
+export function getHostInquiryBucket(booking: HostBookingSlice): HostInquiryBucket {
+  if (isAwaitingHostPaymentConfirmation(booking)) {
+    return 'payment_review';
+  }
+
+  if (isBookedStay(booking)) {
+    return 'confirmed';
+  }
+
+  if (isPendingHostDecision(booking)) {
+    return 'needs_response';
+  }
+
+  if (isAwaitingGuestPayment(booking) || booking.inquiryState === 'APPROVED') {
+    return 'awaiting_guest_payment';
+  }
+
+  return 'closed';
+}
+
+export function getHostInquirySortTimestamp(booking: HostBookingSlice) {
+  switch (getHostInquiryBucket(booking)) {
+    case 'payment_review':
+      return booking.paymentSubmittedAt ?? booking.paymentUnlockedAt ?? booking.createdAt;
+    case 'awaiting_guest_payment':
+      return booking.paymentUnlockedAt ?? booking.respondedAt ?? booking.createdAt;
+    case 'confirmed':
+      return booking.paymentConfirmedAt ?? booking.bookedAt ?? booking.createdAt;
+    case 'closed':
+      return booking.expiresAt ?? booking.respondedAt ?? booking.viewedAt ?? booking.createdAt;
+    case 'needs_response':
+    default:
+      return booking.respondedAt ?? booking.viewedAt ?? booking.createdAt;
+  }
 }
 
 export function isOpenHostInquiry(booking: Pick<Booking, 'inquiryState'>) {

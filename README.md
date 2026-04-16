@@ -54,6 +54,16 @@ This is now an Encore-first repo, not a Firebase bridge with new paint.
 - subscription upgrades and downgrades through Encore billing APIs
 - content studio entitlements, monthly included usage, credit top-ups, and saved drafts through Encore billing APIs
 
+## Booking and availability rules
+
+- listing availability now uses a durable ledger of availability blocks, not just a fragile `blocked_dates` array
+- host manual blocks, approved enquiry holds, and confirmed booked stays are tracked separately in Encore `catalog`
+- stay dates are end-exclusive for occupancy logic, so checkout day is not treated as a blocked overnight
+- the frontend uses shared availability logic in [`src/lib/listing-availability.ts`](/C:/Git%20Repos/IdealTrue/src/lib/listing-availability.ts) so explore filtering and booking validation stay consistent
+- the host enquiries screen is now treated as a workflow board with `Needs Response`, `Awaiting Guest Payment`, `Awaiting Payment Confirmation`, `Confirmed Stays`, and `Closed Loop` buckets
+
+See [`docs/booking-and-enquiry-workflow.md`](/C:/Git%20Repos/IdealTrue/docs/booking-and-enquiry-workflow.md) for the full workflow and operational expectations.
+
 ## What does not fully route through Encore yet
 
 - KYC document submission still needs a more complete ops workflow around review history and disputes

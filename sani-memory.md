@@ -10,3 +10,6 @@
 - Tightened `encore/booking/api.ts` so booking creation and enquiry approval now fail closed on overlapping availability instead of relying on client-side honesty.
 - Updated `src/types.ts`, `src/lib/domain-mappers.ts`, and `src/pages/HostAvailability.tsx` so the host calendar distinguishes manual blocks from approved-payment holds and confirmed stays.
 - Added a shared frontend availability helper in `src/lib/listing-availability.ts` and switched `src/pages/ExploreView.tsx` plus `src/components/ListingDetail.tsx` to use end-exclusive stay overlap checks so booked nights are filtered out consistently without mis-handling checkout days.
+- Rebuilt `src/pages/HostEnquiries.tsx` into a stronger host operations screen with workflow buckets, summary metrics, aging cues, clearer payment-tracking context, and proper host feedback on approve/decline/confirm actions.
+- Added host inquiry workflow helpers in `src/lib/inquiry-state.ts` plus tests in `tests/inquiry-state.test.ts` so enquiry categorization and sorting stay consistent instead of living as page-local guesswork.
+- Added durable feature documentation in `docs/booking-and-enquiry-workflow.md` and updated `README.md` so the availability ledger and host enquiry workflow are documented outside the session log.
