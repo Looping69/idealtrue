@@ -46,6 +46,13 @@ Important workflow rule:
 
 - an enquiry is not a booked stay until host payment confirmation completes
 
+Expiry enforcement:
+
+- unresolved enquiries in `PENDING`, `VIEWED`, or `RESPONDED` now expire automatically 48 hours after the latest host-response milestone
+- approved enquiries now expire automatically 24 hours after approval unless the stay is fully confirmed into `BOOKED`
+- expiry is enforced server-side when bookings are read or mutated, and an hourly booking cron sweeps stale rows so inventory does not depend on someone opening a screen
+- when an approved enquiry expires, the booking moves to `EXPIRED` and its `APPROVED_HOLD` inventory is released on the next availability sync
+
 ## Host enquiries screen
 
 The host enquiries page is intended to be an operational queue, not a passive list.
@@ -63,6 +70,7 @@ The classification logic lives in `src/lib/inquiry-state.ts` so page behavior st
 Key host-screen expectations:
 
 - show booking age and last workflow movement
+- show the active response/payment deadline for expirable enquiries
 - show stay value, breakage deposit, and total guest exposure
 - show payment reference and proof-link state during payment review
 - never enable payment confirmation if proof is inaccessible

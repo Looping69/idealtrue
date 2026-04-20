@@ -23,6 +23,7 @@ import {
   getHostInquiryBucket,
   getHostInquirySortTimestamp,
   getInquiryBadgeLabel,
+  getInquiryDeadlineState,
   isAwaitingGuestPayment,
 } from '@/lib/inquiry-state';
 import { confirmPayment, markInquiryViewed, updateBookingStatus } from '@/lib/platform-client';
@@ -149,6 +150,24 @@ export default function HostEnquiries({
   ) => {
     const listing = listings.find((l) => l.id === booking.listingId);
     const statusLabel = getInquiryBadgeLabel(booking);
+    const deadlineState = getInquiryDeadlineState(booking);
+    const deadlineCopy = deadlineState
+      ? (() => {
+          const distance = formatDistanceToNowStrict(new Date(deadlineState.deadlineAt), { addSuffix: true });
+          switch (deadlineState.kind) {
+            case 'response_due':
+              return `Auto-expires ${distance} if this enquiry stays unresolved.`;
+            case 'payment_due':
+              return `Payment window closes ${distance}. The approval hold releases if payment is not completed in time.`;
+            case 'confirmation_due':
+              return `Approval window closes ${distance}. Confirm the payment before the hold is released.`;
+            case 'expired':
+              return `Expired ${distance}. Any approval hold on these nights has already been released.`;
+            default:
+              return null;
+          }
+        })()
+      : null;
     const totalExposure = booking.totalPrice + (booking.breakageDeposit ?? 0);
     const lastTouchAt =
       booking.paymentSubmittedAt ??
@@ -223,6 +242,7 @@ export default function HostEnquiries({
                     ? `Viewed ${formatDistanceToNowStrict(new Date(booking.viewedAt), { addSuffix: true })}.`
                     : 'No host action logged yet.'}
               </p>
+              {deadlineCopy && <p>{deadlineCopy}</p>}
               {isAwaitingGuestPayment(booking) && (
                 <p>Guest payment is unlocked, but proof has not been submitted yet.</p>
               )}

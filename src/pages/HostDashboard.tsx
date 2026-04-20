@@ -18,12 +18,12 @@ import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
-import { format } from 'date-fns';
+import { format, formatDistanceToNowStrict } from 'date-fns';
 import { toast } from 'sonner';
 import { updateBookingStatus } from '@/lib/platform-client';
 import { getMyHostBillingAccount, saveHostBillingCard } from '@/lib/billing-client';
 import { formatRand } from '@/lib/currency';
-import { getInquiryBadgeLabel, isBookedStay, isPendingHostDecision } from '@/lib/inquiry-state';
+import { getInquiryBadgeLabel, getInquiryDeadlineState, isBookedStay, isPendingHostDecision } from '@/lib/inquiry-state';
 
 export default function HostDashboard({ 
   profile,
@@ -215,6 +215,24 @@ export default function HostDashboard({
             {localBookings.slice(0, 5).map(booking => {
               const listing = listings.find(l => l.id === booking.listingId);
               const bookingLabel = getInquiryBadgeLabel(booking);
+              const deadlineState = getInquiryDeadlineState(booking);
+              const deadlineCopy = deadlineState
+                ? (() => {
+                    const distance = formatDistanceToNowStrict(new Date(deadlineState.deadlineAt), { addSuffix: true });
+                    switch (deadlineState.kind) {
+                      case 'response_due':
+                        return `Expires ${distance}`;
+                      case 'payment_due':
+                        return `Payment closes ${distance}`;
+                      case 'confirmation_due':
+                        return `Confirmation closes ${distance}`;
+                      case 'expired':
+                        return `Expired ${distance}`;
+                      default:
+                        return null;
+                    }
+                  })()
+                : null;
               return (
                 <Card key={booking.id} className="p-4">
                   <div className="flex justify-between items-start mb-2">
@@ -230,6 +248,9 @@ export default function HostDashboard({
                   <p className="text-xs text-on-surface-variant bg-surface-container-lowest p-2 rounded">
                     {format(new Date(booking.checkIn), 'MMM d')} - {format(new Date(booking.checkOut), 'MMM d, yyyy')}
                   </p>
+                  {deadlineCopy ? (
+                    <p className="mt-2 text-[11px] text-on-surface-variant">{deadlineCopy}</p>
+                  ) : null}
                   <div className="mt-3 pt-3 border-t border-outline-variant flex justify-between items-center">
                     <div className="flex flex-col">
                       <span className="text-sm font-bold">{formatRand(booking.totalPrice)}</span>
@@ -278,7 +299,7 @@ export default function HostDashboard({
                       ) : booking.inquiryState === 'APPROVED' ? (
                         <div className="flex gap-2">
                           <span className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-                            Waiting for guest payment
+                            {deadlineState?.kind === 'confirmation_due' ? 'Waiting for payment confirmation' : 'Waiting for guest payment'}
                           </span>
                         </div>
                       ) : (

@@ -1,4 +1,5 @@
 import { api, APIError } from "encore.dev/api";
+import { CronJob } from "encore.dev/cron";
 import { randomUUID } from "node:crypto";
 import { bookingDB } from "./db";
 import { bookingEvidenceBucket } from "./storage";
@@ -13,10 +14,12 @@ import { identityDB } from "../identity/db";
 import type { BookingRecord, InquiryLedgerEventRecord, InquiryState, PaymentState } from "../shared/domain";
 import {
   bookingOverlapsBlockedDates,
+  computeInquiryExpiresAt,
   computeBookingTotalPrice,
   getInquiryStatusTransitionError,
   getPaymentProofSubmissionError,
   getPaymentStateTransitionError,
+  shouldExpireInquiry,
 } from "./workflow";
 
 type LegacyBookingStatus =
@@ -344,12 +347,12 @@ async function persistInquiryStateChange(params: {
     ...params.inquiry,
     inquiry_state: params.nextInquiryState,
     status: deriveLegacyStatus(params.nextInquiryState, params.inquiry.payment_state),
-    viewed_at: params.viewedAt ?? params.inquiry.viewed_at,
-    responded_at: params.respondedAt ?? params.inquiry.responded_at,
-    payment_unlocked_at: params.paymentUnlockedAt ?? params.inquiry.payment_unlocked_at,
-    payment_reference: params.paymentReference ?? params.inquiry.payment_reference,
-    expires_at: params.expiresAt ?? params.inquiry.expires_at,
-    booked_at: params.bookedAt ?? params.inquiry.booked_at,
+    viewed_at: params.viewedAt !== undefined ? params.viewedAt : params.inquiry.viewed_at,
+    responded_at: params.respondedAt !== undefined ? params.respondedAt : params.inquiry.responded_at,
+    payment_unlocked_at: params.paymentUnlockedAt !== undefined ? params.paymentUnlockedAt : params.inquiry.payment_unlocked_at,
+    payment_reference: params.paymentReference !== undefined ? params.paymentReference : params.inquiry.payment_reference,
+    expires_at: params.expiresAt !== undefined ? params.expiresAt : params.inquiry.expires_at,
+    booked_at: params.bookedAt !== undefined ? params.bookedAt : params.inquiry.booked_at,
     updated_at: params.now,
   };
 
@@ -507,13 +510,53 @@ async function fetchBookingRow(id: string) {
   `;
 }
 
-export async function getBookingById(id: string) {
+async function expireInquiryIfNeeded(inquiry: BookingRow, now = new Date().toISOString()) {
+  if (!shouldExpireInquiry(inquiry.inquiry_state, inquiry.expires_at, now)) {
+    return inquiry;
+  }
+
+  const transitionError = getInquiryStatusTransitionError(inquiry.inquiry_state, "EXPIRED", "system");
+  if (transitionError) {
+    return inquiry;
+  }
+
+  const updated = await persistInquiryStateChange({
+    inquiry,
+    nextInquiryState: "EXPIRED",
+    actorId: inquiry.host_id,
+    actor: "system",
+    now,
+    expiresAt: inquiry.expires_at,
+  });
+
+  if (inquiry.inquiry_state === "APPROVED") {
+    await syncListingAvailabilityForBookings(inquiry.listing_id);
+  }
+
+  return updated;
+}
+
+async function fetchBookingRowFresh(id: string, now = new Date().toISOString()) {
   const row = await fetchBookingRow(id);
+  if (!row) {
+    return null;
+  }
+
+  return expireInquiryIfNeeded(row, now);
+}
+
+async function expireInquiryRows(rows: BookingRow[], now = new Date().toISOString()) {
+  return Promise.all(rows.map((row) => expireInquiryIfNeeded(row, now)));
+}
+
+export async function getBookingById(id: string) {
+  const row = await fetchBookingRowFresh(id);
   return row ? mapBookingAccessRecord(row) : null;
 }
 
 export async function recordHostInquiryResponseFromMessage(bookingId: string, actorId: string) {
-  const existing = await fetchBookingRow(bookingId);
+  const now = new Date().toISOString();
+  const existing = await fetchBookingRowFresh(bookingId, now);
   if (!existing) {
     return null;
   }
@@ -522,8 +565,6 @@ export async function recordHostInquiryResponseFromMessage(bookingId: string, ac
   if (transitionError) {
     return null;
   }
-
-  const now = new Date().toISOString();
   return persistInquiryStateChange({
     inquiry: existing,
     nextInquiryState: "RESPONDED",
@@ -532,6 +573,7 @@ export async function recordHostInquiryResponseFromMessage(bookingId: string, ac
     now,
     respondedAt: now,
     viewedAt: existing.viewed_at ?? now,
+    expiresAt: computeInquiryExpiresAt("RESPONDED", now),
   });
 }
 
@@ -578,11 +620,12 @@ export const createBooking = api<CreateBookingParams, { booking: BookingRecord }
     const hostPaymentDetails = await getHostPaymentDetails(listing.hostId);
     const id = randomUUID();
     const now = new Date().toISOString();
+    const expiresAt = computeInquiryExpiresAt("PENDING", now);
 
     await bookingDB.exec`
       INSERT INTO bookings (
         id, listing_id, guest_id, host_id, check_in, check_out, adults, children,
-        total_price, breakage_deposit, status, inquiry_state, payment_state, payment_method, payment_instructions, created_at, updated_at
+        total_price, breakage_deposit, status, inquiry_state, payment_state, payment_method, payment_instructions, expires_at, created_at, updated_at
       )
       VALUES (
         ${id},
@@ -600,6 +643,7 @@ export const createBooking = api<CreateBookingParams, { booking: BookingRecord }
         ${"UNPAID"},
         ${hostPaymentDetails.payment_method},
         ${hostPaymentDetails.payment_instructions},
+        ${expiresAt},
         ${now},
         ${now}
       )
@@ -642,7 +686,8 @@ export const listMyBookings = api<void, { bookings: BookingRecord[] }>(
       `,
       auth.userID,
     );
-    return { bookings: await Promise.all(rows.map(mapBookingAccessRecord)) };
+    const freshRows = await expireInquiryRows(rows);
+    return { bookings: await Promise.all(freshRows.map(mapBookingAccessRecord)) };
   },
 );
 
@@ -656,7 +701,8 @@ export const listAdminBookings = api<void, { bookings: BookingRecord[] }>(
       ORDER BY created_at DESC
       `,
     );
-    return { bookings: await Promise.all(rows.map(mapBookingAccessRecord)) };
+    const freshRows = await expireInquiryRows(rows);
+    return { bookings: await Promise.all(freshRows.map(mapBookingAccessRecord)) };
   },
 );
 
@@ -664,7 +710,7 @@ export const listInquiryLedger = api<{ id: string }, { events: InquiryLedgerEven
   { expose: true, method: "GET", path: "/bookings/:id/ledger", auth: true },
   async ({ id }) => {
     const auth = requireAuth();
-    const existing = await fetchBookingRow(id);
+    const existing = await fetchBookingRowFresh(id);
     if (!existing) {
       throw APIError.notFound("Inquiry not found.");
     }
@@ -690,7 +736,8 @@ export const markInquiryViewed = api<{ id: string }, { booking: BookingRecord }>
   { expose: true, method: "POST", path: "/bookings/:id/view", auth: true },
   async ({ id }) => {
     const auth = requireRole("host", "admin", "support");
-    const existing = await fetchBookingRow(id);
+    const now = new Date().toISOString();
+    const existing = await fetchBookingRowFresh(id, now);
     if (!existing) throw APIError.notFound("Inquiry not found.");
     if (existing.host_id !== auth.userID && !["admin", "support"].includes(auth.role)) {
       throw APIError.permissionDenied("You cannot update this inquiry.");
@@ -700,7 +747,6 @@ export const markInquiryViewed = api<{ id: string }, { booking: BookingRecord }>
       return { booking: await mapBookingAccessRecord(existing) };
     }
 
-    const now = new Date().toISOString();
     const updated = await persistInquiryStateChange({
       inquiry: existing,
       nextInquiryState: "VIEWED",
@@ -708,6 +754,7 @@ export const markInquiryViewed = api<{ id: string }, { booking: BookingRecord }>
       actor: "host",
       now,
       viewedAt: now,
+      expiresAt: computeInquiryExpiresAt("VIEWED", now),
     });
 
     return { booking: await mapBookingAccessRecord(updated) };
@@ -718,7 +765,8 @@ export const updateBookingStatus = api<UpdateBookingStatusParams, { booking: Boo
   { expose: true, method: "PATCH", path: "/bookings/:id/status", auth: true },
   async (params) => {
     const auth = requireRole("host", "admin", "support");
-    const existing = await fetchBookingRow(params.id);
+    const now = new Date().toISOString();
+    const existing = await fetchBookingRowFresh(params.id, now);
     if (!existing) throw APIError.notFound("Inquiry not found.");
     if (existing.host_id !== auth.userID && !["admin", "support"].includes(auth.role)) {
       throw APIError.permissionDenied("You cannot update this inquiry.");
@@ -729,8 +777,6 @@ export const updateBookingStatus = api<UpdateBookingStatusParams, { booking: Boo
     if (transitionError) {
       throw APIError.failedPrecondition(transitionError);
     }
-
-    const now = new Date().toISOString();
     const hostPaymentDetails = await getHostPaymentDetails(existing.host_id);
     const paymentReference =
       nextStatus === "APPROVED"
@@ -754,6 +800,7 @@ export const updateBookingStatus = api<UpdateBookingStatusParams, { booking: Boo
       respondedAt: nextStatus === "RESPONDED" ? now : existing.responded_at,
       paymentUnlockedAt: nextStatus === "APPROVED" ? now : existing.payment_unlocked_at,
       paymentReference,
+      expiresAt: computeInquiryExpiresAt(nextStatus, now),
     });
 
     if (nextStatus === "APPROVED") {
@@ -786,7 +833,7 @@ export const submitPaymentProof = api<SubmitPaymentProofParams, { booking: Booki
   { expose: true, method: "POST", path: "/bookings/:id/payment-proof", auth: true },
   async (params) => {
     const auth = requireAuth();
-    const existing = await fetchBookingRow(params.id);
+    const existing = await fetchBookingRowFresh(params.id);
     if (!existing) throw APIError.notFound("Inquiry not found.");
     if (existing.guest_id !== auth.userID) {
       throw APIError.permissionDenied("Only the guest can submit payment proof for this inquiry.");
@@ -847,7 +894,8 @@ export const confirmPayment = api<ConfirmPaymentParams, { booking: BookingRecord
   { expose: true, method: "POST", path: "/bookings/:id/payment-confirm", auth: true },
   async (params) => {
     const auth = requireAuth();
-    const existing = await fetchBookingRow(params.id);
+    const now = new Date().toISOString();
+    const existing = await fetchBookingRowFresh(params.id, now);
     if (!existing) throw APIError.notFound("Inquiry not found.");
     if (existing.host_id !== auth.userID) {
       throw APIError.permissionDenied("Only the host can confirm payment for this inquiry.");
@@ -858,8 +906,6 @@ export const confirmPayment = api<ConfirmPaymentParams, { booking: BookingRecord
     if (!existing.payment_proof_key && !existing.payment_proof_url) {
       throw APIError.failedPrecondition("Payment proof is missing for this inquiry.");
     }
-
-    const now = new Date().toISOString();
     const paymentTransitionError = getPaymentStateTransitionError(existing.inquiry_state, existing.payment_state, "COMPLETED", "host");
     if (paymentTransitionError) {
       throw APIError.failedPrecondition(paymentTransitionError);
@@ -881,6 +927,7 @@ export const confirmPayment = api<ConfirmPaymentParams, { booking: BookingRecord
       actor: "system",
       now,
       bookedAt: now,
+      expiresAt: null,
     });
 
     await syncListingAvailabilityForBookings(existing.listing_id);
@@ -890,3 +937,25 @@ export const confirmPayment = api<ConfirmPaymentParams, { booking: BookingRecord
     };
   },
 );
+
+export async function processInquiryExpiryCycle(nowIso = new Date().toISOString()) {
+  const staleRows = await bookingDB.queryAll<BookingRow>`
+    SELECT *
+    FROM bookings
+    WHERE inquiry_state IN ('PENDING', 'VIEWED', 'RESPONDED', 'APPROVED')
+      AND expires_at IS NOT NULL
+      AND expires_at <= ${nowIso}
+    ORDER BY expires_at ASC
+  `;
+
+  for (const row of staleRows) {
+    await expireInquiryIfNeeded(row, nowIso);
+  }
+}
+
+export const inquiryExpiryCron = new CronJob("inquiry-expiry-cycle", {
+  every: "1h",
+  endpoint: async () => {
+    await processInquiryExpiryCycle();
+  },
+});

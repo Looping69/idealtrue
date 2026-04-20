@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { getHostInquiryBucket, getHostInquirySortTimestamp, isAwaitingGuestPayment } from '../src/lib/inquiry-state.ts';
+import {
+  getHostInquiryBucket,
+  getHostInquirySortTimestamp,
+  getInquiryDeadlineState,
+  isAwaitingGuestPayment,
+} from '../src/lib/inquiry-state.ts';
 
 const baseBooking = {
   inquiryState: 'PENDING' as const,
@@ -99,5 +104,47 @@ test('host inquiry sort timestamp follows the active workflow milestone', () => 
       paymentSubmittedAt: '2026-04-16T13:00:00.000Z',
     }),
     '2026-04-16T13:00:00.000Z',
+  );
+});
+
+test('deadline state distinguishes response, payment, review, and expired enquiries', () => {
+  assert.deepEqual(
+    getInquiryDeadlineState({
+      inquiryState: 'RESPONDED',
+      paymentState: 'UNPAID',
+      paymentSubmittedAt: null,
+      expiresAt: '2026-04-22T10:00:00.000Z',
+    }),
+    { kind: 'response_due', deadlineAt: '2026-04-22T10:00:00.000Z' },
+  );
+
+  assert.deepEqual(
+    getInquiryDeadlineState({
+      inquiryState: 'APPROVED',
+      paymentState: 'INITIATED',
+      paymentSubmittedAt: null,
+      expiresAt: '2026-04-21T10:00:00.000Z',
+    }),
+    { kind: 'payment_due', deadlineAt: '2026-04-21T10:00:00.000Z' },
+  );
+
+  assert.deepEqual(
+    getInquiryDeadlineState({
+      inquiryState: 'APPROVED',
+      paymentState: 'INITIATED',
+      paymentSubmittedAt: '2026-04-20T15:00:00.000Z',
+      expiresAt: '2026-04-21T10:00:00.000Z',
+    }),
+    { kind: 'confirmation_due', deadlineAt: '2026-04-21T10:00:00.000Z' },
+  );
+
+  assert.deepEqual(
+    getInquiryDeadlineState({
+      inquiryState: 'EXPIRED',
+      paymentState: 'INITIATED',
+      paymentSubmittedAt: null,
+      expiresAt: '2026-04-21T10:00:00.000Z',
+    }),
+    { kind: 'expired', deadlineAt: '2026-04-21T10:00:00.000Z' },
   );
 });

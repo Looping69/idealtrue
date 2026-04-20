@@ -4,10 +4,17 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar, MapPin, Shield } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, formatDistanceToNowStrict } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { formatRand } from '@/lib/currency';
-import { canGuestPay, getInquiryBadgeLabel, getInquiryResponseText, isAwaitingHostPaymentConfirmation, isBookedStay } from '@/lib/inquiry-state';
+import {
+  canGuestPay,
+  getInquiryBadgeLabel,
+  getInquiryDeadlineState,
+  getInquiryResponseText,
+  isAwaitingHostPaymentConfirmation,
+  isBookedStay,
+} from '@/lib/inquiry-state';
 
 export default function GuestDashboard({ 
   profile, 
@@ -53,6 +60,24 @@ export default function GuestDashboard({
           const statusLabel = getInquiryBadgeLabel(booking);
           const bookingReady = isBookedStay(booking);
           const paymentAwaitingReview = isAwaitingHostPaymentConfirmation(booking);
+          const deadlineState = getInquiryDeadlineState(booking);
+          const deadlineCopy = deadlineState
+            ? (() => {
+                const distance = formatDistanceToNowStrict(new Date(deadlineState.deadlineAt), { addSuffix: true });
+                switch (deadlineState.kind) {
+                  case 'response_due':
+                    return `This enquiry auto-expires ${distance} if the host does not move it forward.`;
+                  case 'payment_due':
+                    return `Payment must complete ${distance} or the approval will expire.`;
+                  case 'confirmation_due':
+                    return `Host confirmation must land ${distance} or this approval will expire.`;
+                  case 'expired':
+                    return `This enquiry expired ${distance}. Any payment hold on the dates has been released.`;
+                  default:
+                    return null;
+                }
+              })()
+            : null;
           return (
             <Card key={booking.id} className="p-0 overflow-hidden flex flex-col">
               <div className="aspect-video bg-surface-container relative">
@@ -81,6 +106,11 @@ export default function GuestDashboard({
                           ? 'Payment proof submitted. The host still needs to confirm it.'
                         : getInquiryResponseText(booking)}
                     </span>
+                    {deadlineCopy && (
+                      <span className="text-[10px] text-outline-variant">
+                        {deadlineCopy}
+                      </span>
+                    )}
                   </div>
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" onClick={() => onChat(booking)}>Message</Button>

@@ -3,10 +3,12 @@ import test from 'node:test';
 
 import {
   bookingOverlapsBlockedDates,
+  computeInquiryExpiresAt,
   computeBookingTotalPrice,
   getInquiryStatusTransitionError,
   getPaymentProofSubmissionError,
   getPaymentStateTransitionError,
+  shouldExpireInquiry,
 } from '../encore/booking/workflow.ts';
 
 test('computeBookingTotalPrice uses nightly pricing only for valid stays', () => {
@@ -56,4 +58,39 @@ test('getPaymentProofSubmissionError only allows payment-step bookings', () => {
   assert.equal(getPaymentProofSubmissionError('APPROVED', 'INITIATED'), null);
   assert.match(getPaymentProofSubmissionError('PENDING', 'UNPAID') || '', /Payment is only available/);
   assert.match(getPaymentProofSubmissionError('APPROVED', 'COMPLETED') || '', /Payment is only available/);
+});
+
+test('workflow computes expiry deadlines for unresolved and approved enquiries', () => {
+  assert.equal(
+    computeInquiryExpiresAt('PENDING', '2026-04-20T10:00:00.000Z'),
+    '2026-04-22T10:00:00.000Z',
+  );
+  assert.equal(
+    computeInquiryExpiresAt('RESPONDED', '2026-04-20T10:00:00.000Z'),
+    '2026-04-22T10:00:00.000Z',
+  );
+  assert.equal(
+    computeInquiryExpiresAt('APPROVED', '2026-04-20T10:00:00.000Z'),
+    '2026-04-21T10:00:00.000Z',
+  );
+  assert.equal(computeInquiryExpiresAt('BOOKED', '2026-04-20T10:00:00.000Z'), null);
+});
+
+test('workflow only expires enquiries once their deadline has actually passed', () => {
+  assert.equal(
+    shouldExpireInquiry('APPROVED', '2026-04-21T10:00:00.000Z', '2026-04-21T09:59:59.000Z'),
+    false,
+  );
+  assert.equal(
+    shouldExpireInquiry('APPROVED', '2026-04-21T10:00:00.000Z', '2026-04-21T10:00:00.000Z'),
+    true,
+  );
+  assert.equal(
+    shouldExpireInquiry('EXPIRED', '2026-04-21T10:00:00.000Z', '2026-04-22T10:00:00.000Z'),
+    false,
+  );
+  assert.equal(
+    shouldExpireInquiry('BOOKED', '2026-04-21T10:00:00.000Z', '2026-04-22T10:00:00.000Z'),
+    false,
+  );
 });

@@ -1,5 +1,8 @@
 import type { InquiryState, PaymentState } from "../shared/domain";
 
+const UNRESOLVED_INQUIRY_EXPIRY_HOURS = 48;
+const APPROVED_INQUIRY_EXPIRY_HOURS = 24;
+
 export function normalizeDateOnly(value: string) {
   return value.slice(0, 10);
 }
@@ -100,6 +103,46 @@ export function getPaymentProofSubmissionError(inquiryState: InquiryState, payme
     return "Payment is only available after approval and while the payment flow is active.";
   }
   return null;
+}
+
+function addHours(referenceIso: string, hours: number) {
+  const reference = new Date(referenceIso);
+  if (Number.isNaN(reference.getTime())) {
+    throw new RangeError(`Invalid inquiry reference timestamp: ${referenceIso}`);
+  }
+
+  reference.setUTCHours(reference.getUTCHours() + hours);
+  return reference.toISOString();
+}
+
+export function computeInquiryExpiresAt(state: InquiryState, referenceIso: string) {
+  if (["PENDING", "VIEWED", "RESPONDED"].includes(state)) {
+    return addHours(referenceIso, UNRESOLVED_INQUIRY_EXPIRY_HOURS);
+  }
+
+  if (state === "APPROVED") {
+    return addHours(referenceIso, APPROVED_INQUIRY_EXPIRY_HOURS);
+  }
+
+  return null;
+}
+
+export function shouldExpireInquiry(state: InquiryState, expiresAt: string | null | undefined, nowIso: string) {
+  if (!expiresAt) {
+    return false;
+  }
+
+  if (!["PENDING", "VIEWED", "RESPONDED", "APPROVED"].includes(state)) {
+    return false;
+  }
+
+  const expiry = new Date(expiresAt);
+  const now = new Date(nowIso);
+  if (Number.isNaN(expiry.getTime()) || Number.isNaN(now.getTime())) {
+    return false;
+  }
+
+  return now.getTime() >= expiry.getTime();
 }
 
 export function getInquiryStateLabel(state: InquiryState) {

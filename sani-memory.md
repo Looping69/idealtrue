@@ -1,5 +1,8 @@
 ## Change Log
 
+- Added server-owned enquiry expiry windows in `encore/booking/workflow.ts` and `encore/booking/api.ts`, enforcing 48-hour unresolved-enquiry expiry, 24-hour approval expiry, automatic `EXPIRED` transitions on reads/mutations, and an hourly expiry cron so stale approvals release their `APPROVED_HOLD` inventory.
+- Updated `src/lib/inquiry-state.ts`, `src/pages/HostEnquiries.tsx`, `src/pages/HostDashboard.tsx`, and `src/pages/GuestDashboard.tsx` so host and guest flows show real response/payment/confirmation deadlines and expired-state copy from the canonical booking state instead of vague UI-only messaging.
+- Added coverage in `tests/booking-workflow.test.ts` and `tests/inquiry-state.test.ts`, and wrote the implementation notes to `docs/superpowers/plans/2026-04-20-enquiry-expiry.md` plus `docs/booking-and-enquiry-workflow.md`.
 - Fixed `src/pages/HostDashboard.tsx` so the enquiry summary card now uses the real host `needs_response` queue instead of a sliced local preview, keeping the dashboard aligned with the enquiry workflow buckets.
 - Added `tests/ui/host-dashboard.test.tsx` to lock the host dashboard metric to the full needs-response count and prevent approved enquiries from inflating that card.
 - Reduced the verified-state `Continue` button in `src/components/KYCModal.tsx` so the success modal uses a much smaller CTA footprint.

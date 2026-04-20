@@ -2,6 +2,7 @@ import type { Booking, InquiryState } from '@/types';
 
 type BookingStateSlice = Pick<Booking, 'inquiryState' | 'paymentState' | 'paymentSubmittedAt' | 'paymentConfirmedAt'>;
 type HostBookingSlice = BookingStateSlice & Pick<Booking, 'createdAt' | 'viewedAt' | 'respondedAt' | 'paymentUnlockedAt' | 'bookedAt' | 'expiresAt'>;
+type BookingDeadlineSlice = BookingStateSlice & Pick<Booking, 'expiresAt'>;
 
 export type HostInquiryBucket =
   | 'needs_response'
@@ -9,6 +10,10 @@ export type HostInquiryBucket =
   | 'payment_review'
   | 'confirmed'
   | 'closed';
+
+export type InquiryDeadlineState =
+  | { kind: 'response_due' | 'payment_due' | 'confirmation_due' | 'expired'; deadlineAt: string }
+  | null;
 
 export function getInquiryDisplayState(booking: BookingStateSlice): InquiryState {
   if (booking.inquiryState === 'APPROVED' && booking.paymentState === 'COMPLETED') {
@@ -90,6 +95,29 @@ export function isAwaitingHostPaymentConfirmation(booking: BookingStateSlice) {
 
 export function isAwaitingGuestPayment(booking: BookingStateSlice) {
   return booking.inquiryState === 'APPROVED' && booking.paymentState === 'INITIATED' && !booking.paymentSubmittedAt;
+}
+
+export function getInquiryDeadlineState(booking: BookingDeadlineSlice): InquiryDeadlineState {
+  if (!booking.expiresAt) {
+    return null;
+  }
+
+  if (booking.inquiryState === 'EXPIRED') {
+    return { kind: 'expired', deadlineAt: booking.expiresAt };
+  }
+
+  if (isPendingHostDecision(booking)) {
+    return { kind: 'response_due', deadlineAt: booking.expiresAt };
+  }
+
+  if (booking.inquiryState === 'APPROVED' && booking.paymentState === 'INITIATED') {
+    return {
+      kind: booking.paymentSubmittedAt ? 'confirmation_due' : 'payment_due',
+      deadlineAt: booking.expiresAt,
+    };
+  }
+
+  return null;
 }
 
 export function getHostInquiryBucket(booking: HostBookingSlice): HostInquiryBucket {
