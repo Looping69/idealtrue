@@ -4,13 +4,13 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar, MapPin, Shield } from 'lucide-react';
-import { format, formatDistanceToNowStrict } from 'date-fns';
+import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { formatRand } from '@/lib/currency';
 import {
   canGuestPay,
   getInquiryBadgeLabel,
-  getInquiryDeadlineState,
+  getGuestInquiryDeadlineText,
   getGuestPaymentStateText,
   isAwaitingHostPaymentConfirmation,
   isBookedStay,
@@ -62,24 +62,7 @@ export default function GuestDashboard({
           const paymentAwaitingReview = isAwaitingHostPaymentConfirmation(booking);
           const breakageDeposit = booking.breakageDeposit ?? 0;
           const fullGuestExposure = booking.totalPrice + breakageDeposit;
-          const deadlineState = getInquiryDeadlineState(booking);
-          const deadlineCopy = deadlineState
-            ? (() => {
-                const distance = formatDistanceToNowStrict(new Date(deadlineState.deadlineAt), { addSuffix: true });
-                switch (deadlineState.kind) {
-                  case 'response_due':
-                    return `This enquiry auto-expires ${distance} if the host does not move it forward.`;
-                  case 'payment_due':
-                    return `Payment must complete ${distance} or the approval will expire.`;
-                  case 'confirmation_due':
-                    return `Host confirmation must land ${distance} or this approval will expire.`;
-                  case 'expired':
-                    return `This enquiry expired ${distance}. Any payment hold on the dates has been released.`;
-                  default:
-                    return null;
-                }
-              })()
-            : null;
+          const deadlineCopy = getGuestInquiryDeadlineText(booking);
           return (
             <Card key={booking.id} className="p-0 overflow-hidden flex flex-col">
               <div className="aspect-video bg-surface-container relative">

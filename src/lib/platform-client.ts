@@ -1,6 +1,14 @@
 import { encoreRequest } from './encore-client';
 import type { SerializedImageAsset } from './media-client';
-import type { Booking, Listing, ListingAvailabilityManualBlockInput, ListingAvailabilitySummary, Referral, Review } from '@/types';
+import type {
+  Booking,
+  InquiryDeclineReason,
+  Listing,
+  ListingAvailabilityManualBlockInput,
+  ListingAvailabilitySummary,
+  Referral,
+  Review,
+} from '@/types';
 import {
   mapEncoreBooking,
   mapEncoreListing,
@@ -150,12 +158,24 @@ export async function createBooking(params: {
   return mapEncoreBooking(response.booking);
 }
 
-export async function updateBookingStatus(id: string, status: 'VIEWED' | 'RESPONDED' | 'APPROVED' | 'DECLINED' | 'EXPIRED' | 'BOOKED') {
+export async function updateBookingStatus(
+  id: string,
+  status: 'VIEWED' | 'RESPONDED' | 'APPROVED' | 'DECLINED' | 'EXPIRED' | 'BOOKED',
+  options?: {
+    declineReason?: InquiryDeclineReason | null;
+    declineReasonNote?: string | null;
+  },
+) {
   const response = await encoreRequest<{ booking: EncoreBooking }>(
     `/bookings/${id}/status`,
     {
       method: 'PATCH',
-      body: JSON.stringify({ id, status }),
+      body: JSON.stringify({
+        id,
+        status,
+        declineReason: options?.declineReason ?? null,
+        declineReasonNote: options?.declineReasonNote ?? null,
+      }),
     },
     { auth: true },
   );

@@ -41,7 +41,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { formatRand } from '@/lib/currency';
-import { getInquiryBadgeLabel, isBookedStay } from '@/lib/inquiry-state';
+import { getInquiryBadgeLabel, getInquiryDeclineReasonDetail, isBookedStay } from '@/lib/inquiry-state';
 import type {
   AdminHostBillingAccount,
   Booking,
@@ -730,9 +730,16 @@ export function EnquiriesSection({
                     <td className="px-6 py-4"><p className="text-xs text-slate-500">{new Date(booking.createdAt).toLocaleString()}</p></td>
                     <td className="px-6 py-4"><p className="text-sm font-bold">{formatRand(booking.totalPrice)}</p></td>
                     <td className="px-6 py-4 text-right">
-                      <Badge variant={isBookedStay(booking) ? 'success' : booking.inquiryState === 'PENDING' ? 'warning' : 'neutral'} className="text-[10px] uppercase">
-                        {getInquiryBadgeLabel(booking)}
-                      </Badge>
+                      <div className="space-y-1">
+                        <Badge variant={isBookedStay(booking) ? 'success' : booking.inquiryState === 'PENDING' ? 'warning' : 'neutral'} className="text-[10px] uppercase">
+                          {getInquiryBadgeLabel(booking)}
+                        </Badge>
+                        {booking.inquiryState === 'DECLINED' && getInquiryDeclineReasonDetail(booking) ? (
+                          <p className="max-w-[240px] text-xs text-slate-500">
+                            {getInquiryDeclineReasonDetail(booking)}
+                          </p>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 );

@@ -6,6 +6,12 @@ export type AccountStatus = 'active' | 'suspended' | 'deactivated';
 export type HostBillingSource = 'none' | 'voucher' | 'paid';
 export type HostBillingStatus = 'inactive' | 'active' | 'greylisted';
 export type HostBillingNextAction = 'redeem_voucher' | 'add_card' | 'choose_plan' | 'greylist' | 'none';
+export type InquiryDeclineReason =
+  | 'DATES_UNAVAILABLE'
+  | 'GUEST_COUNT_NOT_SUPPORTED'
+  | 'BOOKING_REQUIREMENTS_NOT_MET'
+  | 'HOST_UNAVAILABLE'
+  | 'OTHER';
 export type InquiryState = 'PENDING' | 'VIEWED' | 'RESPONDED' | 'APPROVED' | 'DECLINED' | 'EXPIRED' | 'BOOKED';
 export type PaymentState = 'UNPAID' | 'INITIATED' | 'COMPLETED' | 'FAILED';
 export type AvailabilityBlockSource = 'MANUAL' | 'APPROVED_HOLD' | 'BOOKED';
@@ -160,6 +166,8 @@ export interface Booking {
   paymentInstructions?: string | null;
   paymentReference?: string | null;
   paymentProofUrl?: string | null;
+  declineReason?: InquiryDeclineReason | null;
+  declineReasonNote?: string | null;
   viewedAt?: string | null;
   respondedAt?: string | null;
   paymentUnlockedAt?: string | null;

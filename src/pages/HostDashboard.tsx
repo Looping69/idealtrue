@@ -21,6 +21,7 @@ import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
+import InquiryDeclineDialog from '@/components/InquiryDeclineDialog';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { toast } from 'sonner';
 import { updateBookingStatus } from '@/lib/platform-client';
@@ -29,6 +30,7 @@ import { formatRand } from '@/lib/currency';
 import { getHostBillingTimelinePresentation } from '@/lib/host-billing-ui';
 import {
   getInquiryBadgeLabel,
+  getInquiryDeclineReasonDetail,
   getInquiryDeadlineState,
   getInquiryDeadlineUrgency,
   groupHostInquiries,
@@ -62,6 +64,7 @@ export default function HostDashboard({
     expiryYear: '',
   });
   const [savingBillingCard, setSavingBillingCard] = useState(false);
+  const [decliningBooking, setDecliningBooking] = useState<Booking | null>(null);
 
   useEffect(() => {
     setLocalBookings(bookings);
@@ -179,6 +182,32 @@ export default function HostDashboard({
 
   const awaitingGuestPaymentTone = getApprovedHoldCardTone(awaitingGuestPaymentBookings);
   const paymentReviewTone = getApprovedHoldCardTone(paymentReviewBookings);
+
+  async function handleDeclineBooking(payload: {
+    declineReason: Booking['declineReason'];
+    declineReasonNote?: string | null;
+  }) {
+    if (!decliningBooking || !payload.declineReason) {
+      return;
+    }
+
+    try {
+      const updatedBooking = await updateBookingStatus(decliningBooking.id, 'DECLINED', payload);
+      setLocalBookings((current) => current.map((item) => item.id === decliningBooking.id ? updatedBooking : item));
+      onBookingUpdated(updatedBooking);
+      navigate('/host/enquiries');
+
+      toast.info(
+        getInquiryDeclineReasonDetail(updatedBooking)
+          ? `Inquiry declined: ${getInquiryDeclineReasonDetail(updatedBooking)}.`
+          : 'Inquiry declined.',
+      );
+      setDecliningBooking(null);
+    } catch (error) {
+      console.error('Failed to decline inquiry:', error);
+      toast.error('Failed to decline inquiry.');
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -474,19 +503,7 @@ export default function HostDashboard({
                             Approve
                           </button>
                           <button 
-                            onClick={async () => {
-                              try {
-                                const updatedBooking = await updateBookingStatus(booking.id, 'DECLINED');
-                                setLocalBookings((current) => current.map((item) => item.id === booking.id ? updatedBooking : item));
-                                onBookingUpdated(updatedBooking);
-                                navigate('/host/enquiries');
-
-                                toast.info('Inquiry declined.');
-                              } catch (error) {
-                                console.error('Failed to decline inquiry:', error);
-                                toast.error('Failed to decline inquiry.');
-                              }
-                            }}
+                            onClick={() => setDecliningBooking(booking)}
                             className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
                           >
                             Decline
@@ -655,6 +672,13 @@ export default function HostDashboard({
           ) : null}
         </Card>
       </div>
+
+      <InquiryDeclineDialog
+        open={!!decliningBooking}
+        bookingLabel={decliningBooking ? `the enquiry for ${listings.find((item) => item.id === decliningBooking.listingId)?.title || 'this stay'}` : 'this enquiry'}
+        onClose={() => setDecliningBooking(null)}
+        onConfirm={handleDeclineBooking}
+      />
 
     </div>
   );

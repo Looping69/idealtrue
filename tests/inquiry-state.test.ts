@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  getGuestInquiryDeadlineText,
   getGuestPaymentStateText,
+  getHostInquiryDeadlineText,
   getInquiryDeadlineUrgency,
   getHostInquiryBucket,
   getHostInquirySortTimestamp,
@@ -264,5 +266,87 @@ test('guest payment state copy stays explicit across payment workflow steps', ()
       paymentConfirmedAt: '2026-04-20T16:00:00.000Z',
     }),
     'Payment confirmed. Your stay is booked.',
+  );
+
+  assert.equal(
+    getGuestPaymentStateText({
+      inquiryState: 'APPROVED',
+      paymentState: 'FAILED',
+      paymentSubmittedAt: '2026-04-20T15:00:00.000Z',
+      paymentConfirmedAt: null,
+    }),
+    'Payment failed. Retry with a new proof submission to keep the stay moving.',
+  );
+
+  assert.equal(
+    getGuestPaymentStateText({
+      inquiryState: 'DECLINED',
+      paymentState: 'UNPAID',
+      paymentSubmittedAt: null,
+      paymentConfirmedAt: null,
+      declineReason: 'HOST_UNAVAILABLE',
+      declineReasonNote: 'The host cannot support these arrival dates.',
+    }),
+    'This inquiry was declined: The host cannot support these arrival dates.',
+  );
+});
+
+test('shared deadline copy stays operationally explicit for host and guest cards', () => {
+  const now = new Date('2026-04-21T12:00:00.000Z');
+
+  assert.equal(
+    getHostInquiryDeadlineText(
+      {
+        inquiryState: 'APPROVED',
+        paymentState: 'INITIATED',
+        paymentSubmittedAt: null,
+        paymentConfirmedAt: null,
+        expiresAt: '2026-04-22T10:00:00.000Z',
+      },
+      now,
+    ),
+    'Payment window closes in 22 hours. The approval hold releases if payment is not completed in time.',
+  );
+
+  assert.equal(
+    getGuestInquiryDeadlineText(
+      {
+        inquiryState: 'APPROVED',
+        paymentState: 'INITIATED',
+        paymentSubmittedAt: null,
+        paymentConfirmedAt: null,
+        expiresAt: '2026-04-22T10:00:00.000Z',
+      },
+      now,
+    ),
+    'Payment window closes in 22 hours. Submit proof before then or the approval hold releases.',
+  );
+
+  assert.equal(
+    getGuestInquiryDeadlineText(
+      {
+        inquiryState: 'APPROVED',
+        paymentState: 'INITIATED',
+        paymentSubmittedAt: '2026-04-21T08:00:00.000Z',
+        paymentConfirmedAt: null,
+        expiresAt: '2026-04-21T18:00:00.000Z',
+      },
+      now,
+    ),
+    'Host confirmation is due in 6 hours. If the host does not confirm in time, the approval hold releases.',
+  );
+
+  assert.equal(
+    getGuestInquiryDeadlineText(
+      {
+        inquiryState: 'EXPIRED',
+        paymentState: 'INITIATED',
+        paymentSubmittedAt: null,
+        paymentConfirmedAt: null,
+        expiresAt: '2026-04-21T10:00:00.000Z',
+      },
+      now,
+    ),
+    'Expired 2 hours ago. Any approval hold on these nights has already been released.',
   );
 });

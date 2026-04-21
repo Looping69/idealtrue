@@ -17,6 +17,8 @@ type InquiryEventPayload = {
   inquiryState: "PENDING" | "VIEWED" | "RESPONDED" | "APPROVED" | "DECLINED" | "EXPIRED" | "BOOKED";
   paymentState: "UNPAID" | "INITIATED" | "COMPLETED" | "FAILED";
   paymentSubmittedAt?: string | null;
+  declineReason?: "DATES_UNAVAILABLE" | "GUEST_COUNT_NOT_SUPPORTED" | "BOOKING_REQUIREMENTS_NOT_MET" | "HOST_UNAVAILABLE" | "OTHER" | null;
+  declineReasonNote?: string | null;
   actor: "host" | "system" | "guest";
 };
 
@@ -47,6 +49,8 @@ export const inquiryNotificationProjection = new Subscription(
             guestId: payload.guestId,
             inquiryState: payload.inquiryState as "VIEWED" | "RESPONDED" | "APPROVED" | "DECLINED" | "EXPIRED" | "BOOKED",
             listingTitle,
+            declineReason: payload.declineReason,
+            declineReasonNote: payload.declineReasonNote,
           });
         }
         return;

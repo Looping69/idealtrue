@@ -87,6 +87,38 @@ function makeBooking(id: string, overrides: Partial<Booking> = {}): Booking {
 }
 
 describe('GuestDashboard', () => {
+  it('shows explicit guest exposure and payment window messaging on approved enquiries', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-21T12:00:00.000Z'));
+    try {
+      render(
+        <MemoryRouter>
+          <GuestDashboard
+            profile={profile}
+            bookings={[makeBooking('booking-1')]}
+            listings={[listing]}
+            onReview={vi.fn()}
+            onExplore={vi.fn()}
+            onChat={vi.fn()}
+            onSubmitPaymentProof={vi.fn()}
+          />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByText('Stay value')).toBeInTheDocument();
+      expect(screen.getByText('Breakage deposit')).toBeInTheDocument();
+      expect(screen.getByText('Full guest exposure')).toBeInTheDocument();
+      expect(screen.getByText('R3,600')).toBeInTheDocument();
+      expect(screen.getByText('R500')).toBeInTheDocument();
+      expect(screen.getByText('R4,100')).toBeInTheDocument();
+      expect(screen.getByText('Payment state')).toBeInTheDocument();
+      expect(screen.getByText('Payment unlocked. Submit payment proof before the approval window closes.')).toBeInTheDocument();
+      expect(screen.getByText('Payment window closes in 22 hours. Submit proof before then or the approval hold releases.')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('shows stay value, deposit, and full guest exposure on the stay card', () => {
     render(
       <MemoryRouter>
@@ -113,14 +145,49 @@ describe('GuestDashboard', () => {
   });
 
   it('shows under-review payment copy with the payment reference on the card itself', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-21T12:00:00.000Z'));
+    try {
+      render(
+        <MemoryRouter>
+          <GuestDashboard
+            profile={profile}
+            bookings={[
+              makeBooking('booking-review', {
+                paymentSubmittedAt: '2026-04-21T08:00:00.000Z',
+                paymentReference: 'IDEAL-123',
+                expiresAt: '2026-04-21T18:00:00.000Z',
+              }),
+            ]}
+            listings={[listing]}
+            onReview={vi.fn()}
+            onExplore={vi.fn()}
+            onChat={vi.fn()}
+            onSubmitPaymentProof={vi.fn()}
+          />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByText('Payment proof submitted. Host confirmation is still pending.')).toBeInTheDocument();
+      expect(screen.getByText('Payment reference:')).toBeInTheDocument();
+      expect(screen.getByText('IDEAL-123')).toBeInTheDocument();
+      expect(screen.getByText('Host confirmation is due in 6 hours. If the host does not confirm in time, the approval hold releases.')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows the persisted decline reason on declined enquiries instead of generic copy', () => {
     render(
       <MemoryRouter>
         <GuestDashboard
           profile={profile}
           bookings={[
-            makeBooking('booking-review', {
-              paymentSubmittedAt: '2026-04-21T08:00:00.000Z',
-              paymentReference: 'IDEAL-123',
+            makeBooking('booking-declined', {
+              inquiryState: 'DECLINED',
+              paymentState: 'UNPAID',
+              declineReason: 'HOST_UNAVAILABLE',
+              declineReasonNote: 'The host cannot support these arrival dates.',
             }),
           ]}
           listings={[listing]}
@@ -132,9 +199,6 @@ describe('GuestDashboard', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText('Payment proof submitted. Host confirmation is still pending.')).toBeInTheDocument();
-    expect(screen.getByText('Payment reference:')).toBeInTheDocument();
-    expect(screen.getByText('IDEAL-123')).toBeInTheDocument();
-    expect(screen.getByText(/Host confirmation must land/)).toBeInTheDocument();
+    expect(screen.getByText('This inquiry was declined: The host cannot support these arrival dates.')).toBeInTheDocument();
   });
 });

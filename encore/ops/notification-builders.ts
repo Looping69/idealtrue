@@ -1,3 +1,31 @@
+type InquiryDeclineReason =
+  | "DATES_UNAVAILABLE"
+  | "GUEST_COUNT_NOT_SUPPORTED"
+  | "BOOKING_REQUIREMENTS_NOT_MET"
+  | "HOST_UNAVAILABLE"
+  | "OTHER";
+
+function getInquiryDeclineReasonLabel(reason: InquiryDeclineReason | null | undefined) {
+  switch (reason) {
+    case "DATES_UNAVAILABLE":
+      return "dates are no longer available";
+    case "GUEST_COUNT_NOT_SUPPORTED":
+      return "the requested guest count is not a fit for this property";
+    case "BOOKING_REQUIREMENTS_NOT_MET":
+      return "the booking requirements were not met";
+    case "HOST_UNAVAILABLE":
+      return "the host is unavailable for those dates";
+    case "OTHER":
+      return "the host could not accommodate this request";
+    default:
+      return null;
+  }
+}
+
+function formatDeclineNotificationDetail(detail: string | null) {
+  return detail?.trim().replace(/[.!\s]+$/, "") ?? null;
+}
+
 export type NotificationType = "info" | "warning" | "success" | "error";
 
 export interface NotificationInput {
@@ -26,12 +54,19 @@ export function buildInquiryStatusChangedNotification(params: {
   guestId: string;
   inquiryState: "VIEWED" | "RESPONDED" | "APPROVED" | "DECLINED" | "EXPIRED" | "BOOKED";
   listingTitle: string;
+  declineReason?: InquiryDeclineReason | null;
+  declineReasonNote?: string | null;
 }): NotificationInput {
+  const declineDetail = formatDeclineNotificationDetail(
+    params.declineReasonNote?.trim() || getInquiryDeclineReasonLabel(params.declineReason) || null,
+  );
   const statusMessage = {
     VIEWED: `Your inquiry for ${params.listingTitle} has been viewed.`,
     RESPONDED: `The host responded to your inquiry for ${params.listingTitle}.`,
     APPROVED: `${params.listingTitle} is ready for payment.`,
-    DECLINED: `Your inquiry for ${params.listingTitle} was declined.`,
+    DECLINED: declineDetail
+      ? `Your inquiry for ${params.listingTitle} was declined because ${declineDetail}.`
+      : `Your inquiry for ${params.listingTitle} was declined.`,
     EXPIRED: `Your inquiry for ${params.listingTitle} expired before it was confirmed.`,
     BOOKED: `Your stay at ${params.listingTitle} is confirmed.`,
   }[params.inquiryState];

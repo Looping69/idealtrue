@@ -337,10 +337,50 @@ test('updateBookingStatus sends the booking status patch to the correct endpoint
   assert.deepEqual(JSON.parse(String(fetchCalls[0]?.init?.body)), {
     id: 'booking-1',
     status: 'APPROVED',
+    declineReason: null,
+    declineReasonNote: null,
   });
   assert.equal(booking.inquiryState, 'APPROVED');
   assert.equal(booking.paymentState, 'INITIATED');
   assert.equal(booking.paymentInstructions, 'Pay within 24 hours.');
+});
+
+test('updateBookingStatus sends decline reason metadata when declining an enquiry', async () => {
+  installFetch(() =>
+    createJsonResponse({
+      booking: {
+        id: 'booking-2',
+        listingId: 'listing-1',
+        guestId: 'guest-1',
+        hostId: 'host-1',
+        checkIn: '2026-04-10',
+        checkOut: '2026-04-12',
+        adults: 2,
+        children: 1,
+        totalPrice: 3200,
+        inquiryState: 'DECLINED',
+        paymentState: 'UNPAID',
+        declineReason: 'HOST_UNAVAILABLE',
+        declineReasonNote: 'We cannot support late check-in for these dates.',
+        createdAt: '2026-03-30T09:00:00.000Z',
+        updatedAt: '2026-03-30T09:05:00.000Z',
+      },
+    }),
+  );
+
+  const booking = await updateBookingStatus('booking-2', 'DECLINED', {
+    declineReason: 'HOST_UNAVAILABLE',
+    declineReasonNote: 'We cannot support late check-in for these dates.',
+  });
+
+  assert.deepEqual(JSON.parse(String(fetchCalls.at(-1)?.init?.body)), {
+    id: 'booking-2',
+    status: 'DECLINED',
+    declineReason: 'HOST_UNAVAILABLE',
+    declineReasonNote: 'We cannot support late check-in for these dates.',
+  });
+  assert.equal(booking.declineReason, 'HOST_UNAVAILABLE');
+  assert.equal(booking.declineReasonNote, 'We cannot support late check-in for these dates.');
 });
 
 test('submitPaymentProof posts the guest payment proof to the booking payment endpoint', async () => {

@@ -11,7 +11,13 @@ import {
   replaceBookingAvailabilityBlocks,
 } from "../catalog/api";
 import { identityDB } from "../identity/db";
-import type { BookingRecord, InquiryLedgerEventRecord, InquiryState, PaymentState } from "../shared/domain";
+import type {
+  BookingRecord,
+  InquiryDeclineReason,
+  InquiryLedgerEventRecord,
+  InquiryState,
+  PaymentState,
+} from "../shared/domain";
 import {
   bookingOverlapsBlockedDates,
   computeInquiryExpiresAt,
@@ -50,6 +56,8 @@ type BookingRow = {
   payment_reference: string | null;
   payment_proof_key: string | null;
   payment_proof_url: string | null;
+  decline_reason: InquiryDeclineReason | null;
+  decline_reason_note: string | null;
   viewed_at: string | null;
   responded_at: string | null;
   payment_unlocked_at: string | null;
@@ -92,6 +100,8 @@ interface CreateBookingParams {
 interface UpdateBookingStatusParams {
   id: string;
   status: InquiryState;
+  declineReason?: InquiryDeclineReason | null;
+  declineReasonNote?: string | null;
 }
 
 interface SubmitPaymentProofParams {
@@ -126,6 +136,8 @@ function mapBooking(row: BookingRow): BookingRecord {
     paymentReference: row.payment_reference,
     paymentProofKey: row.payment_proof_key,
     paymentProofUrl: row.payment_proof_url,
+    declineReason: row.decline_reason,
+    declineReasonNote: row.decline_reason_note,
     viewedAt: row.viewed_at,
     respondedAt: row.responded_at,
     paymentUnlockedAt: row.payment_unlocked_at,
@@ -155,6 +167,14 @@ const ALLOWED_PAYMENT_PROOF_CONTENT_TYPES = new Set([
   "image/jpeg",
   "image/png",
   "image/webp",
+]);
+
+const INQUIRY_DECLINE_REASONS = new Set<InquiryDeclineReason>([
+  "DATES_UNAVAILABLE",
+  "GUEST_COUNT_NOT_SUPPORTED",
+  "BOOKING_REQUIREMENTS_NOT_MET",
+  "HOST_UNAVAILABLE",
+  "OTHER",
 ]);
 
 function sanitizePaymentProofFilename(filename: string) {
@@ -321,6 +341,8 @@ async function publishInquiryEvent(params: {
       inquiryState: params.inquiry.inquiry_state,
       paymentState: params.inquiry.payment_state,
       paymentSubmittedAt: params.inquiry.payment_submitted_at,
+      declineReason: params.inquiry.decline_reason,
+      declineReasonNote: params.inquiry.decline_reason_note,
       actor: params.actor,
     }),
   });
@@ -336,6 +358,8 @@ async function persistInquiryStateChange(params: {
   respondedAt?: string | null;
   paymentUnlockedAt?: string | null;
   paymentReference?: string | null;
+  declineReason?: InquiryDeclineReason | null;
+  declineReasonNote?: string | null;
   expiresAt?: string | null;
   bookedAt?: string | null;
 }) {
@@ -351,6 +375,9 @@ async function persistInquiryStateChange(params: {
     responded_at: params.respondedAt !== undefined ? params.respondedAt : params.inquiry.responded_at,
     payment_unlocked_at: params.paymentUnlockedAt !== undefined ? params.paymentUnlockedAt : params.inquiry.payment_unlocked_at,
     payment_reference: params.paymentReference !== undefined ? params.paymentReference : params.inquiry.payment_reference,
+    decline_reason: params.declineReason !== undefined ? params.declineReason : params.inquiry.decline_reason,
+    decline_reason_note:
+      params.declineReasonNote !== undefined ? params.declineReasonNote : params.inquiry.decline_reason_note,
     expires_at: params.expiresAt !== undefined ? params.expiresAt : params.inquiry.expires_at,
     booked_at: params.bookedAt !== undefined ? params.bookedAt : params.inquiry.booked_at,
     updated_at: params.now,
@@ -364,6 +391,8 @@ async function persistInquiryStateChange(params: {
         responded_at = ${nextRow.responded_at},
         payment_unlocked_at = ${nextRow.payment_unlocked_at},
         payment_reference = ${nextRow.payment_reference},
+        decline_reason = ${nextRow.decline_reason},
+        decline_reason_note = ${nextRow.decline_reason_note},
         expires_at = ${nextRow.expires_at},
         booked_at = ${nextRow.booked_at},
         updated_at = ${nextRow.updated_at}
@@ -376,7 +405,11 @@ async function persistInquiryStateChange(params: {
     fromState: params.inquiry.inquiry_state,
     toState: nextRow.inquiry_state,
     actor: params.actor,
-    metadata: { paymentState: nextRow.payment_state },
+    metadata: {
+      paymentState: nextRow.payment_state,
+      declineReason: nextRow.decline_reason,
+      declineReasonNote: nextRow.decline_reason_note,
+    },
     timestamp: params.now,
   });
 
@@ -777,6 +810,21 @@ export const updateBookingStatus = api<UpdateBookingStatusParams, { booking: Boo
     if (transitionError) {
       throw APIError.failedPrecondition(transitionError);
     }
+    const declineReason = nextStatus === "DECLINED" ? params.declineReason ?? null : null;
+    const declineReasonNote = nextStatus === "DECLINED" ? params.declineReasonNote?.trim() ?? "" : "";
+
+    if (nextStatus === "DECLINED") {
+      if (!declineReason || !INQUIRY_DECLINE_REASONS.has(declineReason)) {
+        throw APIError.invalidArgument("A valid decline reason is required when declining an inquiry.");
+      }
+      if (declineReason === "OTHER" && !declineReasonNote) {
+        throw APIError.invalidArgument("Add a short note when selecting Other as the decline reason.");
+      }
+      if (declineReasonNote.length > 280) {
+        throw APIError.invalidArgument("Decline note must stay under 280 characters.");
+      }
+    }
+
     const hostPaymentDetails = await getHostPaymentDetails(existing.host_id);
     const paymentReference =
       nextStatus === "APPROVED"
@@ -800,6 +848,8 @@ export const updateBookingStatus = api<UpdateBookingStatusParams, { booking: Boo
       respondedAt: nextStatus === "RESPONDED" ? now : existing.responded_at,
       paymentUnlockedAt: nextStatus === "APPROVED" ? now : existing.payment_unlocked_at,
       paymentReference,
+      declineReason,
+      declineReasonNote: declineReasonNote || null,
       expiresAt: computeInquiryExpiresAt(nextStatus, now),
     });
 

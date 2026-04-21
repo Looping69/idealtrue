@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+import InquiryDeclineDialog from '@/components/InquiryDeclineDialog';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -21,7 +22,8 @@ import { Booking, Listing } from '../types';
 import { formatRand } from '@/lib/currency';
 import {
   getInquiryBadgeLabel,
-  getInquiryDeadlineState,
+  getInquiryDeclineReasonDetail,
+  getHostInquiryDeadlineText,
   groupHostInquiries,
   isAwaitingGuestPayment,
 } from '@/lib/inquiry-state';
@@ -47,6 +49,7 @@ export default function HostEnquiries({
   onBookingUpdated: (booking: Booking) => void;
 }) {
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
+  const [decliningBooking, setDecliningBooking] = useState<Booking | null>(null);
 
   const groupedBookings = useMemo(() => groupHostInquiries(bookings), [bookings]);
 
@@ -99,6 +102,32 @@ export default function HostEnquiries({
     }
   };
 
+  const handleDeclineBooking = async (payload: {
+    declineReason: Booking['declineReason'];
+    declineReasonNote?: string | null;
+  }) => {
+    if (!decliningBooking || !payload.declineReason) {
+      return;
+    }
+
+    setIsProcessing(decliningBooking.id);
+    try {
+      const updatedBooking = await updateBookingStatus(decliningBooking.id, 'DECLINED', payload);
+      onBookingUpdated(updatedBooking);
+      toast.info(
+        getInquiryDeclineReasonDetail(updatedBooking)
+          ? `Inquiry declined: ${getInquiryDeclineReasonDetail(updatedBooking)}.`
+          : 'Inquiry declined.',
+      );
+      setDecliningBooking(null);
+    } catch (error) {
+      console.error('Error declining booking:', error);
+      toast.error('Failed to decline inquiry.');
+    } finally {
+      setIsProcessing(null);
+    }
+  };
+
   const handlePaymentConfirmation = async (booking: Booking) => {
     setIsProcessing(booking.id);
     try {
@@ -135,24 +164,7 @@ export default function HostEnquiries({
   ) => {
     const listing = listings.find((l) => l.id === booking.listingId);
     const statusLabel = getInquiryBadgeLabel(booking);
-    const deadlineState = getInquiryDeadlineState(booking);
-    const deadlineCopy = deadlineState
-      ? (() => {
-          const distance = formatDistanceToNowStrict(new Date(deadlineState.deadlineAt), { addSuffix: true });
-          switch (deadlineState.kind) {
-            case 'response_due':
-              return `Auto-expires ${distance} if this enquiry stays unresolved.`;
-            case 'payment_due':
-              return `Payment window closes ${distance}. The approval hold releases if payment is not completed in time.`;
-            case 'confirmation_due':
-              return `Approval window closes ${distance}. Confirm the payment before the hold is released.`;
-            case 'expired':
-              return `Expired ${distance}. Any approval hold on these nights has already been released.`;
-            default:
-              return null;
-          }
-        })()
-      : null;
+    const deadlineCopy = getHostInquiryDeadlineText(booking);
     const totalExposure = booking.totalPrice + (booking.breakageDeposit ?? 0);
     const lastTouchAt =
       booking.paymentSubmittedAt ??
@@ -228,6 +240,12 @@ export default function HostEnquiries({
                     : 'No host action logged yet.'}
               </p>
               {deadlineCopy && <p>{deadlineCopy}</p>}
+              {booking.inquiryState === 'DECLINED' && getInquiryDeclineReasonDetail(booking) && (
+                <p>
+                  Decline reason:{' '}
+                  <span className="font-medium text-on-surface">{getInquiryDeclineReasonDetail(booking)}</span>
+                </p>
+              )}
               {isAwaitingGuestPayment(booking) && (
                 <p>Guest payment is unlocked, but proof has not been submitted yet.</p>
               )}
@@ -280,7 +298,7 @@ export default function HostEnquiries({
                 <Button
                   variant="outline"
                   className="w-full lg:w-auto text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                  onClick={() => handleBookingAction(booking, 'DECLINED')}
+                  onClick={() => setDecliningBooking(booking)}
                   disabled={isProcessing === booking.id}
                 >
                   <XCircle className="w-4 h-4 mr-2" /> Decline
@@ -392,6 +410,14 @@ export default function HostEnquiries({
             renderEmptyState(Ban, 'No closed enquiries', 'Declined and expired enquiries will remain visible here for audit context.')}
         </section>
       </div>
+
+      <InquiryDeclineDialog
+        open={!!decliningBooking}
+        bookingLabel={decliningBooking ? `the enquiry for ${listings.find((listing) => listing.id === decliningBooking.listingId)?.title || 'this stay'}` : 'this enquiry'}
+        isSubmitting={!!decliningBooking && isProcessing === decliningBooking.id}
+        onClose={() => setDecliningBooking(null)}
+        onConfirm={handleDeclineBooking}
+      />
     </div>
   );
 }

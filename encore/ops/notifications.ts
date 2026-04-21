@@ -78,6 +78,14 @@ export async function notifyInquiryStatusChanged(params: {
   guestId: string;
   inquiryState: "VIEWED" | "RESPONDED" | "APPROVED" | "DECLINED" | "EXPIRED" | "BOOKED";
   listingTitle: string;
+  declineReason?:
+    | "DATES_UNAVAILABLE"
+    | "GUEST_COUNT_NOT_SUPPORTED"
+    | "BOOKING_REQUIREMENTS_NOT_MET"
+    | "HOST_UNAVAILABLE"
+    | "OTHER"
+    | null;
+  declineReasonNote?: string | null;
 }) {
   return createNotification(buildInquiryStatusChangedNotification(params));
 }

@@ -66,10 +66,11 @@ test('booking status builder distinguishes success and warning states', () => {
       guestId: 'guest-1',
       inquiryState: 'DECLINED',
       listingTitle: 'Sea Point Stay',
+      declineReason: 'DATES_UNAVAILABLE',
     }),
     {
       title: 'Inquiry updated',
-      message: 'Your inquiry for Sea Point Stay was declined.',
+      message: 'Your inquiry for Sea Point Stay was declined because dates are no longer available.',
       type: 'warning',
       target: 'guest-1',
       actionPath: '/guest',

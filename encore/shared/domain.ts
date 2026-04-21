@@ -5,6 +5,12 @@ export type ReferralTier = "bronze" | "silver" | "gold";
 export type AccountStatus = "active" | "suspended" | "deactivated";
 export type ListingStatus = "draft" | "pending" | "active" | "inactive" | "rejected" | "archived";
 export type AvailabilityBlockSource = "MANUAL" | "APPROVED_HOLD" | "BOOKED";
+export type InquiryDeclineReason =
+  | "DATES_UNAVAILABLE"
+  | "GUEST_COUNT_NOT_SUPPORTED"
+  | "BOOKING_REQUIREMENTS_NOT_MET"
+  | "HOST_UNAVAILABLE"
+  | "OTHER";
 export type InquiryState =
   | "PENDING"
   | "VIEWED"
@@ -126,6 +132,8 @@ export interface BookingRecord {
   paymentReference?: string | null;
   paymentProofKey?: string | null;
   paymentProofUrl?: string | null;
+  declineReason?: InquiryDeclineReason | null;
+  declineReasonNote?: string | null;
   viewedAt?: string | null;
   respondedAt?: string | null;
   paymentUnlockedAt?: string | null;
@@ -223,6 +231,8 @@ export type DomainEvent =
         inquiryState: InquiryState;
         paymentState: PaymentState;
         paymentSubmittedAt?: string | null;
+        declineReason?: InquiryDeclineReason | null;
+        declineReasonNote?: string | null;
         actor: "host" | "system" | "guest";
       };
     }

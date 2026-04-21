@@ -1,8 +1,45 @@
-import type { Booking, InquiryState } from '@/types';
+import { formatDistanceStrict } from 'date-fns';
 
-type BookingStateSlice = Pick<Booking, 'inquiryState' | 'paymentState' | 'paymentSubmittedAt' | 'paymentConfirmedAt'>;
+import type { Booking, InquiryDeclineReason, InquiryState } from '@/types';
+
+type BookingStateSlice = Pick<
+  Booking,
+  'inquiryState' | 'paymentState' | 'paymentSubmittedAt' | 'paymentConfirmedAt' | 'declineReason' | 'declineReasonNote'
+>;
 type HostBookingSlice = BookingStateSlice & Pick<Booking, 'createdAt' | 'viewedAt' | 'respondedAt' | 'paymentUnlockedAt' | 'bookedAt' | 'expiresAt'>;
 type BookingDeadlineSlice = BookingStateSlice & Pick<Booking, 'expiresAt'>;
+
+export const inquiryDeclineReasonOptions: Array<{
+  value: InquiryDeclineReason;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: 'DATES_UNAVAILABLE',
+    label: 'Dates no longer available',
+    description: 'Use when the nights are no longer open for this enquiry.',
+  },
+  {
+    value: 'GUEST_COUNT_NOT_SUPPORTED',
+    label: 'Guest count not supported',
+    description: 'Use when the guest mix or occupancy does not fit the property.',
+  },
+  {
+    value: 'BOOKING_REQUIREMENTS_NOT_MET',
+    label: 'Booking requirements not met',
+    description: 'Use when house rules or booking requirements were not met.',
+  },
+  {
+    value: 'HOST_UNAVAILABLE',
+    label: 'Host unavailable',
+    description: 'Use when the host cannot support the stay even if dates looked open.',
+  },
+  {
+    value: 'OTHER',
+    label: 'Other',
+    description: 'Use when another host-side reason applies. Add a short note.',
+  },
+];
 
 export type HostInquiryBucket =
   | 'needs_response'
@@ -70,6 +107,32 @@ export function getInquiryBadgeLabel(booking: BookingStateSlice) {
   }
 }
 
+export function getInquiryDeclineReasonLabel(reason: InquiryDeclineReason | null | undefined) {
+  return inquiryDeclineReasonOptions.find((option) => option.value === reason)?.label ?? null;
+}
+
+export function getInquiryDeclineReasonDetail(booking: Pick<Booking, 'inquiryState' | 'declineReason' | 'declineReasonNote'>) {
+  if (booking.inquiryState !== 'DECLINED') {
+    return null;
+  }
+
+  const note = booking.declineReasonNote?.trim();
+  if (note) {
+    return note;
+  }
+
+  return getInquiryDeclineReasonLabel(booking.declineReason) ?? null;
+}
+
+function formatDeclineReasonSentence(detail: string | null) {
+  if (!detail) {
+    return 'This inquiry was declined';
+  }
+
+  const normalizedDetail = detail.trim().replace(/[.!\s]+$/, '');
+  return `This inquiry was declined: ${normalizedDetail}.`;
+}
+
 export function getInquiryResponseText(booking: BookingStateSlice) {
   if (isAwaitingHostPaymentConfirmation(booking)) {
     return 'Payment proof submitted. Awaiting host confirmation';
@@ -87,7 +150,7 @@ export function getInquiryResponseText(booking: BookingStateSlice) {
     case 'APPROVED':
       return 'Ready for payment';
     case 'DECLINED':
-      return 'This inquiry was declined';
+      return formatDeclineReasonSentence(getInquiryDeclineReasonDetail(booking));
     case 'EXPIRED':
       return 'This inquiry expired';
     case 'BOOKED':
@@ -115,6 +178,54 @@ export function getGuestPaymentStateText(booking: BookingStateSlice) {
   }
 
   return getInquiryResponseText(booking);
+}
+
+export function getHostInquiryDeadlineText(booking: BookingDeadlineSlice, now: Date = new Date()) {
+  const deadlineState = getInquiryDeadlineState(booking);
+  if (!deadlineState) {
+    return null;
+  }
+
+  const distance = formatDistanceStrict(new Date(deadlineState.deadlineAt), now, {
+    addSuffix: true,
+  });
+
+  switch (deadlineState.kind) {
+    case 'response_due':
+      return `Auto-expires ${distance} if this enquiry stays unresolved.`;
+    case 'payment_due':
+      return `Payment window closes ${distance}. The approval hold releases if payment is not completed in time.`;
+    case 'confirmation_due':
+      return `Approval window closes ${distance}. Confirm the payment before the hold is released.`;
+    case 'expired':
+      return `Expired ${distance}. Any approval hold on these nights has already been released.`;
+    default:
+      return null;
+  }
+}
+
+export function getGuestInquiryDeadlineText(booking: BookingDeadlineSlice, now: Date = new Date()) {
+  const deadlineState = getInquiryDeadlineState(booking);
+  if (!deadlineState) {
+    return null;
+  }
+
+  const distance = formatDistanceStrict(new Date(deadlineState.deadlineAt), now, {
+    addSuffix: true,
+  });
+
+  switch (deadlineState.kind) {
+    case 'response_due':
+      return `Host response expires ${distance}. If the host does not move this enquiry forward, the dates release automatically.`;
+    case 'payment_due':
+      return `Payment window closes ${distance}. Submit proof before then or the approval hold releases.`;
+    case 'confirmation_due':
+      return `Host confirmation is due ${distance}. If the host does not confirm in time, the approval hold releases.`;
+    case 'expired':
+      return `Expired ${distance}. Any approval hold on these nights has already been released.`;
+    default:
+      return null;
+  }
 }
 
 export function canGuestPay(booking: BookingStateSlice) {
