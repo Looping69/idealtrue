@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 import { updateBookingStatus } from '@/lib/platform-client';
 import { getMyHostBillingAccount, saveHostBillingCard } from '@/lib/billing-client';
 import { formatRand } from '@/lib/currency';
+import { getHostBillingTimelinePresentation } from '@/lib/host-billing-ui';
 import { getInquiryBadgeLabel, getInquiryDeadlineState, isBookedStay, isPendingHostDecision } from '@/lib/inquiry-state';
 
 export default function HostDashboard({ 
@@ -87,6 +88,15 @@ export default function HostDashboard({
     .reduce((sum, b) => sum + b.totalPrice, 0);
   const isGreylisted = billingAccount?.billingStatus === 'greylisted';
   const isVoucherHost = billingAccount?.billingSource === 'voucher';
+  const billingTimeline = getHostBillingTimelinePresentation(billingAccount);
+  const billingTimelineBadgeVariant =
+    billingTimeline.urgencyTone === 'danger'
+      ? 'danger'
+      : billingTimeline.urgencyTone === 'warning'
+        ? 'warning'
+        : billingTimeline.urgencyTone === 'success'
+          ? 'success'
+          : 'neutral';
 
   return (
     <div className="space-y-8">
@@ -362,28 +372,58 @@ export default function HostDashboard({
               </p>
             </div>
             <div className="rounded-2xl border border-outline-variant bg-surface-container-low p-4">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">Current Cycle</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">Countdown</p>
               <p className="mt-2 text-sm font-bold">
-                {billingAccount?.currentPeriodStart?.slice(0, 10) || 'Not started'} {billingAccount?.currentPeriodEnd ? `to ${billingAccount.currentPeriodEnd.slice(0, 10)}` : ''}
+                {billingTimeline.countdownLabel}
               </p>
-              <p className="mt-1 text-xs text-on-surface-variant">
-                {billingAccount?.inReminderWindow
-                  ? 'Reminder window is active. Add a billing card now.'
-                  : isGreylisted
-                    ? 'This account is currently greylisted for billing follow-up.'
-                    : billingAccount?.currentPeriodEnd
-                      ? `Next billing action lands on ${billingAccount.currentPeriodEnd.slice(0, 10)}.`
-                      : 'Redeem a voucher or choose a paid plan to start a billing cycle.'}
-              </p>
+              <p className="mt-1 text-xs text-on-surface-variant">{billingTimeline.periodLabel}</p>
             </div>
             <div className="rounded-2xl border border-outline-variant bg-surface-container-low p-4">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">Card On File</p>
-              <p className="mt-2 text-sm font-bold">{billingAccount?.cardOnFile ? billingAccount.cardLabel || 'Card saved' : 'Not added'}</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">Urgency</p>
+              <div className="mt-2 flex items-center gap-2">
+                <Badge variant={billingTimelineBadgeVariant}>{billingTimeline.urgencyLabel}</Badge>
+                <span className="text-xs text-on-surface-variant">{billingTimeline.reminderLabel}</span>
+              </div>
+              <p className="mt-3 text-sm font-bold">{billingTimeline.actionLabel}</p>
               <p className="mt-1 text-xs text-on-surface-variant">
-                {billingAccount?.cardOnFile ? 'Billing follow-up is covered.' : 'Voucher hosts need a card on file before the free period ends.'}
+                {billingAccount?.cardOnFile ? 'Billing follow-up is covered.' : 'Saving a billing card clears the voucher follow-up path.'}
               </p>
             </div>
           </div>
+
+          {isVoucherHost ? (
+            <div className="mt-6 rounded-3xl border border-outline-variant bg-surface-container-low p-5">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">Voucher Billing Timeline</p>
+                  <h4 className="mt-2 text-xl font-bold">{billingTimeline.countdownLabel}</h4>
+                  <p className="mt-1 text-sm text-on-surface-variant">{billingTimeline.periodLabel}</p>
+                </div>
+                <Badge variant={billingTimelineBadgeVariant} className="w-fit">
+                  {billingTimeline.urgencyLabel}
+                </Badge>
+              </div>
+              <div className="mt-4 grid gap-4 md:grid-cols-3">
+                <div className="rounded-2xl border border-outline-variant bg-background/70 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">Countdown</p>
+                  <p className="mt-2 text-base font-bold">{billingTimeline.countdownLabel}</p>
+                  <p className="mt-1 text-xs text-on-surface-variant">This is the next billing enforcement checkpoint for voucher hosting.</p>
+                </div>
+                <div className="rounded-2xl border border-outline-variant bg-background/70 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">Urgency</p>
+                  <p className="mt-2 text-base font-bold">{billingTimeline.urgencyLabel}</p>
+                  <p className="mt-1 text-xs text-on-surface-variant">{billingTimeline.reminderLabel}</p>
+                </div>
+                <div className="rounded-2xl border border-outline-variant bg-background/70 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">Required Action</p>
+                  <p className="mt-2 text-base font-bold">{billingTimeline.actionLabel}</p>
+                  <p className="mt-1 text-xs text-on-surface-variant">
+                    {billingAccount?.cardOnFile ? 'No extra billing capture is needed right now.' : 'Use the billing card form below to stop the reminder path.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           {isGreylisted ? (
             <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
