@@ -289,12 +289,17 @@ function canReadUnpublishedListing(auth: AuthData | null, listingHostId: string)
 }
 
 async function isHostGreylisted(hostId: string) {
-  const row = await billingDB.queryRow<{ billing_status: string }>`
-    SELECT billing_status
-    FROM host_billing_accounts
-    WHERE user_id = ${hostId}
-  `;
-  return row?.billing_status === "greylisted";
+  try {
+    const row = await billingDB.queryRow<{ billing_status: string }>`
+      SELECT billing_status
+      FROM host_billing_accounts
+      WHERE user_id = ${hostId}
+    `;
+    return row?.billing_status === "greylisted";
+  } catch (error) {
+    console.warn(`Failed to read host billing status for ${hostId}; allowing listing visibility fallback.`, error);
+    return false;
+  }
 }
 
 async function filterPubliclyVisibleListings(rows: ListingRow[]) {
@@ -303,17 +308,22 @@ async function filterPubliclyVisibleListings(rows: ListingRow[]) {
     return rows;
   }
 
-  const greylistedRows = await billingDB.rawQueryAll<{ user_id: string }>(
-    `
-      SELECT user_id
-      FROM host_billing_accounts
-      WHERE billing_status = 'greylisted'
-        AND user_id = ANY($1::text[])
-    `,
-    hostIds,
-  );
-  const greylistedHosts = new Set(greylistedRows.map((row) => row.user_id));
-  return rows.filter((row) => !greylistedHosts.has(row.host_id));
+  try {
+    const greylistedRows = await billingDB.rawQueryAll<{ user_id: string }>(
+      `
+        SELECT user_id
+        FROM host_billing_accounts
+        WHERE billing_status = 'greylisted'
+          AND user_id = ANY($1::text[])
+      `,
+      hostIds,
+    );
+    const greylistedHosts = new Set(greylistedRows.map((row) => row.user_id));
+    return rows.filter((row) => !greylistedHosts.has(row.host_id));
+  } catch (error) {
+    console.warn("Failed to filter public listings against host billing status; returning unfiltered listings.", error);
+    return rows;
+  }
 }
 
 function getListingMediaObjectKey(publicUrl: string) {
