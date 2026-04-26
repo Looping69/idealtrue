@@ -724,8 +724,8 @@ export const workflowCoverageMatrix = [
     notificationEffects: ['KYC approval and rejection notifications'],
     externalBoundaries: ['KYC docs bucket', 'secure preview URLs'],
     fixtureKeys: ['KYC pending host', 'KYC rejected host'],
-    currentCoverage: ['tests/api-clients.test.ts'],
-    requiredNextCoverage: ['tests/e2e/kyc-admin-review.spec.ts', 'backend KYC permission tests'],
+    currentCoverage: ['tests/api-clients.test.ts', 'tests/e2e/kyc-admin-review.spec.ts'],
+    requiredNextCoverage: ['backend KYC permission tests', 'UI preview failure test'],
   },
   {
     workflow: 'Subscription checkout, voucher redemption, card save, greylisting, webhook completion',
