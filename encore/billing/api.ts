@@ -35,6 +35,11 @@ import {
   type SocialTemplateId,
   type SocialTone,
 } from "./social-templates";
+import {
+  CONTENT_LIMITS,
+  getContentCreditPrice,
+  resolveContentDraftDebit,
+} from "./content-entitlements";
 
 type BillingInterval = "monthly" | "annual";
 type ContentDraftStatus = "draft" | "scheduled" | "published";
@@ -214,17 +219,12 @@ const CONTENT_DRAFT_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const CONTENT_DRAFT_RATE_LIMIT_MAX = 5;
 const contentDraftRateLimitStore = new Map<string, number[]>();
 
-const CONTENT_LIMITS: Record<HostPlan, { includedDraftsPerMonth: number; canSchedule: boolean; contentStudioEnabled: boolean }> = {
-  standard: { includedDraftsPerMonth: 20, canSchedule: false, contentStudioEnabled: true },
-  professional: { includedDraftsPerMonth: 60, canSchedule: true, contentStudioEnabled: true },
-  premium: { includedDraftsPerMonth: 120, canSchedule: true, contentStudioEnabled: true },
-};
-
 function getCreditPrice(credits: number) {
-  if (![10, 25, 50].includes(credits)) {
+  const amount = getContentCreditPrice(credits);
+  if (amount === null) {
     throw APIError.invalidArgument("Unsupported credit top-up size.");
   }
-  return credits * 12;
+  return amount;
 }
 
 function getSubscriptionDefinition(plan: HostPlan) {
@@ -402,15 +402,17 @@ async function getContentEntitlementsForUser(userId: string): Promise<ContentEnt
 }
 
 async function debitOneContentUse(db: QueryExecutor, userId: string, entitlements: ContentEntitlements, referenceId: string) {
-  if (!entitlements.contentStudioEnabled) {
+  const decision = resolveContentDraftDebit(entitlements);
+
+  if (!decision.allowed && decision.reason === "studio_disabled") {
     throw APIError.permissionDenied("Your current plan does not include the content studio.");
   }
 
-  if (entitlements.remainingIncludedDrafts > 0) {
+  if (decision.allowed && decision.source === "included") {
     return;
   }
 
-  if (entitlements.creditBalance < 1) {
+  if (!decision.allowed) {
     throw APIError.permissionDenied("You have used your included content drafts. Buy more credits or upgrade your plan.");
   }
 
@@ -1009,7 +1011,8 @@ export const generateContentDraft = api<GenerateContentDraftParams, { draft: Con
     if (!previewEntitlements.contentStudioEnabled) {
       throw APIError.permissionDenied("Your current plan does not include the content studio.");
     }
-    if (previewEntitlements.remainingIncludedDrafts < 1 && previewEntitlements.creditBalance < 1) {
+    const previewDebit = resolveContentDraftDebit(previewEntitlements);
+    if (!previewDebit.allowed) {
       throw APIError.permissionDenied("You have used your included content drafts. Buy more credits or upgrade your plan.");
     }
 

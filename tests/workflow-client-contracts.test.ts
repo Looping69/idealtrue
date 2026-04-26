@@ -193,7 +193,7 @@ test('content studio clients cover entitlements, draft lifecycle, credit checkou
 
   const entitlements = await getContentEntitlements();
   const creditsCheckout = await createContentCreditsCheckout(10);
-  const generated = await generateContentDraft(workflowListings.active as any, 'instagram' as any, 'warm' as any, 'stay_carousel' as any, {
+  const generated = await generateContentDraft(workflowListings.active as any, 'instagram' as any, 'friendly' as any, 'stay_carousel' as any, {
     includePrice: true,
     includeSpecialOffer: false,
     customHeadline: 'Weekend special',
@@ -213,8 +213,20 @@ test('content studio clients cover entitlements, draft lifecycle, credit checkou
   assert.equal(scheduled.status, 'scheduled');
   assert.equal(checkoutStatus.status, 'paid');
   assert.equal(requestBody(1).credits, 10);
-  assert.equal(requestBody(2).listingId, workflowListings.active.id);
-  assert.equal(requestBody(4).status, 'scheduled');
+  assert.deepEqual(requestBody(2), {
+    listingId: workflowListings.active.id,
+    platform: 'instagram',
+    tone: 'friendly',
+    templateId: 'stay_carousel',
+    includePrice: true,
+    includeSpecialOffer: false,
+    customHeadline: 'Weekend special',
+  });
+  assert.deepEqual(requestBody(4), {
+    draftId: workflowContentDrafts.draft.id,
+    status: 'scheduled',
+    scheduledFor: workflowContentDrafts.scheduled.scheduledFor,
+  });
 });
 
 test('messaging clients use booking-scoped message endpoints and preserve attachment URLs', async () => {
@@ -354,4 +366,3 @@ test('subscription checkout client posts plan interval and reads checkout status
   assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/billing/subscriptions/checkout`);
   assert.deepEqual(requestBody(0), { plan: 'professional', billingInterval: 'monthly' });
 });
-

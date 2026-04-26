@@ -99,13 +99,13 @@ export default function SocialDashboard({ listings }: { listings: Listing[] }) {
       if (cancelled) return;
       setEntitlements(nextEntitlements);
       setDrafts(nextDrafts);
-      if (!selectedDraftId && nextDrafts.length > 0) setSelectedDraftId(nextDrafts[0].id);
+      setSelectedDraftId((currentDraftId) => currentDraftId ?? nextDrafts[0]?.id ?? null);
     }
     void loadWorkspace().catch((error) => console.error('Failed to load content workspace', error));
     return () => {
       cancelled = true;
     };
-  }, [profile, selectedDraftId]);
+  }, [profile]);
 
   useEffect(() => {
     const billingStatus = searchParams.get('billing_status');
