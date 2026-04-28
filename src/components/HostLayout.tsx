@@ -58,10 +58,10 @@ export default function HostLayout() {
       icon: Share2,
       items: [
         { name: 'Content Studio', path: '/host/social', icon: Sparkles },
-        { name: 'New Post Ideas', path: '/host/social', icon: Sparkles },
-        { name: 'Quick Templates', path: '/host/social', icon: LayoutTemplate, soon: true },
-        { name: 'Media Collections', path: '/host/social', icon: Images, soon: true },
-        { name: 'Content Calendar', path: '/host/social', icon: CalendarDays, soon: true },
+        { name: 'New Post Ideas', path: '/host/social?tool=ideas', icon: Sparkles },
+        { name: 'Quick Templates', path: '/host/social?tool=templates', icon: LayoutTemplate },
+        { name: 'Media Collections', path: '/host/social?tool=media', icon: Images },
+        { name: 'Content Calendar', path: '/host/social?tool=calendar', icon: CalendarDays },
       ]
     },
     {
@@ -132,7 +132,7 @@ export default function HostLayout() {
                   <div className="pl-9 pr-2 space-y-1 mt-1">
                     {group.items.map((item) => {
                       const Icon = item.icon;
-                      const isActive = location.pathname === item.path && !item.soon;
+                      const isActive = `${location.pathname}${location.search}` === item.path || (item.path === '/host/social' && location.pathname === '/host/social' && !location.search);
                       return (
                         <Link 
                           key={item.name}
@@ -146,7 +146,6 @@ export default function HostLayout() {
                         >
                           <Icon className="w-4 h-4" />
                           <span className="min-w-0 flex-1">{item.name}</span>
-                          {item.soon ? <span className="text-[9px] font-bold uppercase text-on-surface-variant">Soon</span> : null}
                         </Link>
                       );
                     })}

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { CalendarDays, CheckCircle2, ChevronDown, Copy, Download, LayoutTemplate, Loader2, Send, Sparkles, WalletCards } from 'lucide-react';
+import { CalendarDays, CheckCircle2, ChevronDown, Copy, Download, ImageIcon, LayoutTemplate, Loader2, Send, Sparkles, WalletCards } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { toast } from 'sonner';
 import { Card } from '../components/ui/card';
@@ -24,6 +24,7 @@ import { getPlatformLabel, getSocialTemplate, SOCIAL_PLATFORMS, SOCIAL_TEMPLATES
 
 const CREDIT_PACKS = [10, 25, 50];
 
+type ContentToolId = 'ideas' | 'templates' | 'media' | 'calendar';
 type IdeaModeId = 'brand_new' | 'content_pillars' | 'start_with_image' | 'custom_idea';
 type GeneratorModeId = 'trending_topics' | 'evergreen_ideas' | 'viral_hooks' | 'surprise_me';
 
@@ -106,11 +107,11 @@ const GENERATOR_MODES: Array<{
   },
 ];
 
-const CONTENT_TOOLS = [
-  { label: 'New Post Ideas', active: true },
-  { label: 'Quick Templates', active: false },
-  { label: 'Media Collections', active: false },
-  { label: 'Content Calendar', active: false },
+const CONTENT_TOOLS: Array<{ id: ContentToolId; label: string }> = [
+  { id: 'ideas', label: 'New Post Ideas' },
+  { id: 'templates', label: 'Quick Templates' },
+  { id: 'media', label: 'Media Collections' },
+  { id: 'calendar', label: 'Content Calendar' },
 ];
 
 function downloadDataUrl(filename: string, dataUrl: string) {
@@ -135,6 +136,7 @@ export default function SocialDashboard({ listings }: { listings: Listing[] }) {
   const [customHeadline, setCustomHeadline] = useState('');
   const [selectedIdeaMode, setSelectedIdeaMode] = useState<IdeaModeId>('brand_new');
   const [selectedGeneratorMode, setSelectedGeneratorMode] = useState<GeneratorModeId>('evergreen_ideas');
+  const [activeTool, setActiveTool] = useState<ContentToolId>('ideas');
   const [creativeSourceUrl, setCreativeSourceUrl] = useState<string | null>(null);
   const [generatedCreative, setGeneratedCreative] = useState<GeneratedSocialCreative | null>(null);
   const [drafts, setDrafts] = useState<ContentDraft[]>([]);
@@ -144,6 +146,7 @@ export default function SocialDashboard({ listings }: { listings: Listing[] }) {
   const [entitlements, setEntitlements] = useState<ContentEntitlements | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [purchasingCredits, setPurchasingCredits] = useState<number | null>(null);
   const [copiedDraft, setCopiedDraft] = useState(false);
   const [copiedCaption, setCopiedCaption] = useState(false);
 
@@ -151,6 +154,13 @@ export default function SocialDashboard({ listings }: { listings: Listing[] }) {
   const selectedDraft = useMemo(() => drafts.find((draft) => draft.id === selectedDraftId) ?? null, [drafts, selectedDraftId]);
   const selectedIdea = useMemo(() => IDEA_MODES.find((item) => item.id === selectedIdeaMode) ?? IDEA_MODES[0], [selectedIdeaMode]);
   const selectedGenerator = useMemo(() => GENERATOR_MODES.find((item) => item.id === selectedGeneratorMode) ?? GENERATOR_MODES[0], [selectedGeneratorMode]);
+
+  useEffect(() => {
+    const tool = searchParams.get('tool') as ContentToolId | null;
+    if (tool && CONTENT_TOOLS.some((item) => item.id === tool)) {
+      setActiveTool(tool);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (listingIdFromUrl && listings.length > 0) {
@@ -231,6 +241,29 @@ export default function SocialDashboard({ listings }: { listings: Listing[] }) {
     setSelectedGeneratorMode(mode.id);
     setSelectedTemplateId(mode.templateId);
     setTone(mode.tone);
+  }
+
+  function applyTemplate(templateId: SocialTemplateId) {
+    const template = getSocialTemplate(templateId);
+    setSelectedTemplateId(template.id);
+    if (!template.supportedPlatforms.includes(platform)) {
+      setPlatform(template.supportedPlatforms[0]);
+    }
+    if (!template.supportsSpecialOffer) {
+      setIncludeSpecialOffer(false);
+    }
+  }
+
+  async function handleTopUpCredits(credits: number) {
+    setPurchasingCredits(credits);
+    try {
+      const checkout = await createContentCreditsCheckout(credits);
+      window.location.assign(checkout.redirectUrl);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Credit purchase failed.');
+    } finally {
+      setPurchasingCredits(null);
+    }
   }
 
   async function handleGeneratePostSet() {
@@ -332,11 +365,11 @@ export default function SocialDashboard({ listings }: { listings: Listing[] }) {
                       {CONTENT_TOOLS.map((item) => (
                         <button
                           key={item.label}
-                          className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium ${item.active ? 'bg-primary/10 text-primary' : 'text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface'}`}
+                          className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium ${activeTool === item.id ? 'bg-primary/10 text-primary' : 'text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface'}`}
+                          onClick={() => setActiveTool(item.id)}
                           type="button"
                         >
                           <span>{item.label}</span>
-                          {!item.active ? <span className="text-[10px] uppercase text-on-surface-variant">Soon</span> : null}
                         </button>
                       ))}
                     </div>
@@ -353,10 +386,12 @@ export default function SocialDashboard({ listings }: { listings: Listing[] }) {
                           <button
                             key={credits}
                             className="rounded-md border border-outline-variant bg-surface-container-lowest px-2 py-1 text-xs font-semibold hover:border-primary hover:text-primary"
-                            onClick={() => createContentCreditsCheckout(credits).then((checkout) => window.location.assign(checkout.redirectUrl)).catch((error) => toast.error(error instanceof Error ? error.message : 'Credit purchase failed.'))}
+                            aria-label={`Buy ${credits} content tokens`}
+                            disabled={purchasingCredits !== null}
+                            onClick={() => void handleTopUpCredits(credits)}
                             type="button"
                           >
-                            +{credits}
+                            {purchasingCredits === credits ? '...' : `+${credits}`}
                           </button>
                         ))}
                       </div>
@@ -412,27 +447,109 @@ export default function SocialDashboard({ listings }: { listings: Listing[] }) {
                 <div className="mb-4 flex items-center gap-2">
                   <LayoutTemplate className="h-5 w-5 text-primary" />
                   <div>
-                    <h3 className="font-bold">Start with a sniff of an idea</h3>
-                    <p className="text-sm text-on-surface-variant">{selectedIdea.description}</p>
+                    <h3 className="font-bold">
+                      {activeTool === 'templates' ? 'Quick Templates' : activeTool === 'media' ? 'Media Collections' : activeTool === 'calendar' ? 'Content Calendar' : 'Start with a sniff of an idea'}
+                    </h3>
+                    <p className="text-sm text-on-surface-variant">
+                      {activeTool === 'templates'
+                        ? 'Pick a reusable format and keep the generator aligned to the channel.'
+                        : activeTool === 'media'
+                          ? 'Choose the listing image that should anchor the visual pack.'
+                          : activeTool === 'calendar'
+                            ? 'Review scheduled and published drafts before you ship more noise.'
+                            : selectedIdea.description}
+                    </p>
                   </div>
                 </div>
 
-                <div className="space-y-3">
-                  {IDEA_MODES.map((mode) => (
-                    <button
-                      key={mode.id}
-                      onClick={() => applyIdeaMode(mode.id)}
-                      className={`flex w-full gap-3 rounded-lg border p-4 text-left transition ${selectedIdeaMode === mode.id ? 'border-primary bg-primary/5 ring-2 ring-primary/10' : 'border-outline-variant hover:border-primary/60'}`}
-                      type="button"
-                    >
-                      <span className={`mt-1 h-3 w-3 rounded-full border ${selectedIdeaMode === mode.id ? 'border-primary bg-primary' : 'border-outline-variant'}`} />
-                      <span>
-                        <span className="block font-semibold">{mode.title}: {selectedListing?.type ?? 'Holiday Rental Property'}</span>
-                        <span className="mt-1 block text-sm text-on-surface-variant">{mode.description}</span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
+                {activeTool === 'ideas' ? (
+                  <div className="space-y-3">
+                    {IDEA_MODES.map((mode) => (
+                      <button
+                        key={mode.id}
+                        onClick={() => applyIdeaMode(mode.id)}
+                        className={`flex w-full gap-3 rounded-lg border p-4 text-left transition ${selectedIdeaMode === mode.id ? 'border-primary bg-primary/5 ring-2 ring-primary/10' : 'border-outline-variant hover:border-primary/60'}`}
+                        type="button"
+                      >
+                        <span className={`mt-1 h-3 w-3 rounded-full border ${selectedIdeaMode === mode.id ? 'border-primary bg-primary' : 'border-outline-variant'}`} />
+                        <span>
+                          <span className="block font-semibold">{mode.title}: {selectedListing?.type ?? 'Holiday Rental Property'}</span>
+                          <span className="mt-1 block text-sm text-on-surface-variant">{mode.description}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
+                {activeTool === 'templates' ? (
+                  <div className="grid gap-3">
+                    {SOCIAL_TEMPLATES.map((template) => (
+                      <button
+                        key={template.id}
+                        onClick={() => applyTemplate(template.id)}
+                        className={`rounded-lg border p-4 text-left transition ${selectedTemplateId === template.id ? 'border-primary bg-primary/5 ring-2 ring-primary/10' : 'border-outline-variant hover:border-primary/60'}`}
+                        type="button"
+                        aria-label={`Use ${template.name}`}
+                      >
+                        <span className="flex items-center justify-between gap-3">
+                          <span className="font-semibold">{template.name}</span>
+                          <span className="rounded-full bg-surface-container-low px-2 py-1 text-[10px] font-bold uppercase text-on-surface-variant">{template.category}</span>
+                        </span>
+                        <span className="mt-1 block text-sm text-on-surface-variant">{template.shortDescription}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
+                {activeTool === 'media' ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    {(selectedListing?.images ?? []).map((imageUrl, index) => (
+                      <button
+                        key={imageUrl}
+                        onClick={() => { setCreativeSourceUrl(imageUrl); setGeneratedCreative(null); }}
+                        className={`overflow-hidden rounded-lg border text-left ${creativeSourceUrl === imageUrl ? 'border-primary ring-2 ring-primary/20' : 'border-outline-variant'}`}
+                        type="button"
+                        aria-label={`Select listing image ${index + 1}`}
+                      >
+                        <img src={imageUrl} alt="" className="aspect-square w-full object-cover" referrerPolicy="no-referrer" />
+                        <span className="flex items-center gap-2 px-3 py-2 text-xs font-semibold">
+                          <ImageIcon className="h-3.5 w-3.5" /> Image {index + 1}
+                        </span>
+                      </button>
+                    ))}
+                    {!selectedListing?.images?.length ? (
+                      <div className="col-span-2 rounded-lg border border-dashed border-outline-variant p-6 text-center text-sm text-on-surface-variant">
+                        Add listing photos before generating a visual pack.
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {activeTool === 'calendar' ? (
+                  <div className="space-y-3">
+                    {drafts.filter((draft) => draft.status !== 'draft').map((draft) => (
+                      <button
+                        key={draft.id}
+                        onClick={() => setSelectedDraftId(draft.id)}
+                        className={`w-full rounded-lg border p-4 text-left transition ${selectedDraftId === draft.id ? 'border-primary bg-primary/5' : 'border-outline-variant hover:border-primary/60'}`}
+                        type="button"
+                      >
+                        <span className="flex items-center justify-between gap-3">
+                          <span className="font-semibold">{draft.listingTitle}</span>
+                          <span className="text-xs uppercase tracking-[0.18em] text-on-surface-variant">{draft.status}</span>
+                        </span>
+                        <span className="mt-1 block text-sm text-on-surface-variant">
+                          {draft.scheduledFor ? new Date(draft.scheduledFor).toLocaleString() : draft.publishedAt ? new Date(draft.publishedAt).toLocaleString() : 'No distribution date set'}
+                        </span>
+                      </button>
+                    ))}
+                    {drafts.every((draft) => draft.status === 'draft') ? (
+                      <div className="rounded-lg border border-dashed border-outline-variant p-6 text-center text-sm text-on-surface-variant">
+                        No scheduled or published content yet.
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <div className="mt-5 space-y-3">
                   <select

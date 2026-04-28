@@ -234,4 +234,77 @@ describe('SocialDashboard', () => {
     expect(screen.getByText('Wallet')).toBeInTheDocument();
     expect(screen.getByText('Credits available')).toBeInTheDocument();
   });
+
+  it('opens quick templates as a real template picker instead of a soon-only item', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <SocialDashboard listings={[listing]} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(getContentEntitlementsMock).toHaveBeenCalled());
+
+    await user.click(screen.getByRole('button', { name: /studio tools/i }));
+    await user.click(screen.getByRole('button', { name: /quick templates/i }));
+
+    expect(screen.getByRole('heading', { name: /quick templates/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /use special offer/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /use special offer/i }));
+
+    expect(screen.getByText(/selected: special offer/i)).toBeInTheDocument();
+  });
+
+  it('opens media collections and lets the host choose the creative source image', async () => {
+    const user = userEvent.setup();
+    const listingWithImages = {
+      ...listing,
+      images: ['https://cdn.example.com/listing-a.jpg', 'https://cdn.example.com/listing-b.jpg'],
+    };
+
+    render(
+      <MemoryRouter>
+        <SocialDashboard listings={[listingWithImages]} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(getContentEntitlementsMock).toHaveBeenCalled());
+
+    await user.click(screen.getByRole('button', { name: /studio tools/i }));
+    await user.click(screen.getByRole('button', { name: /media collections/i }));
+    await user.click(screen.getByRole('button', { name: /select listing image 2/i }));
+    await user.click(screen.getByRole('button', { name: /generate post set/i }));
+
+    await waitFor(() => expect(generateListingSocialCreativeMock).toHaveBeenCalledWith(expect.objectContaining({
+      sourceImageUrl: 'https://cdn.example.com/listing-b.jpg',
+    })));
+  });
+
+  it('starts a token top-up checkout from the wallet controls', async () => {
+    const user = userEvent.setup();
+    const assignMock = vi.fn();
+    createContentCreditsCheckoutMock.mockResolvedValue({
+      checkoutId: 'checkout-10',
+      redirectUrl: 'https://pay.example.com/checkout-10',
+    });
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, assign: assignMock },
+      writable: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <SocialDashboard listings={[listing]} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(getContentEntitlementsMock).toHaveBeenCalled());
+
+    await user.click(screen.getByRole('button', { name: /studio tools/i }));
+    await user.click(screen.getByRole('button', { name: /buy 10 content tokens/i }));
+
+    await waitFor(() => expect(createContentCreditsCheckoutMock).toHaveBeenCalledWith(10));
+    expect(assignMock).toHaveBeenCalledWith('https://pay.example.com/checkout-10');
+  });
 });
