@@ -1,5 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <rect width="64" height="64" rx="18" fill="#0f766e"/>
-  <path d="M18 34.5 32 21l14 13.5V46a2 2 0 0 1-2 2h-8V37H28v11h-8a2 2 0 0 1-2-2V34.5Z" fill="#fff"/>
-  <path d="M25 18.5h14" stroke="#99f6e4" stroke-width="4" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Ideal Stay">
+  <defs>
+    <linearGradient id="navy" x1="70" x2="250" y1="66" y2="392" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#082b61"/>
+      <stop offset="1" stop-color="#031d49"/>
+    </linearGradient>
+    <linearGradient id="aqua" x1="210" x2="452" y1="65" y2="366" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#19bfd1"/>
+      <stop offset="1" stop-color="#05a8c7"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#navy)" d="M95 116c0-22 18-40 40-40h39c22 0 40 18 40 40v244c-28 28-67 44-119 50V116Z"/>
+  <path fill="url(#aqua)" d="M420 101c15 7 20 24 11 38l-22 34c-9 14-27 19-41 11-30-17-61-25-91-24-31 1-50 12-54 31-5 22 17 37 70 51 58 16 98 37 120 63 22 27 27 62 13 105l-50 45c4-33-5-58-27-75-19-15-50-29-92-41-55-15-94-35-117-60-23-26-30-59-19-99 11-41 38-72 80-92 44-20 96-16 219 13Z"/>
+  <path fill="url(#navy)" d="M34 398c58 22 118 11 179-34 65-48 131-62 198-18-64-15-126-5-187 31-71 43-134 50-190 21Z"/>
+  <path fill="url(#aqua)" d="M178 438c65-4 118-20 159-47 46-30 94-32 145-6-50 8-96 9-138 4-47-6-102 11-166 49Z"/>
 </svg>
