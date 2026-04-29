@@ -69,3 +69,4 @@
 - Simplified the public header in `src/components/AppNavigation.tsx` to avoid duplicating the brand name beside the new full lockup.
 - Switched `src/components/BrandLogo.tsx` back to the PNG lockup so website logo placements use `public/ideal-stay-logo.png` while favicon assets stay mark-only.
 - Replaced `public/ideal-stay-logo.png` and `public/apple-touch-icon.png` with Klaas's supplied `Ideal Stay Logo (1).png`, and pointed `index.html` favicon/touch-icon links at the same canonical PNG so in-app logo placements and browser chrome use the exact same brand asset.
+- Replaced `public/favicon.svg` with Klaas's supplied `Ideal Stay Logo (1).svg` and pointed the browser favicon link in `index.html` at `/favicon.svg` while leaving the site logo and apple touch icon untouched.
