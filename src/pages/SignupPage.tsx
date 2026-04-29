@@ -142,7 +142,7 @@ export default function SignupPage() {
     return (
       <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
         <Card className="max-w-lg w-full p-10 text-center space-y-6">
-          <BrandLogo size="lg" className="mx-auto h-24" priority />
+          <BrandLogo variant="inline" size="lg" className="mx-auto h-20" priority />
           <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
             {isVerifyingEmail ? <Loader2 className="w-8 h-8 animate-spin text-primary" /> : <MailCheck className="w-8 h-8 text-primary" />}
           </div>
@@ -168,7 +168,7 @@ export default function SignupPage() {
     <div className="min-h-[80vh] flex flex-col items-center justify-center px-4 py-12">
       <div className="max-w-2xl w-full space-y-8 text-center">
         <div className="space-y-2">
-          <BrandLogo size="xl" className="mx-auto h-28" priority />
+          <BrandLogo variant="inline" size="xl" className="mx-auto h-24" priority />
           <h1 className="text-4xl font-bold tracking-tight text-on-surface">{passwordActionTitle}</h1>
           <p className="text-on-surface-variant text-lg">
             {isResetPasswordMode

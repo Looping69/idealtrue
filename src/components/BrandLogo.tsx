@@ -4,6 +4,7 @@ type BrandLogoProps = {
   className?: string;
   priority?: boolean;
   size?: 'sm' | 'md' | 'lg' | 'xl';
+  variant?: 'compact' | 'inline';
 };
 
 const sizeClasses: Record<NonNullable<BrandLogoProps['size']>, string> = {
@@ -17,10 +18,11 @@ export default function BrandLogo({
   className,
   priority = false,
   size = 'md',
+  variant = 'compact',
 }: BrandLogoProps) {
   return (
     <img
-      src="/ideal-stay-logo.png"
+      src={variant === 'inline' ? '/ideal-stay-logo-inline.png' : '/ideal-stay-logo.png'}
       alt="Ideal Stay"
       className={cn('block object-contain select-none', sizeClasses[size], className)}
       draggable={false}

@@ -75,3 +75,5 @@
 - Pulled the remaining search-bar gradient icon buttons into the same solid `#08a8c8` treatment after verifying listings were failing only on the preview server without the API proxy.
 - Replaced the remaining listing-creation pricing redirect button gradient with the same solid `#08a8c8` brand cyan.
 - Updated signup/header auth actions, signup mode toggles, and selected role accents to the exact `#08a8c8` brand cyan.
+- Rebased the app's primary design token in `src/index.css` from the old blue to `#08a8c8` so listing-detail buttons, focus rings, calendar accents, and remaining `primary` controls inherit the logo color.
+- Added Klaas's wide inline logo as `public/ideal-stay-logo-inline.png`, extended `BrandLogo` with compact/inline variants, and used the inline lockup in header, signup, loading, host, and admin contexts where horizontal branding fits.

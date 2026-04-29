@@ -524,7 +524,7 @@ export default function AdminDashboard() {
     <div className="flex h-screen overflow-hidden bg-[#fcfcfc]">
       <aside className="z-20 flex w-64 flex-col border-r border-slate-100 bg-white">
         <div className="flex flex-col items-start gap-3 p-6">
-          <BrandLogo size="lg" priority className="h-20" />
+          <BrandLogo variant="inline" size="lg" priority className="h-16" />
           <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.24em] text-slate-500">
             <Settings className="h-3.5 w-3.5" />
             Admin

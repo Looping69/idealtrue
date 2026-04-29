@@ -143,7 +143,7 @@ function AppContent() {
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-surface">
-        <BrandLogo size="lg" priority className="h-24" />
+        <BrandLogo variant="inline" size="lg" priority className="h-20" />
         <Loader2 className="w-8 h-8 animate-spin text-outline-variant" />
       </div>
     );

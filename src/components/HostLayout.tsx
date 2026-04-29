@@ -94,7 +94,7 @@ export default function HostLayout() {
       {/* Sidebar */}
       <aside className="w-64 bg-surface border-r border-outline-variant flex flex-col h-full shrink-0 hidden md:flex">
         <div className="p-6 flex items-center justify-center cursor-pointer" onClick={() => navigate('/')} aria-label="Go to Ideal Stay marketplace">
-          <BrandLogo size="lg" priority className="h-24" />
+          <BrandLogo variant="inline" size="lg" priority className="h-20" />
         </div>
 
         <div className="px-4 mb-2">
