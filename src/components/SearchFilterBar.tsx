@@ -286,7 +286,7 @@ export default function SearchFilterBar({ onChange, onModeChange, onSendMessage,
             >
               <div className="absolute w-full h-full" style={{ backfaceVisibility: "hidden" }}>
                 <div className="bg-surface rounded-full p-2 flex items-center gap-3 h-full">
-                  <button onClick={handleFlip} className="p-2.5 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 transition-all shadow-lg shadow-blue-500/30">
+                  <button onClick={handleFlip} className="p-2.5 rounded-full bg-[#08a8c8] hover:bg-[#08a8c8]/90 transition-all shadow-lg shadow-[#08a8c8]/20">
                     <Sparkles className="w-4 h-4 text-white" />
                   </button>
                   <input 
@@ -297,7 +297,7 @@ export default function SearchFilterBar({ onChange, onModeChange, onSendMessage,
                     placeholder="Describe the trip you want to plan..." 
                     className="flex-1 bg-transparent text-on-surface placeholder-on-surface-variant outline-none text-base px-2 font-medium" 
                   />
-                  <button className="p-2.5 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 transition-all shadow-lg shadow-blue-500/30" onClick={() => onSendMessage?.(message)}>
+                  <button className="p-2.5 rounded-full bg-[#08a8c8] hover:bg-[#08a8c8]/90 transition-all shadow-lg shadow-[#08a8c8]/20" onClick={() => onSendMessage?.(message)}>
                     <Send className="w-4 h-4 text-white" />
                   </button>
                 </div>
@@ -426,7 +426,7 @@ export default function SearchFilterBar({ onChange, onModeChange, onSendMessage,
                   </div>
 
                   <div className="pl-2 pr-1 flex items-center ml-auto">
-                    <button className="p-3 rounded-full bg-gradient-to-r from-slate-900 to-blue-600 text-white hover:opacity-90 transition-all shadow-lg shadow-blue-900/30" onClick={() => emit()}>
+                    <button className="p-3 rounded-full bg-[#08a8c8] text-white hover:bg-[#08a8c8]/90 transition-all shadow-lg shadow-[#08a8c8]/20" onClick={() => emit()}>
                       <Search className="w-5 h-5 text-white" strokeWidth={2.5} />
                     </button>
                   </div>

@@ -98,7 +98,7 @@ export default function FilterBar({ activeCategory, onFilterChange, onOpenFilter
                 <SlidersHorizontal className={cn("w-3.5 h-3.5", !isCollapsed && "md:w-3.5 md:h-3.5")} />
                 <span className="hidden md:inline">Filters</span>
                 {activeFiltersCount > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-gradient-to-r from-slate-900 to-blue-600 text-white text-[9px] rounded-full flex items-center justify-center border border-surface">
+                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-[#08a8c8] text-white text-[9px] rounded-full flex items-center justify-center border border-surface">
                     {activeFiltersCount}
                   </span>
                 )}
@@ -206,7 +206,7 @@ export default function FilterBar({ activeCategory, onFilterChange, onOpenFilter
                     className={cn(
                       "px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all border",
                       activeSubCategory === sub.id
-                        ? "bg-gradient-to-r from-slate-900 to-blue-600 text-white border-transparent shadow-[0_4px_14px_0_rgba(0,0,0,0.1)]"
+                        ? "bg-[#08a8c8] text-white border-transparent shadow-[#08a8c8]/20"
                         : "bg-surface text-on-surface-variant border-outline-variant hover:border-blue-600/50 hover:text-blue-600"
                     )}
                   >

@@ -321,7 +321,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
                             <button
                                 type="button"
                                 onClick={() => setBillingInterval('monthly')}
-                                className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${billingInterval === 'monthly' ? 'bg-gradient-to-r from-slate-900 to-blue-600 text-white' : 'text-slate-600 hover:text-slate-950'}`}
+                                className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${billingInterval === 'monthly' ? 'bg-[#08a8c8] text-white' : 'text-slate-600 hover:text-slate-950'}`}
                             >
                                 Monthly
                             </button>
@@ -388,7 +388,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
                             <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-600" />
                             {plan.highlight && (
                                 <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                                    <span className="bg-gradient-to-r from-slate-900 to-blue-600 text-white px-4 py-1.5 rounded-full text-xs uppercase tracking-widest font-bold">
+                                    <span className="bg-[#08a8c8] text-white px-4 py-1.5 rounded-full text-xs uppercase tracking-widest font-bold">
                                         {plan.highlight}
                                     </span>
                                 </div>
@@ -440,7 +440,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
                                     onClick={() => handleUpgrade(plan.id)}
                                     disabled={loadingPlan !== null || isCurrent}
                                     variant={isCurrent ? "outline" : plan.id === 'premium' || plan.id === 'professional' ? "default" : "secondary"}
-                                    className={`h-12 w-full rounded-xl text-base font-semibold ${plan.id === 'premium' ? 'bg-gradient-to-r from-slate-900 to-blue-600 hover:opacity-90 text-white' : plan.id === 'professional' ? 'bg-cyan-700 hover:bg-cyan-800 text-white' : ''
+                                    className={`h-12 w-full rounded-xl text-base font-semibold ${plan.id === 'premium' ? 'bg-[#08a8c8] hover:bg-[#08a8c8]/90 text-white' : plan.id === 'professional' ? 'bg-cyan-700 hover:bg-cyan-800 text-white' : ''
                                         }`}
                                 >
                                     {isLoading ? (
@@ -516,7 +516,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
                 </div>
 
                 <div className="overflow-hidden rounded-2xl border border-slate-200">
-                    <div className="grid grid-cols-4 bg-gradient-to-r from-slate-900 to-blue-600 text-white">
+                    <div className="grid grid-cols-4 bg-[#08a8c8] text-white">
                         <div className="px-4 py-4 text-sm font-bold uppercase tracking-[0.2em] text-slate-300">Feature</div>
                         {plans.map((plan) => (
                             <div key={plan.id} className="px-4 py-4 text-center text-sm font-bold uppercase tracking-[0.2em]">

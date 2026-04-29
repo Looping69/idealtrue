@@ -70,3 +70,8 @@
 - Switched `src/components/BrandLogo.tsx` back to the PNG lockup so website logo placements use `public/ideal-stay-logo.png` while favicon assets stay mark-only.
 - Replaced `public/ideal-stay-logo.png` and `public/apple-touch-icon.png` with Klaas's supplied `Ideal Stay Logo (1).png`, and pointed `index.html` favicon/touch-icon links at the same canonical PNG so in-app logo placements and browser chrome use the exact same brand asset.
 - Replaced `public/favicon.svg` with Klaas's supplied `Ideal Stay Logo (1).svg` and pointed the browser favicon link in `index.html` at `/favicon.svg` while leaving the site logo and apple touch icon untouched.
+- Reverted the prior carousel/auth behavior change at Klaas's request, then replaced the old `from-slate-900 to-blue-600` gradient styling on selected controls, featured carousel buttons, search action, pricing pills, and listing-form controls with the primary logo blue.
+- Updated the same de-gradient controls to Klaas's exact logo cyan `#08a8c8`.
+- Pulled the remaining search-bar gradient icon buttons into the same solid `#08a8c8` treatment after verifying listings were failing only on the preview server without the API proxy.
+- Replaced the remaining listing-creation pricing redirect button gradient with the same solid `#08a8c8` brand cyan.
+- Updated signup/header auth actions, signup mode toggles, and selected role accents to the exact `#08a8c8` brand cyan.

@@ -189,7 +189,7 @@ export default function FiltersModal({ isOpen, onClose, onApply, initialFilters 
                 onClick={() => setFilters({ ...filters, province: "all" })}
                 className={cn(
                   "px-4 py-2 rounded-full border text-sm font-medium transition-all",
-                  filters.province === "all" ? "bg-gradient-to-r from-slate-900 to-blue-600 text-white border-transparent" : "bg-surface text-on-surface-variant border-outline-variant hover:border-primary"
+                  filters.province === "all" ? "bg-[#08a8c8] text-white border-transparent" : "bg-surface text-on-surface-variant border-outline-variant hover:border-primary"
                 )}
               >
                 All Provinces
@@ -200,7 +200,7 @@ export default function FiltersModal({ isOpen, onClose, onApply, initialFilters 
                   onClick={() => setFilters({ ...filters, province: p })}
                   className={cn(
                     "px-4 py-2 rounded-full border text-sm font-medium transition-all",
-                    filters.province === p ? "bg-gradient-to-r from-slate-900 to-blue-600 text-white border-transparent" : "bg-surface text-on-surface-variant border-outline-variant hover:border-primary"
+                    filters.province === p ? "bg-[#08a8c8] text-white border-transparent" : "bg-surface text-on-surface-variant border-outline-variant hover:border-primary"
                   )}
                 >
                   {p}
@@ -221,7 +221,7 @@ export default function FiltersModal({ isOpen, onClose, onApply, initialFilters 
                 >
                   <div className={cn(
                     "w-6 h-6 rounded-md border flex items-center justify-center transition-all",
-                    filters.amenities.includes(amenity) ? "bg-gradient-to-r from-slate-900 to-blue-600 border-transparent text-white" : "border-outline-variant group-hover:border-primary"
+                    filters.amenities.includes(amenity) ? "bg-[#08a8c8] border-transparent text-white" : "border-outline-variant group-hover:border-primary"
                   )}>
                     {filters.amenities.includes(amenity) && <Check className="w-4 h-4" />}
                   </div>
@@ -243,7 +243,7 @@ export default function FiltersModal({ isOpen, onClose, onApply, initialFilters 
                 >
                   <div className={cn(
                     "w-6 h-6 rounded-md border flex items-center justify-center transition-all",
-                    filters.facilities.includes(facility) ? "bg-gradient-to-r from-slate-900 to-blue-600 border-transparent text-white" : "border-outline-variant group-hover:border-primary"
+                    filters.facilities.includes(facility) ? "bg-[#08a8c8] border-transparent text-white" : "border-outline-variant group-hover:border-primary"
                   )}>
                     {filters.facilities.includes(facility) && <Check className="w-4 h-4" />}
                   </div>

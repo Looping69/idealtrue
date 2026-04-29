@@ -422,7 +422,7 @@ export default function CreateListing() {
           Archive or delete your current listing to free the slot, or upgrade if you need more capacity.
         </p>
         <div className="pt-6">
-                      <Button onClick={() => navigate('/pricing?audience=host')} className="h-12 px-8 text-base bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
+                      <Button onClick={() => navigate('/pricing?audience=host')} className="h-12 px-8 text-base bg-[#08a8c8] hover:bg-[#08a8c8]/90">
             Upgrade My Plan
           </Button>
           <div className="mt-4">
@@ -444,7 +444,7 @@ export default function CreateListing() {
         </div>
         <div className="h-2 bg-surface-container-low rounded-full overflow-hidden">
           <div
-            className="h-full bg-gradient-to-r from-slate-900 to-blue-600 transition-all duration-500 ease-out"
+            className="h-full bg-[#08a8c8] transition-all duration-500 ease-out"
             style={{ width: `${(step / totalSteps) * 100}%` }}
           />
         </div>
@@ -701,7 +701,7 @@ export default function CreateListing() {
                               className={cn(
                                 "px-4 py-2 rounded-full border transition-all text-sm font-medium",
                                 formData.restaurantOffers.includes(meal)
-                                  ? "bg-gradient-to-r from-slate-900 to-blue-600 text-white border-transparent"
+                                  ? "bg-[#08a8c8] text-white border-transparent"
                                   : "bg-surface text-on-surface-variant border-outline-variant"
                               )}
                             >
@@ -767,7 +767,7 @@ export default function CreateListing() {
                             formData.amenities.includes(amenity) ? "border-primary bg-primary/10/50" : "border-outline-variant"
                           )}
                         >
-                          <div className={cn("w-4 h-4 rounded border flex items-center justify-center", formData.amenities.includes(amenity) ? "bg-gradient-to-r from-slate-900 to-blue-600 border-transparent text-white" : "border-outline-variant")}>
+                          <div className={cn("w-4 h-4 rounded border flex items-center justify-center", formData.amenities.includes(amenity) ? "bg-[#08a8c8] border-transparent text-white" : "border-outline-variant")}>
                             {formData.amenities.includes(amenity) && <Check className="w-3 h-3" />}
                           </div>
                           {amenity}
@@ -788,7 +788,7 @@ export default function CreateListing() {
                             formData.facilities.includes(facility) ? "border-primary bg-primary/10/50" : "border-outline-variant"
                           )}
                         >
-                          <div className={cn("w-4 h-4 rounded border flex items-center justify-center", formData.facilities.includes(facility) ? "bg-gradient-to-r from-slate-900 to-blue-600 border-transparent text-white" : "border-outline-variant")}>
+                          <div className={cn("w-4 h-4 rounded border flex items-center justify-center", formData.facilities.includes(facility) ? "bg-[#08a8c8] border-transparent text-white" : "border-outline-variant")}>
                             {formData.facilities.includes(facility) && <Check className="w-3 h-3" />}
                           </div>
                           {facility}
@@ -987,7 +987,7 @@ export default function CreateListing() {
 
           <Button
             onClick={step === totalSteps ? handleSubmit : handleNext}
-            className="bg-gradient-to-r from-slate-900 to-blue-600 hover:opacity-90 text-white px-8 rounded-xl h-12 text-base shadow-lg shadow-blue-900/20"
+            className="bg-[#08a8c8] hover:bg-[#08a8c8]/90 text-white px-8 rounded-xl h-12 text-base shadow-lg shadow-[#08a8c8]/20"
             disabled={(step === 1 && !formData.category) || isSubmitting}
           >
             {isSubmitting ? (

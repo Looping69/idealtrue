@@ -53,8 +53,8 @@ export default function FeaturedCarousel({ listings, onListingClick }: FeaturedC
                         ))}
                     </CarouselContent>
                     <div className="flex justify-end gap-3 mt-6 md:absolute md:-top-16 md:right-0">
-                        <CarouselPrevious className="static min-w-[4.75rem] translate-y-0 rounded-xl border-transparent bg-gradient-to-r from-slate-900 to-blue-600 px-4 text-white shadow-lg shadow-blue-900/20 hover:opacity-90" />
-                        <CarouselNext className="static min-w-[4.75rem] translate-y-0 rounded-xl border-transparent bg-gradient-to-r from-slate-900 to-blue-600 px-4 text-white shadow-lg shadow-blue-900/20 hover:opacity-90" />
+                        <CarouselPrevious className="static min-w-[4.75rem] translate-y-0 rounded-xl border-transparent bg-[#08a8c8] px-4 text-white shadow-lg shadow-[#08a8c8]/20 hover:bg-[#08a8c8]/90" />
+                        <CarouselNext className="static min-w-[4.75rem] translate-y-0 rounded-xl border-transparent bg-[#08a8c8] px-4 text-white shadow-lg shadow-[#08a8c8]/20 hover:bg-[#08a8c8]/90" />
                     </div>
                 </Carousel>
             </div>

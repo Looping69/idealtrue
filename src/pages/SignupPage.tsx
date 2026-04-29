@@ -185,7 +185,7 @@ export default function SignupPage() {
             type="button"
             className={cn(
               'px-5 py-2 rounded-xl text-sm font-semibold transition-colors',
-              isSignupMode ? 'bg-primary text-white' : 'text-on-surface-variant hover:text-on-surface',
+              isSignupMode ? 'bg-[#08a8c8] text-white' : 'text-on-surface-variant hover:text-on-surface',
             )}
             onClick={() => setMode('signup')}
           >
@@ -195,7 +195,7 @@ export default function SignupPage() {
             type="button"
             className={cn(
               'px-5 py-2 rounded-xl text-sm font-semibold transition-colors',
-              !isSignupMode ? 'bg-primary text-white' : 'text-on-surface-variant hover:text-on-surface',
+              !isSignupMode ? 'bg-[#08a8c8] text-white' : 'text-on-surface-variant hover:text-on-surface',
             )}
             onClick={() => setMode('signin')}
           >
@@ -258,14 +258,14 @@ export default function SignupPage() {
             className={cn(
               "p-8 cursor-pointer transition-all duration-300 border-2 flex flex-col items-center text-center space-y-4 group relative overflow-hidden",
               selectedRole === 'guest' 
-                ? "border-primary bg-primary/5 shadow-lg scale-105" 
-                : "border-outline-variant hover:border-primary/50 hover:bg-surface-container-lowest"
+                ? "border-[#08a8c8] bg-[#08a8c8]/5 shadow-lg scale-105" 
+                : "border-outline-variant hover:border-[#08a8c8]/50 hover:bg-surface-container-lowest"
             )}
             onClick={() => setSelectedRole('guest')}
           >
             <div className={cn(
               "w-16 h-16 rounded-2xl flex items-center justify-center transition-colors",
-              selectedRole === 'guest' ? "bg-primary text-white" : "bg-surface-container-high text-on-surface-variant group-hover:bg-primary/10 group-hover:text-primary"
+              selectedRole === 'guest' ? "bg-[#08a8c8] text-white" : "bg-surface-container-high text-on-surface-variant group-hover:bg-[#08a8c8]/10 group-hover:text-[#08a8c8]"
             )}>
               <Users className="w-8 h-8" />
             </div>
@@ -275,7 +275,7 @@ export default function SignupPage() {
             </div>
             {selectedRole === 'guest' && (
               <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute top-4 right-4">
-                <CheckCircle2 className="w-6 h-6 text-primary" />
+                <CheckCircle2 className="w-6 h-6 text-[#08a8c8]" />
               </motion.div>
             )}
           </Card>
@@ -285,14 +285,14 @@ export default function SignupPage() {
             className={cn(
               "p-8 cursor-pointer transition-all duration-300 border-2 flex flex-col items-center text-center space-y-4 group relative overflow-hidden",
               selectedRole === 'host' 
-                ? "border-primary bg-primary/5 shadow-lg scale-105" 
-                : "border-outline-variant hover:border-primary/50 hover:bg-surface-container-lowest"
+                ? "border-[#08a8c8] bg-[#08a8c8]/5 shadow-lg scale-105" 
+                : "border-outline-variant hover:border-[#08a8c8]/50 hover:bg-surface-container-lowest"
             )}
             onClick={() => setSelectedRole('host')}
           >
             <div className={cn(
               "w-16 h-16 rounded-2xl flex items-center justify-center transition-colors",
-              selectedRole === 'host' ? "bg-primary text-white" : "bg-surface-container-high text-on-surface-variant group-hover:bg-primary/10 group-hover:text-primary"
+              selectedRole === 'host' ? "bg-[#08a8c8] text-white" : "bg-surface-container-high text-on-surface-variant group-hover:bg-[#08a8c8]/10 group-hover:text-[#08a8c8]"
             )}>
               <Home className="w-8 h-8" />
             </div>
@@ -302,7 +302,7 @@ export default function SignupPage() {
             </div>
             {selectedRole === 'host' && (
               <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute top-4 right-4">
-                <CheckCircle2 className="w-6 h-6 text-primary" />
+                <CheckCircle2 className="w-6 h-6 text-[#08a8c8]" />
               </motion.div>
             )}
           </Card>
@@ -313,7 +313,7 @@ export default function SignupPage() {
           <Button 
             type="submit"
             size="lg" 
-            className="w-full max-w-sm h-14 text-lg font-bold rounded-2xl shadow-xl shadow-primary/20"
+            className="w-full max-w-sm h-14 text-lg font-bold rounded-2xl bg-[#08a8c8] hover:bg-[#08a8c8]/90 shadow-xl shadow-[#08a8c8]/20"
             disabled={
               ((isResetPasswordMode || isSignupMode) && !password.trim()) ||
               (!isResetPasswordMode && !email.trim()) ||
@@ -336,7 +336,7 @@ export default function SignupPage() {
               {mode === 'signin' ? (
                 <button
                   type="button"
-                  className="text-sm text-primary font-medium inline-flex items-center gap-2"
+                  className="text-sm text-[#08a8c8] font-medium inline-flex items-center gap-2"
                   onClick={handlePasswordResetRequest}
                   disabled={isSubmitting || !email.trim()}
                 >
