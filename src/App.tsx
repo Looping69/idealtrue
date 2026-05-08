@@ -157,7 +157,7 @@ function AppContent() {
   }
 
   return (
-    <div className={cn('min-h-screen font-sans text-on-surface', isHostRoute ? 'bg-surface' : 'bg-surface-container-low')}>
+    <div className={cn('min-h-screen font-sans text-on-surface', isHostRoute ? 'bg-surface' : 'bg-surface-container-high')}>
       <Toaster position="top-center" richColors />
       <AppNavigation
         isAdmin={isAdmin}

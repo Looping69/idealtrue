@@ -45,11 +45,11 @@ export default function AppNavigation({
 
   return (
     <>
-      <nav className="sticky top-0 z-50 bg-surface-variant/60 backdrop-blur-md">
+      <nav className="sticky top-0 z-50 bg-surface-variant/70 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <div className="flex h-16 items-center cursor-pointer" onClick={() => navigate('/')} aria-label="Go to Ideal Stay home">
-              <BrandLogo variant="inline" size="md" priority className="h-12 max-h-14 sm:h-14" />
+          <div className="flex justify-between h-[4.5rem] items-center">
+            <div className="flex h-[4.5rem] items-center cursor-pointer" onClick={() => navigate('/')} aria-label="Go to Ideal Stay home">
+              <BrandLogo variant="inline" size="md" priority className="h-14 max-h-16 sm:h-16" />
             </div>
 
             <div className="hidden md:flex items-center gap-6">
