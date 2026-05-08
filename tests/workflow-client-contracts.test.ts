@@ -127,7 +127,8 @@ test('auth and account lifecycle clients call the canonical identity endpoints',
   await resetPasswordWithToken({ token: 'reset-token-1', password: 'new-password123' });
   const updated = await updateEncoreProfile({ displayName: 'Updated Guest', role: 'host' });
 
-  assert.equal(signedUp.id, 'signed-up-user');
+  assert.equal(signedUp.profile.id, 'signed-up-user');
+  assert.equal(signedUp.verificationEmailStatus, 'sent');
   assert.equal(signedIn.id, 'signed-in-user');
   assert.equal(updated.displayName, 'Updated Guest');
   assert.deepEqual(

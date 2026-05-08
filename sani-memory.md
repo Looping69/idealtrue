@@ -1,5 +1,6 @@
 ## Change Log
 
+- Fixed signup truthfulness so `encore/identity/api.ts` no longer throws a full registration failure after the user row is already created just because the verification email dispatch fails; signup now returns a live session with `verificationEmailStatus`, `src/contexts/AuthContext.tsx` / `src/pages/SignupPage.tsx` surface a warning instead of a false success, and `tests/signup-flow.test.ts` plus `tests/workflow-client-contracts.test.ts` lock the contract.
 - Fixed the auth entry flow so `/signup?mode=signin`, header/mobile Sign In actions, verify-email success, and reset-password success all land on the real sign-in panel while preserving referral params during signup/signin toggles; covered it in `tests/e2e/auth-account.spec.ts`.
 - Fixed auth email dispatch in `encore/identity/email.ts` so missing optional Encore secrets no longer abort verification/reset email sends before Resend is called, while missing required delivery/app URL config now fails with explicit errors.
 - Moved the Content Studio side-rail controls out of `src/pages/SocialDashboard.tsx` into a compact Studio Tools dropdown, expanded the Social Media group in `src/components/HostLayout.tsx` with the Content Studio tool entries, and added UI coverage in `tests/ui/social-dashboard.test.tsx` so the dropdown keeps Create Post, tools, and wallet access.

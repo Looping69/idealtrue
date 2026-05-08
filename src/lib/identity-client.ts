@@ -8,6 +8,7 @@ export type { LeaderboardUser } from './domain-mappers';
 type EncoreUserRole = EncoreUser['role'];
 type EncoreHostPlan = EncoreUser['hostPlan'];
 type EncoreKycStatus = EncoreUser['kycStatus'];
+export type VerificationEmailStatus = 'sent' | 'failed';
 
 interface SignupParams {
   email: string;
@@ -16,6 +17,11 @@ interface SignupParams {
   photoUrl?: string | null;
   role?: EncoreUserRole;
   referredByCode?: string | null;
+}
+
+interface SignupResponse {
+  user: EncoreUser;
+  verificationEmailStatus?: VerificationEmailStatus;
 }
 
 interface LoginParams {
@@ -40,7 +46,7 @@ async function storeSessionResponse(response: { user: EncoreUser }) {
 }
 
 export async function signUpWithPassword(params: SignupParams) {
-  const response = await encoreRequest<{ user: EncoreUser }>(
+  const response = await encoreRequest<SignupResponse>(
     '/auth/signup',
     {
       method: 'POST',
@@ -55,7 +61,10 @@ export async function signUpWithPassword(params: SignupParams) {
     },
   );
 
-  return storeSessionResponse(response);
+  return {
+    profile: await storeSessionResponse(response),
+    verificationEmailStatus: response.verificationEmailStatus ?? 'sent',
+  };
 }
 
 export async function signInWithPassword(params: LoginParams) {

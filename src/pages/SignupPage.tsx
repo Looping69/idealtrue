@@ -133,14 +133,18 @@ export default function SignupPage() {
     try {
       if (isSignupMode) {
         const refCode = searchParams.get('ref');
-        const profile = await signUp({
+        const { profile, verificationEmailStatus } = await signUp({
           email: email.trim(),
           displayName: displayName.trim(),
           password,
           role: selectedRole!,
           referredByCode: refCode,
         });
-        toast.success('Account created. Check your email to verify your address.');
+        if (verificationEmailStatus === 'failed') {
+          toast.warning('Account created, but the verification email did not send. You can sign in now and request another verification email from inside the account flow.');
+        } else {
+          toast.success('Account created. Check your email to verify your address.');
+        }
         navigate(safeReturnPath ?? (profile.role === 'host' ? '/host' : '/'));
       } else {
         const profile = await signIn({

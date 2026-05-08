@@ -5,6 +5,7 @@ import { issueToken } from "./auth";
 import { isDevLoginEnabled } from "./dev-login";
 import { sendAuthEmail } from "./email";
 import { hashPassword, verifyPassword } from "./passwords";
+import { finalizeSignupSession, type SignupSessionResponse } from "./signup-flow";
 import { createRawAuthToken, hashAuthToken } from "./tokens";
 import { requireAuth, requireRole } from "../shared/auth";
 import { profileMediaBucket } from "./storage";
@@ -508,7 +509,7 @@ async function consumeAuthToken(rawToken: string, type: "verify_email" | "reset_
   return row;
 }
 
-export const signup = api<SignupParams, SessionResponse>(
+export const signup = api<SignupParams, SignupSessionResponse>(
   { expose: true, method: "POST", path: "/auth/signup" },
   async (params) => {
     const email = normalizeEmail(params.email);
@@ -574,15 +575,25 @@ export const signup = api<SignupParams, SessionResponse>(
       payload: JSON.stringify({ role: user.role, email: user.email }),
     });
 
-    const verificationToken = await issueAuthToken(user.id, "verify_email", 60 * 24);
-    await sendAuthEmail({
-      to: user.email,
-      displayName: user.displayName,
-      kind: "verify_email",
-      token: verificationToken,
+    return finalizeSignupSession({
+      user,
+      issueSession,
+      sendVerificationEmail: async () => {
+        const verificationToken = await issueAuthToken(user.id, "verify_email", 60 * 24);
+        await sendAuthEmail({
+          to: user.email,
+          displayName: user.displayName,
+          kind: "verify_email",
+          token: verificationToken,
+        });
+      },
+      onEmailFailure: (error) => {
+        console.error(
+          `Signup verification email failed for ${user.email}:`,
+          error instanceof Error ? error.message : error,
+        );
+      },
     });
-
-    return issueSession(user);
   },
 );
 

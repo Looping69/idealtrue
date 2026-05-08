@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { clearEncoreSession } from '@/lib/encore-client';
-import { getEncoreSessionProfile, signInWithPassword, signUpWithPassword } from '@/lib/identity-client';
+import { getEncoreSessionProfile, signInWithPassword, signUpWithPassword, type VerificationEmailStatus } from '@/lib/identity-client';
 import { UserProfile, UserRole } from '@/types';
 
 export interface AuthSessionUser {
@@ -30,7 +30,7 @@ interface AuthContextType {
   loading: boolean;
   refreshProfile: () => Promise<UserProfile | null>;
   signIn: (params: LoginParams) => Promise<UserProfile>;
-  signUp: (params: SignupParams) => Promise<UserProfile>;
+  signUp: (params: SignupParams) => Promise<{ profile: UserProfile; verificationEmailStatus: VerificationEmailStatus }>;
   logout: () => Promise<void>;
 }
 
@@ -82,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async ({ email, displayName, password, role = 'guest', photoUrl = null, referredByCode }: SignupParams) => {
-    const nextProfile = await signUpWithPassword({
+    const signupResult = await signUpWithPassword({
       email,
       displayName,
       password,
@@ -90,9 +90,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       role,
       referredByCode,
     });
-    setProfile(nextProfile);
-    setUser(toSessionUser(nextProfile));
-    return nextProfile;
+    setProfile(signupResult.profile);
+    setUser(toSessionUser(signupResult.profile));
+    return signupResult;
   };
 
   const signIn = async ({ email, password }: LoginParams) => {
