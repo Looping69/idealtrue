@@ -9,6 +9,7 @@ type EncoreUserRole = EncoreUser['role'];
 type EncoreHostPlan = EncoreUser['hostPlan'];
 type EncoreKycStatus = EncoreUser['kycStatus'];
 export type VerificationEmailStatus = 'sent' | 'failed';
+export type VoucherEmailStatus = 'not_applicable' | 'sent' | 'failed';
 
 interface SignupParams {
   email: string;
@@ -27,6 +28,12 @@ interface SignupResponse {
 interface LoginParams {
   email: string;
   password: string;
+}
+
+interface GoogleAuthParams {
+  credential: string;
+  role?: EncoreUserRole;
+  referredByCode?: string | null;
 }
 
 interface UpdateEncoreProfileParams {
@@ -79,6 +86,18 @@ export async function signInWithPassword(params: LoginParams) {
   return storeSessionResponse(response);
 }
 
+export async function signInWithGoogle(params: GoogleAuthParams) {
+  const response = await encoreRequest<{ user: EncoreUser }>(
+    '/auth/google',
+    {
+      method: 'POST',
+      body: JSON.stringify(params),
+    },
+  );
+
+  return storeSessionResponse(response);
+}
+
 export async function requestPasswordReset(email: string) {
   return encoreRequest<{ ok: true }>(
     '/auth/request-password-reset',
@@ -110,7 +129,7 @@ export async function requestEmailVerification() {
 }
 
 export async function verifyEmailToken(token: string) {
-  return encoreRequest<{ ok: true }>(
+  return encoreRequest<{ ok: true; voucherEmailStatus?: VoucherEmailStatus; voucherCodeAssigned?: boolean }>(
     '/auth/verify-email',
     {
       method: 'POST',

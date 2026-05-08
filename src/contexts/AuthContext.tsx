@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { clearEncoreSession } from '@/lib/encore-client';
-import { getEncoreSessionProfile, signInWithPassword, signUpWithPassword, type VerificationEmailStatus } from '@/lib/identity-client';
+import { getEncoreSessionProfile, signInWithGoogle, signInWithPassword, signUpWithPassword, type VerificationEmailStatus } from '@/lib/identity-client';
 import { UserProfile, UserRole } from '@/types';
 
 export interface AuthSessionUser {
@@ -24,6 +24,12 @@ interface SignupParams {
   referredByCode?: string | null;
 }
 
+interface GoogleSigninParams {
+  credential: string;
+  role?: UserRole;
+  referredByCode?: string | null;
+}
+
 interface AuthContextType {
   user: AuthSessionUser | null;
   profile: UserProfile | null;
@@ -31,6 +37,7 @@ interface AuthContextType {
   refreshProfile: () => Promise<UserProfile | null>;
   signIn: (params: LoginParams) => Promise<UserProfile>;
   signUp: (params: SignupParams) => Promise<{ profile: UserProfile; verificationEmailStatus: VerificationEmailStatus }>;
+  signInWithGoogle: (params: GoogleSigninParams) => Promise<UserProfile>;
   logout: () => Promise<void>;
 }
 
@@ -43,6 +50,9 @@ const AuthContext = createContext<AuthContextType>({
     throw new Error('Auth context not ready.');
   },
   signUp: async () => {
+    throw new Error('Auth context not ready.');
+  },
+  signInWithGoogle: async () => {
     throw new Error('Auth context not ready.');
   },
   logout: async () => {},
@@ -102,6 +112,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return nextProfile;
   };
 
+  const signInGoogle = async ({ credential, role, referredByCode }: GoogleSigninParams) => {
+    const nextProfile = await signInWithGoogle({ credential, role, referredByCode });
+    setProfile(nextProfile);
+    setUser(toSessionUser(nextProfile));
+    return nextProfile;
+  };
+
   useEffect(() => {
     let cancelled = false;
 
@@ -134,7 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, refreshProfile, signIn, signUp, logout }}>
+    <AuthContext.Provider value={{ user, profile, loading, refreshProfile, signIn, signUp, signInWithGoogle: signInGoogle, logout }}>
       {!loading && children}
     </AuthContext.Provider>
   );

@@ -37,6 +37,7 @@ This is now an Encore-first repo, not a Firebase bridge with new paint.
 - session sync and profile resolution
 - local session bootstrap and account creation
 - password signup and password login
+- Google sign-in through Google Identity Services
 - email verification and password reset flows
 - profile updates and role changes
 - public listing reads
@@ -113,6 +114,7 @@ If you want to be explicit in your local env file, set:
 
 ```bash
 ENCORE_API_URL=http://127.0.0.1:4000
+VITE_GOOGLE_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com
 ```
 
 Preview and production must set `ENCORE_API_URL` explicitly. They fail closed if the variable is missing, and production-like environments refuse to start if the value points at the staging Encore host.
@@ -135,6 +137,14 @@ Backend auth email delivery is optional in local/dev but should be configured in
 - `AUTH_EMAIL_FROM`
 - `AUTH_EMAIL_REPLY_TO`
 - `IDEAL_STAY_APP_URL`
+- `GOOGLE_OAUTH_CLIENT_ID`
+
+Google sign-in now expects the same Google web client id in two places:
+
+- frontend env: `VITE_GOOGLE_CLIENT_ID`
+- Encore backend config/secret: `GOOGLE_OAUTH_CLIENT_ID`
+
+Do not commit the downloaded Google OAuth client secret JSON into the repo. The frontend only needs the client id string, and the backend verifies Google ID tokens against that same client id.
 
 The Encore app typechecks cleanly, but there are two environment caveats in the current machine state:
 

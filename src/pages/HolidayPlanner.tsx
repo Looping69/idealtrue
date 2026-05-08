@@ -5,6 +5,9 @@ import { Button } from '@/components/ui/button';
 import ReactMarkdown from 'react-markdown';
 import { cn } from '@/lib/utils';
 import { generateTripPlannerReply } from '@/lib/ai-client';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
+import { buildPlannerAuthPath } from '@/lib/booking-auth-intent';
 
 export default function HolidayPlanner() {
   const [messages, setMessages] = useState<{ role: 'user' | 'ai', content: string }[]>([]);
@@ -13,13 +16,18 @@ export default function HolidayPlanner() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const { profile } = useAuth();
 
   useEffect(() => {
+    if (!profile) {
+      return;
+    }
+
     const initialQuery = searchParams.get('q');
     if (initialQuery && messages.length === 0) {
       handleSend(initialQuery);
     }
-  }, [searchParams]);
+  }, [messages.length, profile, searchParams]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -44,6 +52,11 @@ export default function HolidayPlanner() {
       setMessages(prev => [...prev, { role: 'ai', content: response }]);
     } catch (error: any) {
       console.error(error);
+      if (error instanceof Error && /signed in/i.test(error.message)) {
+        toast.error('Sign in to use the AI trip planner.');
+        navigate(buildPlannerAuthPath(userMessage));
+        return;
+      }
       setMessages(prev => [...prev, { role: 'ai', content: "Something broke while talking to the planner. Try again with a clearer destination or trip shape." }]);
     } finally {
       setLoading(false);

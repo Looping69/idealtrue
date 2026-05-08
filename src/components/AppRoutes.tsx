@@ -1,8 +1,9 @@
 import { lazy, Suspense, type ReactElement } from 'react';
 import { Loader2 } from 'lucide-react';
-import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import HostLayout from '@/components/HostLayout';
 import type { Booking, Listing, Referral, UserProfile } from '@/types';
+import { buildAuthPathWithReturn } from '@/lib/booking-auth-intent';
 
 const AccountPage = lazy(() => import('@/pages/AccountPage'));
 const AdminDashboard = lazy(() => import('@/pages/AdminDashboard'));
@@ -35,9 +36,19 @@ function RouteLoader() {
   );
 }
 
-function RequireAuthRoute({ profile, children }: { profile: UserProfile | null; children: ReactElement }) {
+function RequireAuthRoute({
+  profile,
+  children,
+  intent,
+}: {
+  profile: UserProfile | null;
+  children: ReactElement;
+  intent?: string;
+}) {
+  const location = useLocation();
   if (!profile) {
-    return <Navigate to="/signup" replace />;
+    const returnTo = `${location.pathname}${location.search}${location.hash}`;
+    return <Navigate to={buildAuthPathWithReturn(returnTo, intent)} replace />;
   }
 
   return children;
@@ -111,7 +122,14 @@ export default function AppRoutes({
           <Route path="*" element={<Navigate to="/host" />} />
         </Route>
         <Route path="/admin" element={isAdmin ? <AdminDashboard /> : <Navigate to="/" />} />
-        <Route path="/planner" element={<HolidayPlanner />} />
+        <Route
+          path="/planner"
+          element={(
+            <RequireAuthRoute profile={profile} intent="planner">
+              <HolidayPlanner />
+            </RequireAuthRoute>
+          )}
+        />
         <Route
           path="/guest"
           element={
@@ -131,7 +149,7 @@ export default function AppRoutes({
         <Route path="/referral" element={<RequireAuthRoute profile={profile}><ReferralView profile={profile} referrals={referrals} /></RequireAuthRoute>} />
         <Route path="/account" element={<RequireAuthRoute profile={profile}><AccountPage /></RequireAuthRoute>} />
         <Route path="/signup" element={<SignupPage />} />
-        <Route path="/pricing" element={<PricingPage onBack={() => navigate('/host')} />} />
+        <Route path="/pricing" element={<PricingPage />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms-of-service" element={<TermsOfService />} />
         <Route path="/host-agreement" element={<HostAgreement />} />

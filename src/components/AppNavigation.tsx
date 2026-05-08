@@ -54,6 +54,7 @@ export default function AppNavigation({
 
             <div className="hidden md:flex items-center gap-6">
               <Link to="/" className={cn('text-sm font-medium', location.pathname === '/' ? 'text-on-surface' : 'text-on-surface-variant hover:text-on-surface')}>Explore</Link>
+              <Link to="/pricing" className={cn('text-sm font-medium', location.pathname === '/pricing' ? 'text-on-surface' : 'text-on-surface-variant hover:text-on-surface')}>Pricing</Link>
               {user ? (
                 <>
                   {profile?.role === 'host' && (
@@ -125,6 +126,7 @@ export default function AppNavigation({
           >
             <div className="flex flex-col gap-6 text-center">
               <Link to="/" onClick={onCloseMenu} className="text-2xl font-bold">Explore</Link>
+              <Link to="/pricing" onClick={onCloseMenu} className="text-2xl font-bold">Pricing</Link>
               {user ? (
                 <>
                   {profile?.role === 'host' && (

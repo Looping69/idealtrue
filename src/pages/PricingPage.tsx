@@ -5,7 +5,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { ArrowRight, Check, Loader2, Megaphone, ShieldCheck, Sparkles, Smartphone, Video, BarChart4, Users, Share2, LineChart, BadgeCheck } from "lucide-react";
 import { toast } from 'sonner';
 import { useAuth } from "@/contexts/AuthContext";
-import { createSubscriptionCheckout, getCheckoutStatus, redeemHostVoucher } from "@/lib/billing-client";
+import { createSubscriptionCheckout, getCheckoutStatus, getMyHostBillingAccount, redeemHostVoucher } from "@/lib/billing-client";
+import type { HostBillingAccount } from "@/types";
 
 type PlanTier = 'standard' | 'professional' | 'premium';
 type BillingInterval = 'monthly' | 'annual';
@@ -24,7 +25,6 @@ interface Plan {
     highlight?: string;
     color: string;
     cta: string;
-    eyebrow: string;
 }
 
 const plans: Plan[] = [
@@ -32,79 +32,76 @@ const plans: Plan[] = [
         id: 'standard',
         name: "Standard",
         price: "R149",
-        description: "The paid entry point. Get live, get verified, and run one serious listing properly.",
+        description: "A strong starting plan for hosts who want one polished listing with real visibility support.",
         highlight: "Most Popular",
         color: "bg-primary/10 border-blue-200",
         cta: "Start on Standard",
-        eyebrow: "Growth",
         features: [
             { text: "1 active listing", included: true },
-            { text: "Higher Search Ranking", included: true },
-            { text: "Full Photo Gallery", included: true },
-            { text: "Showcase Video Slot", included: false },
-            { text: "Monthly Social Visibility", included: true },
-            { text: "Verified Host Badge", included: true },
-            { text: "Holiday Campaign Priority", included: true },
-            { text: "Access to Promotions", included: true },
-            { text: "Styled content for any listing", included: true },
+            { text: "Stronger search placement", included: true },
+            { text: "Up to 10 listing photos", included: true },
+            { text: "Monthly social visibility support", included: true },
+            { text: "Verified host badge", included: true },
+            { text: "Placement in seasonal campaigns", included: true },
+            { text: "Access to host promotions", included: true },
+            { text: "Styled social content for your listing", included: true },
         ]
     },
     {
         id: 'professional',
         name: "Professional",
         price: "R350",
-        description: "Scale your reach with advanced social & ranking tools.",
+        description: "For hosts who want more reach, more promotion, and room to market multiple properties properly.",
         color: "bg-primary/10/50 border-blue-100",
         cta: "Go Professional",
-        eyebrow: "Scale",
         features: [
             { text: "Everything in Standard", included: true },
-            { text: "2 Social Promos/mo", included: true },
-            { text: "Advanced Analytics", included: true },
-            { text: "Custom Marketing Templates", included: true },
-            { text: "Professional Video", included: false },
-            { text: "Featured in 'Top Picks'", included: false },
-            { text: "Direct WhatsApp Support", included: false },
+            { text: "Extra monthly social promos", included: true },
+            { text: "Advanced performance insights", included: true },
+            { text: "Custom marketing templates", included: true },
+            { text: "Multiple active listings", included: true },
+            { text: "Showcase video support", included: true },
+            { text: "Featured Top Picks opportunities", included: false },
+            { text: "Priority support", included: false },
             { text: "Multi-platform social copy", included: true },
         ]
     },
     {
         id: 'premium',
         name: "Premium",
-        price: "R399",
-        description: "Top-tier professional tools for serious hosts.",
+        price: "R499",
+        description: "Full promotion support for hosts who want premium placement, faster help, and the strongest visibility stack.",
         highlight: "Best Value",
         color: "bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-200",
         cta: "Go Premium",
-        eyebrow: "Elite",
         features: [
             { text: "Everything in Standard", included: true },
-            { text: "Professional Video", included: true },
-            { text: "Full Social Promo (1/mo)", included: true },
-            { text: "Featured in 'Top Picks'", included: true },
-            { text: "Holiday Traffic Priority", included: true },
-            { text: "Direct WhatsApp Support", included: true },
-            { text: "Custom Marketing Templates", included: true },
-            { text: "Partner Deals Priority", included: true },
-            { text: "Styled campaigns across networks", included: true },
+            { text: "Showcase video placement", included: true },
+            { text: "Priority social promo support", included: true },
+            { text: "Featured Top Picks opportunities", included: true },
+            { text: "Priority holiday traffic placement", included: true },
+            { text: "Direct WhatsApp support", included: true },
+            { text: "Custom marketing templates", included: true },
+            { text: "Priority partner campaign access", included: true },
+            { text: "Campaign-ready content across networks", included: true },
         ]
     }
 ];
 
 const planStats = [
     { label: "No commission", value: "0%", icon: BadgeCheck },
-    { label: "Community reach", value: "1M+", icon: Megaphone },
-    { label: "Ranking uplift", value: "2.4x", icon: LineChart },
+    { label: "Facebook group network", value: "Nearly 1M", icon: Megaphone },
+    { label: "Monthly community growth", value: "Thousands", icon: LineChart },
 ];
 
 const comparisonRows = [
     { label: "Listings included", values: ["1", "Multiple", "Multiple"] },
-    { label: "Verified badge", values: ["Included", "Included", "Priority"] },
-    { label: "Video placement", values: ["Not included", "Included", "Included"] },
-    { label: "Social promotion", values: ["Monthly visibility", "2 promos", "Featured promo"] },
-    { label: "Content engine", values: ["Any listing", "Any listing + multi-platform", "Any listing + campaign-ready"] },
-    { label: "Analytics", values: ["Basic", "Advanced", "Advanced"] },
-    { label: "Support", values: ["Standard", "Priority", "WhatsApp VIP"] },
+    { label: "Verified host badge", values: ["Included", "Included", "Priority support handling"] },
+    { label: "Video support", values: ["Not included", "Included", "Included"] },
+    { label: "Social promotion", values: ["Monthly visibility", "Extra monthly promos", "Priority featured promo"] },
+    { label: "Content engine", values: ["Listing-ready", "Multi-platform", "Campaign-ready"] },
+    { label: "Insights", values: ["Basic", "Advanced", "Advanced"] },
+    { label: "Support", values: ["Standard", "Priority", "WhatsApp direct"] },
 ];
 
 export default function PricingPage({ onBack }: { onBack?: () => void }) {
@@ -116,6 +113,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
     const [billingInterval, setBillingInterval] = useState<BillingInterval>('monthly');
     const [voucherCode, setVoucherCode] = useState('');
     const [redeemingVoucher, setRedeemingVoucher] = useState(false);
+    const [billingAccount, setBillingAccount] = useState<HostBillingAccount | null>(null);
     const [searchParams] = useSearchParams();
     const sourceLabel = searchParams.get('source_label') || searchParams.get('region');
     const billingStatus = searchParams.get('billing_status');
@@ -124,10 +122,22 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
     const fetchPlan = useCallback(async () => {
         if (!profile) {
             setCurrentPlan('standard');
+            setBillingAccount(null);
             setFetchingPlan(false);
             return;
         }
         setCurrentPlan((profile.hostPlan as PlanTier) || 'standard');
+        if (profile.role === 'host') {
+            try {
+                const account = await getMyHostBillingAccount();
+                setBillingAccount(account);
+            } catch (error) {
+                console.error('Failed to load host billing account for pricing page:', error);
+                setBillingAccount(null);
+            }
+        } else {
+            setBillingAccount(null);
+        }
         setFetchingPlan(false);
     }, [profile]);
 
@@ -223,6 +233,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
         setRedeemingVoucher(true);
         try {
             const account = await redeemHostVoucher(voucherCode);
+            setBillingAccount(account);
             const nextProfile = await refreshProfile();
             setCurrentPlan((nextProfile?.hostPlan as PlanTier) || account.plan);
             toast.success(`Voucher redeemed. Free Standard access now runs until ${account.currentPeriodEnd?.slice(0, 10)}.`);
@@ -235,6 +246,9 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
             setRedeemingVoucher(false);
         }
     }, [navigate, refreshProfile, user, voucherCode]);
+
+    const hasActiveHostPlan = billingAccount?.billingSource === 'voucher' || billingAccount?.billingSource === 'paid';
+    const showCurrentPlanState = profile?.role === 'host' && hasActiveHostPlan;
 
     const getPlanPrice = useCallback((plan: Plan) => {
         if (billingInterval === 'monthly') {
@@ -281,12 +295,19 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
 
                         <div className="max-w-3xl space-y-4">
                             <h1 className="text-4xl font-black tracking-tight text-slate-950 md:text-6xl">
-                                Plans built to help serious hosts get seen, trusted, and booked.
+                                Plans built to help hosts get seen, trusted, and booked across South Africa.
                             </h1>
                             <p className="max-w-2xl text-lg leading-8 text-slate-600 md:text-xl">
-                                Pricing now lives outside the host dashboard for a reason. This is a growth decision, not a settings page.
-                                Compare the tiers, see what changes, and upgrade when the numbers make sense. Paid plans also unlock
-                                the content engine that turns any listing into styled social media content you can reuse across your channels.
+                                Choose the level of visibility and marketing support that fits your property business.
+                                Every paid plan is designed to help your listing look stronger, reach more travellers, and convert more enquiries into bookings.
+                            </p>
+                            <p className="max-w-2xl text-base leading-7 text-slate-600">
+                                Ideal Stay is backed by a Facebook group network with nearly one million members across location-based communities such as
+                                <span className="font-semibold"> “Cape Town Holiday Accommodation”</span>,
+                                <span className="font-semibold"> “Durban Holiday Accommodation”</span>,
+                                <span className="font-semibold"> “Johannesburg Holiday Accommodation”</span>,
+                                <span className="font-semibold"> “Pretoria Holiday Accommodation”</span>, and many more covering major cities and holiday towns across South Africa.
+                                That network continues to grow by thousands of new members each month.
                             </p>
                         </div>
 
@@ -304,17 +325,29 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
                                 <div className="rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800">
                                     Sign in to upgrade, but you can review every plan first.
                                 </div>
+                            ) : profile?.role === 'host' && !hasActiveHostPlan ? (
+                                <div className="rounded-full border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-medium text-sky-800">
+                                    Base host tier: Standard. Hosting billing only becomes active after voucher redemption or paid checkout.
+                                </div>
                             ) : (
                                 <div className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800">
                                     Your current plan: {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)}
                                 </div>
                             )}
 
-                            {onBack && (
-                                <Button variant="outline" onClick={onBack} className="rounded-full border-slate-300 bg-surface/80">
-                                    Back to Host Workspace
-                                </Button>
-                            )}
+                            <Button
+                                variant="outline"
+                                onClick={() => {
+                                    if (onBack) {
+                                        onBack();
+                                        return;
+                                    }
+                                    navigate(profile?.role === 'host' ? '/host' : '/');
+                                }}
+                                className="rounded-full border-slate-300 bg-surface/80"
+                            >
+                                {profile?.role === 'host' ? 'Back to Host Workspace' : 'Back to Explore'}
+                            </Button>
                         </div>
 
                         <div className="inline-flex w-fit items-center gap-2 rounded-full border border-slate-200 bg-surface/85 p-1 shadow-sm">
@@ -355,9 +388,9 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
                     <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white/80 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
                         Founding Host Voucher
                     </div>
-                    <h2 className="text-2xl font-black text-slate-950">First 100 hosts can redeem a 3-month Standard voucher PIN.</h2>
+                    <h2 className="text-2xl font-black text-slate-950">First 100 hosts can redeem a 1-month Standard voucher PIN.</h2>
                     <p className="text-sm leading-6 text-slate-600">
-                        Redeeming the PIN starts a free Standard billing cycle immediately. Card capture is not required upfront, but hosts will start receiving reminders 7 days before the free period ends.
+                        Newly verified hosts in that first 100 are emailed a personal voucher PIN. Redeeming it starts a free 1-month Standard plan. No upfront card capture is required, and reminder notices only start 7 days before the free period ends.
                     </p>
                 </div>
                 <div className="flex flex-col gap-3 sm:flex-row">
@@ -376,7 +409,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
 
             <section className="grid grid-cols-1 gap-6 md:grid-cols-3">
                 {plans.map((plan) => {
-                    const isCurrent = currentPlan === plan.id;
+                    const isCurrent = showCurrentPlanState && currentPlan === plan.id;
                     const isLoading = loadingPlan === plan.id;
                     const price = getPlanPrice(plan);
 
@@ -396,7 +429,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
 
                             <CardHeader className="pb-4 text-left">
                                 <div className="mb-4 flex items-center justify-between">
-                                    <span className="text-xs font-bold uppercase tracking-[0.24em] text-slate-500">{plan.eyebrow}</span>
+                                    <span />
                                     {isCurrent && (
                                         <span className="border border-emerald-200 bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full text-xs">
                                             Current
@@ -465,38 +498,39 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
                 <div className="relative z-10 space-y-6">
                     <div className="inline-flex items-center gap-2 rounded-full border border-surface/20 bg-surface/10 px-3 py-1 text-sm font-medium backdrop-blur-sm">
                         <Users className="w-4 h-4" />
-                        <span>1 Million+ Followers</span>
+                        <span>Nearly 1 Million Group Members</span>
                     </div>
                     <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
                         <div className="space-y-5">
                             <h3 className="text-3xl font-black leading-tight md:text-4xl">
-                                Instant access to South Africa's largest travel community.
+                                Put your listing in front of one of South Africa's strongest holiday accommodation audiences.
                             </h3>
                             <p className="text-lg leading-8 text-cyan-50/90">
-                                The paid plans are not just about a prettier listing. They buy ranking, trust signals, distribution,
-                                and promotional leverage. That is the whole commercial point.
+                                Our network spans city and town Facebook groups built around the familiar
+                                <span className="font-semibold"> “(Town Name) Holiday Accommodation”</span> format.
+                                It already reaches travellers across places like Cape Town, Durban, Johannesburg, Pretoria, Margate, Umhlanga, St Lucia, Port Edward and more, and continues to add thousands of new members every month.
                             </p>
                         </div>
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div className="rounded-2xl border border-surface/15 bg-surface/10 p-5 backdrop-blur-md">
                                 <Share2 className="mb-3 h-8 w-8 text-cyan-100" />
-                                <div className="text-lg font-bold">Viral Reach</div>
-                                <p className="mt-1 text-sm text-cyan-50/80">Direct access to a massive travel audience.</p>
+                                <div className="text-lg font-bold">Real Audience Reach</div>
+                                <p className="mt-1 text-sm text-cyan-50/80">Your listing can be positioned in front of a large, travel-focused Facebook audience.</p>
                             </div>
                             <div className="rounded-2xl border border-surface/15 bg-surface/10 p-5 backdrop-blur-md">
                                 <ShieldCheck className="mb-3 h-8 w-8 text-cyan-100" />
-                                <div className="text-lg font-bold">Verified Trust</div>
-                                <p className="mt-1 text-sm text-cyan-50/80">Badges and placement that reduce hesitation.</p>
+                                <div className="text-lg font-bold">More Trust</div>
+                                <p className="mt-1 text-sm text-cyan-50/80">Badges, stronger presentation, and better placement help guests feel safer enquiring.</p>
                             </div>
                             <div className="rounded-2xl border border-surface/15 bg-surface/10 p-5 backdrop-blur-md">
                                 <Video className="mb-3 h-8 w-8 text-cyan-100" />
-                                <div className="text-lg font-bold">Content Lift</div>
-                                <p className="mt-1 text-sm text-cyan-50/80">Turn any listing into styled posts for Instagram, Facebook, X, or LinkedIn.</p>
+                                <div className="text-lg font-bold">Content Support</div>
+                                <p className="mt-1 text-sm text-cyan-50/80">Turn any listing into styled posts for Facebook, Instagram, X, LinkedIn, and more.</p>
                             </div>
                             <div className="rounded-2xl border border-surface/15 bg-surface/10 p-5 backdrop-blur-md">
                                 <Smartphone className="mb-3 h-8 w-8 text-cyan-100" />
-                                <div className="text-lg font-bold">Direct Support</div>
-                                <p className="mt-1 text-sm text-cyan-50/80">Faster help when a listing needs attention now.</p>
+                                <div className="text-lg font-bold">Faster Support</div>
+                                <p className="mt-1 text-sm text-cyan-50/80">Get quicker help when your listing, promotion, or account needs attention.</p>
                             </div>
                         </div>
                     </div>
@@ -509,9 +543,9 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
                         <BarChart4 className="h-4 w-4" />
                         Compare What Changes
                     </div>
-                    <h3 className="text-3xl font-black text-slate-950">A clearer view of what each tier actually buys.</h3>
+                    <h3 className="text-3xl font-black text-slate-950">A clear view of what each plan includes.</h3>
                     <p className="mt-3 text-base leading-7 text-slate-600">
-                        This is the part hosts actually need. Not fluff. What gets unlocked, what stays limited, and what starts compounding once the listing is no longer invisible.
+                        Compare listing capacity, promotion support, visibility tools, and support levels side by side before you choose a plan.
                     </p>
                 </div>
 
@@ -546,8 +580,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
                     </div>
                     <h3 className="text-3xl font-black text-slate-950">Every paid host plan includes the content engine.</h3>
                     <p className="text-base leading-7 text-slate-700">
-                        This is not generic template fluff. The engine is meant to take any listing you already have on Ideal Stay and turn it
-                        into styled promotional content that feels usable on real social channels.
+                        Turn any Ideal Stay listing into polished promotional content without having to start from a blank page every time you want to post.
                     </p>
                 </div>
 
@@ -555,26 +588,26 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
                     <div className="rounded-2xl border border-surface/80 bg-surface/90 p-5 shadow-sm">
                         <div className="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Input</div>
                         <p className="mt-3 text-sm leading-6 text-slate-700">
-                            Choose one of your existing listings and let the engine pull the title, location, amenities, price, and positioning.
+                            Choose one of your listings and let the engine pull the title, location, amenities, price, and positioning automatically.
                         </p>
                     </div>
                     <div className="rounded-2xl border border-surface/80 bg-surface/90 p-5 shadow-sm">
                         <div className="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Styling</div>
                         <p className="mt-3 text-sm leading-6 text-slate-700">
-                            Generate styled copy with hooks, body text, CTA language, and hashtag direction tuned for each network.
+                            Generate styled copy with headlines, body text, call-to-action wording, and hashtag direction for each platform.
                         </p>
                     </div>
                     <div className="rounded-2xl border border-surface/80 bg-surface/90 p-5 shadow-sm">
                         <div className="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Output</div>
                         <p className="mt-3 text-sm leading-6 text-slate-700">
-                            Reuse the content on Instagram, Facebook, X, LinkedIn, or wherever else you market your property.
+                            Reuse the content on Facebook, Instagram, X, LinkedIn, or wherever else you market your property.
                         </p>
                     </div>
                     <div className="rounded-2xl border border-surface/80 bg-surface/90 p-5 shadow-sm">
                         <div className="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Commercial Angle</div>
                         <p className="mt-3 text-sm leading-6 text-slate-700">
-                            The point is speed and polish: less staring at blank captions, more consistent promotion for every listing.
-                        </p>
+                            Save time, stay consistent, and keep your listing visible more often without hiring a full content team.
+                    </p>
                     </div>
                 </div>
             </section>

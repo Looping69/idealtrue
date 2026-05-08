@@ -23,8 +23,8 @@ export default function FeaturedCarousel({ listings, onListingClick }: FeaturedC
     if (listings.length === 0) return null;
 
     return (
-        <section className="w-full bg-[#FAFAFA] py-10 mb-10 border-y border-outline-variant overflow-visible">
-            <div className="container mx-auto px-4 mb-6">
+        <section className="relative left-1/2 right-1/2 ml-[-50vw] mr-[-50vw] mb-10 w-screen overflow-visible border-y border-outline-variant bg-[#f8fbff] py-8 sm:py-10">
+            <div className="mx-auto mb-6 w-full max-w-[1600px] px-5 sm:px-6 lg:px-8">
                 <div className="flex items-end justify-between">
                     <div>
                         <h2 className="text-3xl font-bold text-on-surface tracking-tight font-primary">Featured Stays</h2>
@@ -32,27 +32,27 @@ export default function FeaturedCarousel({ listings, onListingClick }: FeaturedC
                 </div>
             </div>
 
-            <div className="w-full relative px-4">
+            <div className="relative w-full px-5 sm:px-6 lg:px-8">
                 <Carousel
                     opts={{
                         align: "start",
                         loop: true,
                     }}
                     plugins={[autoplayPlugin.current]}
-                    className="w-full max-w-[1400px] mx-auto overflow-visible"
+                    className="mx-auto w-full max-w-[1600px] overflow-visible"
                 >
-                    <CarouselContent className="-ml-3">
+                    <CarouselContent className="-ml-4 md:-ml-5">
                         {listings.map((listing) => (
-                            <CarouselItem key={listing.id} className="pl-3 basis-1/2 sm:basis-1/3 md:basis-1/4 lg:basis-1/5 xl:basis-1/6 2xl:basis-[12.5%]">
+                            <CarouselItem key={listing.id} className="basis-full pl-4 sm:basis-[78%] md:basis-1/2 md:pl-5 lg:basis-[31%] xl:basis-1/4 2xl:basis-[22%]">
                                 <div className="p-0.5 h-full">
                                     <div className="transition-all duration-300 hover:-translate-y-1.5 hover:shadow-xl hover:shadow-gray-200 rounded-2xl h-full">
-                                        <PropertyCard listing={listing} onClick={onListingClick} showBorder={true} compact />
+                                        <PropertyCard listing={listing} onClick={onListingClick} showBorder={true} />
                                     </div>
                                 </div>
                             </CarouselItem>
                         ))}
                     </CarouselContent>
-                    <div className="flex justify-end gap-3 mt-6 md:absolute md:-top-16 md:right-0">
+                    <div className="mt-6 flex justify-end gap-3 md:absolute md:-top-16 md:right-0">
                         <CarouselPrevious className="static min-w-[4.75rem] translate-y-0 rounded-xl border-transparent bg-[#08a8c8] px-4 text-white shadow-lg shadow-[#08a8c8]/20 hover:bg-[#08a8c8]/90" />
                         <CarouselNext className="static min-w-[4.75rem] translate-y-0 rounded-xl border-transparent bg-[#08a8c8] px-4 text-white shadow-lg shadow-[#08a8c8]/20 hover:bg-[#08a8c8]/90" />
                     </div>

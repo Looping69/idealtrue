@@ -14,6 +14,8 @@ import { listListingReviews } from '@/lib/platform-client';
 import { formatRand } from '@/lib/currency';
 import { isListingNightBlocked, stayOverlapsListingAvailability } from '@/lib/listing-availability';
 import type { BookingIntent } from '@/lib/booking-auth-intent';
+import { computeDriveRouteSummary } from '@/lib/google-places';
+import { readSearchContext } from '@/lib/search-context';
 
 export default function ListingDetail({ 
   listing, 
@@ -37,6 +39,7 @@ export default function ListingDetail({
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isBooking, setIsBooking] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [routeSummary, setRouteSummary] = useState<{ label: string; durationLabel: string; distanceLabel: string } | null>(null);
 
   // Booking state
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
@@ -71,6 +74,43 @@ export default function ListingDetail({
   useEffect(() => {
     setSelectedImageIndex(0);
   }, [listing.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!listing.coordinates) {
+      setRouteSummary(null);
+      return;
+    }
+
+    const searchContext = readSearchContext();
+    if (!searchContext?.coordinates) {
+      setRouteSummary(null);
+      return;
+    }
+
+    void computeDriveRouteSummary(searchContext.coordinates, listing.coordinates)
+      .then((summary) => {
+        if (cancelled || !summary) {
+          return;
+        }
+
+        setRouteSummary({
+          label: searchContext.label,
+          durationLabel: summary.durationLabel,
+          distanceLabel: summary.distanceLabel,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRouteSummary(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [listing.coordinates, listing.id]);
 
   useEffect(() => {
     if (!initialBookingIntent) {
@@ -223,6 +263,11 @@ export default function ListingDetail({
                   <p className="text-on-surface-variant">
                     {listing.adults + listing.children} guests · {listing.bedrooms} bedrooms · {listing.bedrooms} beds · {listing.bathrooms} bath
                   </p>
+                  {routeSummary && (
+                    <p className="text-sm font-medium text-on-surface-variant">
+                      Approx. {routeSummary.durationLabel} drive from {routeSummary.label} · {routeSummary.distanceLabel}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 bg-surface-container-low px-4 py-2 rounded-2xl">
                   <Star className="w-5 h-5 fill-black" />

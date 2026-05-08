@@ -34,7 +34,7 @@ function getAppUrl() {
   );
 }
 
-function renderEmail(kind: AuthEmailKind, link: string, displayName: string) {
+function renderAuthEmail(kind: AuthEmailKind, link: string, displayName: string) {
   if (kind === "verify_email") {
     return {
       subject: "Verify your Ideal Stay email",
@@ -80,8 +80,26 @@ export async function sendAuthEmail(params: {
       ? `/signup?mode=verify-email&token=${encodeURIComponent(params.token)}`
       : `/signup?mode=reset-password&token=${encodeURIComponent(params.token)}`;
   const link = `${appUrl}${path}`;
-  const rendered = renderEmail(params.kind, link, params.displayName);
+  const rendered = renderAuthEmail(params.kind, link, params.displayName);
 
+  return sendEmail({
+    to: params.to,
+    subject: rendered.subject,
+    html: rendered.html,
+    text: rendered.text,
+    logFallbackLabel: `auth-email:${params.kind}`,
+    logFallbackValue: link,
+  });
+}
+
+async function sendEmail(params: {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  logFallbackLabel: string;
+  logFallbackValue: string;
+}) {
   const apiKey = readConfiguredSecret(resendApiKey, "RESEND_API_KEY");
   const from = readConfiguredSecret(authEmailFrom, "AUTH_EMAIL_FROM");
   const replyTo = readConfiguredSecret(authEmailReplyTo, "AUTH_EMAIL_REPLY_TO");
@@ -91,8 +109,8 @@ export async function sendAuthEmail(params: {
         "Auth email transport is not configured. Set RESEND_API_KEY and AUTH_EMAIL_FROM, or explicitly enable local log fallback with IDEAL_STAY_ALLOW_AUTH_EMAIL_LOG=true.",
       );
     }
-    console.log(`[auth-email:${params.kind}] ${params.to} -> ${link}`);
-    return { delivery: "log" as const, link };
+    console.log(`[${params.logFallbackLabel}] ${params.to} -> ${params.logFallbackValue}`);
+    return { delivery: "log" as const };
   }
 
   const response = await fetch("https://api.resend.com/emails", {
@@ -104,17 +122,51 @@ export async function sendAuthEmail(params: {
     body: JSON.stringify({
       from,
       to: [params.to],
-      subject: rendered.subject,
-      html: rendered.html,
-      text: rendered.text,
+      subject: params.subject,
+      html: params.html,
+      text: params.text,
       reply_to: replyTo || undefined,
     }),
   });
 
   const body = await response.text();
   if (!response.ok) {
-    throw new Error(`Failed to send auth email: ${response.status} ${body}`);
+    throw new Error(`Failed to send email: ${response.status} ${body}`);
   }
 
-  return { delivery: "resend" as const, link };
+  return { delivery: "resend" as const };
+}
+
+export async function sendHostVoucherEmail(params: {
+  to: string;
+  displayName: string;
+  code: string;
+  durationMonths: number;
+}) {
+  const durationLabel = params.durationMonths === 1 ? "1 month" : `${params.durationMonths} months`;
+  const rendered = {
+    subject: "Your Ideal Stay founding host voucher PIN",
+    html: `
+      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
+        <h2>Your founding host voucher is ready</h2>
+        <p>Hi ${params.displayName || "there"},</p>
+        <p>Your email is verified and you qualify for a founding host voucher.</p>
+        <p>This PIN gives you <strong>${durationLabel}</strong> of Standard host access once redeemed.</p>
+        <div style="margin:20px 0;padding:16px 18px;border:1px solid #bae6fd;border-radius:12px;background:#f0f9ff;font-size:20px;font-weight:700;letter-spacing:0.18em">
+          ${params.code}
+        </div>
+        <p>Sign in, open the pricing page, and redeem the PIN to activate your hosting period.</p>
+      </div>
+    `,
+    text: `Your founding host voucher PIN is ${params.code}. Redeem it on the Ideal Stay pricing page to activate ${durationLabel} of Standard host access.`,
+  };
+
+  return sendEmail({
+    to: params.to,
+    subject: rendered.subject,
+    html: rendered.html,
+    text: rendered.text,
+    logFallbackLabel: "host-voucher-email",
+    logFallbackValue: params.code,
+  });
 }

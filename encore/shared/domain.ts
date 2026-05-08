@@ -292,8 +292,8 @@ export const HOST_PLANS: SubscriptionPlan[] = [
   {
     id: "premium",
     name: "Premium",
-    monthlyAmount: 399,
-    annualAmount: 3990,
+    monthlyAmount: 499,
+    annualAmount: 4990,
     features: ["Premium support", "Featured campaigns", "Priority operations tooling"],
   },
 ];

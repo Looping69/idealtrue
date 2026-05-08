@@ -52,11 +52,32 @@ export function buildBookingReturnPath({ listingId, checkIn, checkOut, adults, c
 }
 
 export function buildBookingAuthPath(input: BookingAuthIntentInput) {
+  return buildAuthPathWithReturn(buildBookingReturnPath(input), 'booking');
+}
+
+export function buildAuthPathWithReturn(returnTo: string, intent?: string) {
   const searchParams = new URLSearchParams();
-  searchParams.set('intent', 'booking');
-  searchParams.set('returnTo', buildBookingReturnPath(input));
+  if (intent) {
+    searchParams.set('intent', intent);
+  }
+  searchParams.set('returnTo', returnTo);
 
   return `/signup?${searchParams.toString()}`;
+}
+
+export function buildPlannerReturnPath(query?: string | null) {
+  const normalizedQuery = `${query || ''}`.trim();
+  if (!normalizedQuery) {
+    return '/planner';
+  }
+
+  const searchParams = new URLSearchParams();
+  searchParams.set('q', normalizedQuery);
+  return `/planner?${searchParams.toString()}`;
+}
+
+export function buildPlannerAuthPath(query?: string | null) {
+  return buildAuthPathWithReturn(buildPlannerReturnPath(query), 'planner');
 }
 
 export function parseBookingIntent(search: string): BookingIntent | null {

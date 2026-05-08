@@ -1,4 +1,4 @@
-import React, { FormEvent, useEffect, useMemo, useState } from 'react';
+import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -12,23 +12,29 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { requestPasswordReset, resetPasswordWithToken, verifyEmailToken } from '@/lib/identity-client';
 import { getSafeAuthReturnPath } from '@/lib/booking-auth-intent';
+import { getGoogleClientId, loadGoogleIdentityScript } from '@/lib/google-identity';
 
 export default function SignupPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { signIn, signUp } = useAuth();
+  const { signIn, signInWithGoogle, signUp } = useAuth();
   const [mode, setMode] = useState<'signup' | 'signin'>('signup');
   const urlMode = searchParams.get('mode');
   const actionToken = searchParams.get('token') || '';
   const safeReturnPath = getSafeAuthReturnPath(searchParams.get('returnTo'));
+  const authIntent = searchParams.get('intent');
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
   const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
   const [verificationState, setVerificationState] = useState<'idle' | 'success' | 'error'>('idle');
+  const [voucherEmailState, setVoucherEmailState] = useState<'idle' | 'sent' | 'failed' | 'not_applicable'>('idle');
+  const googleButtonRef = useRef<HTMLDivElement | null>(null);
+  const googleClientId = getGoogleClientId();
 
   const isSignupMode = mode === 'signup';
   const isResetPasswordMode = urlMode === 'reset-password' && !!actionToken;
@@ -58,15 +64,45 @@ export default function SignupPage() {
     return query ? `/signup?${query}` : '/signup';
   };
 
+  const handleGoogleAuth = useCallback(async (credential: string) => {
+    if (!credential) {
+      toast.error('Google sign-in did not return a usable credential.');
+      return;
+    }
+
+    if (isSignupMode && !selectedRole) {
+      toast.error('Choose Guest or Host before continuing with Google.');
+      return;
+    }
+
+    setIsGoogleSubmitting(true);
+    try {
+      const profile = await signInWithGoogle({
+        credential,
+        role: isSignupMode ? selectedRole ?? undefined : undefined,
+        referredByCode: isSignupMode ? searchParams.get('ref') : undefined,
+      });
+
+      toast.success(isSignupMode ? 'Google account connected. You are signed in.' : 'Signed in with Google.');
+      navigate(safeReturnPath ?? (profile.role === 'host' ? '/host' : '/'));
+    } catch (error) {
+      console.error('Google auth error:', error);
+      toast.error(error instanceof Error ? error.message : 'Google sign-in failed.');
+    } finally {
+      setIsGoogleSubmitting(false);
+    }
+  }, [isSignupMode, navigate, safeReturnPath, searchParams, selectedRole, signInWithGoogle]);
+
   useEffect(() => {
     if (!isVerifyEmailMode || verificationState !== 'idle') return;
 
     let cancelled = false;
     setIsVerifyingEmail(true);
     verifyEmailToken(actionToken)
-      .then(() => {
+      .then((result) => {
         if (!cancelled) {
           setVerificationState('success');
+          setVoucherEmailState(result.voucherEmailStatus ?? 'not_applicable');
         }
       })
       .catch((error) => {
@@ -85,6 +121,54 @@ export default function SignupPage() {
       cancelled = true;
     };
   }, [actionToken, isVerifyEmailMode, verificationState]);
+
+  useEffect(() => {
+    if (isResetPasswordMode || isVerifyEmailMode || !googleButtonRef.current || !googleClientId) {
+      if (googleButtonRef.current) {
+        googleButtonRef.current.innerHTML = '';
+      }
+      return;
+    }
+
+    if (isSignupMode && !selectedRole) {
+      googleButtonRef.current.innerHTML = '';
+      return;
+    }
+
+    let cancelled = false;
+
+    void loadGoogleIdentityScript()
+      .then(() => {
+        if (cancelled || !googleButtonRef.current || !window.google?.accounts?.id) {
+          return;
+        }
+
+        googleButtonRef.current.innerHTML = '';
+        window.google.accounts.id.initialize({
+          client_id: googleClientId,
+          callback: ({ credential }) => {
+            void handleGoogleAuth(`${credential || ''}`);
+          },
+          cancel_on_tap_outside: true,
+        });
+        window.google.accounts.id.renderButton(googleButtonRef.current, {
+          type: 'standard',
+          theme: 'outline',
+          text: isSignupMode ? 'continue_with' : 'signin_with',
+          size: 'large',
+          shape: 'pill',
+          width: 320,
+          logo_alignment: 'left',
+        });
+      })
+      .catch((error) => {
+        console.error('Failed to load Google Identity Services:', error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [googleClientId, handleGoogleAuth, isResetPasswordMode, isSignupMode, isVerifyEmailMode, selectedRole]);
 
   const handlePasswordResetRequest = async () => {
     if (!email.trim()) return;
@@ -178,6 +262,16 @@ export default function SignupPage() {
                   ? 'Your email is verified. You can sign in normally.'
                   : 'That verification link is invalid or expired.'}
             </p>
+            {!isVerifyingEmail && verificationState === 'success' && voucherEmailState === 'sent' && (
+              <p className="text-sm text-emerald-700">
+                If you qualified as one of the first 100 hosts, your voucher PIN has been emailed to you.
+              </p>
+            )}
+            {!isVerifyingEmail && verificationState === 'success' && voucherEmailState === 'failed' && (
+              <p className="text-sm text-amber-700">
+                Your email is verified, but the founding host voucher email could not be sent right now.
+              </p>
+            )}
           </div>
           <Button onClick={() => navigate('/signup?mode=signin')} className="w-full h-12 rounded-2xl font-bold">
             Back to sign in
@@ -200,6 +294,11 @@ export default function SignupPage() {
                 ? 'Create a real account with a password. No more caveman auth.'
                 : 'Use your email and password to get back into the platform.'}
           </p>
+          {!isResetPasswordMode && authIntent === 'planner' && (
+            <p className="text-sm font-medium text-[#08a8c8]">
+              Sign in to use the AI trip planner.
+            </p>
+          )}
         </div>
 
         {!isResetPasswordMode && (
@@ -342,7 +441,8 @@ export default function SignupPage() {
               (!isResetPasswordMode && !email.trim()) ||
               (isSignupMode && !isResetPasswordMode && (!selectedRole || !displayName.trim() || !confirmPassword.trim())) ||
               (isResetPasswordMode && !confirmPassword.trim()) ||
-              isSubmitting
+              isSubmitting ||
+              isGoogleSubmitting
             }
           >
             {isSubmitting ? (
@@ -354,6 +454,24 @@ export default function SignupPage() {
               </>
             )}
           </Button>
+          {!isResetPasswordMode && !isVerifyEmailMode && googleClientId && (
+            <div className="w-full max-w-sm space-y-3">
+              <div className="flex items-center gap-3 text-xs uppercase tracking-[0.22em] text-on-surface-variant">
+                <div className="h-px flex-1 bg-outline-variant" />
+                <span>or</span>
+                <div className="h-px flex-1 bg-outline-variant" />
+              </div>
+              {isSignupMode && !selectedRole ? (
+                <p className="text-center text-sm text-on-surface-variant">
+                  Choose Guest or Host first, then continue with Google.
+                </p>
+              ) : (
+                <div className={cn('flex justify-center', isGoogleSubmitting && 'opacity-60 pointer-events-none')}>
+                  <div ref={googleButtonRef} />
+                </div>
+              )}
+            </div>
+          )}
           {!isResetPasswordMode && (
             <>
               {mode === 'signin' ? (

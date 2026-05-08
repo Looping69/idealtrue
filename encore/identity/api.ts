@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import { identityDB } from "./db";
 import { issueToken } from "./auth";
 import { isDevLoginEnabled } from "./dev-login";
-import { sendAuthEmail } from "./email";
+import { sendAuthEmail, sendHostVoucherEmail } from "./email";
+import { verifyGoogleIdToken } from "./google-id-token";
 import { hashPassword, verifyPassword } from "./passwords";
 import { finalizeSignupSession, type SignupSessionResponse } from "./signup-flow";
 import { createRawAuthToken, hashAuthToken } from "./tokens";
@@ -11,6 +12,7 @@ import { requireAuth, requireRole } from "../shared/auth";
 import { profileMediaBucket } from "./storage";
 import { platformEvents } from "../analytics/events";
 import { billingDB } from "../billing/db";
+import { assignFoundingHostVoucher, markFoundingHostVoucherEmailSent } from "../billing/host-billing-service";
 import { bookingDB } from "../booking/db";
 import { catalogDB } from "../catalog/db";
 import { opsDB } from "../ops/db";
@@ -39,6 +41,12 @@ interface LoginParams {
   password: string;
 }
 
+interface GoogleAuthParams {
+  credential: string;
+  role?: UserRole;
+  referredByCode?: string | null;
+}
+
 interface RequestPasswordResetParams {
   email: string;
 }
@@ -51,6 +59,8 @@ interface ResetPasswordParams {
 interface VerifyEmailParams {
   token: string;
 }
+
+type VoucherEmailStatus = "not_applicable" | "sent" | "failed";
 
 interface DevLoginParams {
   email: string;
@@ -144,6 +154,7 @@ type UserRow = {
   payment_method: string | null;
   payment_instructions: string | null;
   payment_reference_prefix: string | null;
+  google_sub: string | null;
   last_login_at: string | null;
   created_at: string;
   updated_at: string;
@@ -202,6 +213,7 @@ const USER_SELECT = `
     payment_method,
     payment_instructions,
     payment_reference_prefix,
+    google_sub,
     last_login_at,
     created_at,
     updated_at
@@ -277,6 +289,13 @@ function resolveSelfServiceRole(existingRole: UserRole, isAdmin: boolean, reques
   }
 
   throw APIError.permissionDenied("Self-service role updates can only switch between guest and host.");
+}
+
+function resolveGoogleSignupRole(requestedRole?: UserRole) {
+  if (requestedRole === "guest" || requestedRole === "host") {
+    return requestedRole;
+  }
+  throw APIError.invalidArgument("Choose guest or host before continuing with Google.");
 }
 
 function mapUser(row: UserRow): UserProfile {
@@ -630,6 +649,129 @@ export const login = api<LoginParams, SessionResponse>(
   },
 );
 
+export const googleAuth = api<GoogleAuthParams, SessionResponse>(
+  { expose: true, method: "POST", path: "/auth/google" },
+  async (params) => {
+    const credential = `${params.credential || ""}`.trim();
+    if (!credential) {
+      throw APIError.invalidArgument("Google credential is required.");
+    }
+
+    const googleUser = await verifyGoogleIdToken(credential);
+    const now = new Date().toISOString();
+
+    const existingByGoogle = await identityDB.rawQueryRow<UserRow>(
+      `${USER_SELECT} WHERE google_sub = $1`,
+      googleUser.sub,
+    );
+
+    if (existingByGoogle) {
+      assertAccountCanAccessSession(existingByGoogle);
+      const nextPhotoUrl = existingByGoogle.photo_url || googleUser.picture;
+      await identityDB.exec`
+        UPDATE users
+        SET email = ${googleUser.email},
+            email_verified = ${true},
+            display_name = ${existingByGoogle.display_name || googleUser.name},
+            photo_url = ${nextPhotoUrl},
+            last_login_at = ${now},
+            updated_at = ${now}
+        WHERE id = ${existingByGoogle.id}
+      `;
+
+      return issueSession(mapUser({
+        ...existingByGoogle,
+        email: googleUser.email,
+        email_verified: true,
+        display_name: existingByGoogle.display_name || googleUser.name,
+        photo_url: nextPhotoUrl,
+        last_login_at: now,
+        updated_at: now,
+      }));
+    }
+
+    const existingByEmail = await identityDB.rawQueryRow<UserRow>(
+      `${USER_SELECT} WHERE email = $1`,
+      googleUser.email,
+    );
+
+    if (existingByEmail) {
+      if (existingByEmail.google_sub && existingByEmail.google_sub !== googleUser.sub) {
+        throw APIError.permissionDenied("This email is already linked to a different Google account.");
+      }
+      assertAccountCanAccessSession(existingByEmail);
+
+      const nextPhotoUrl = existingByEmail.photo_url || googleUser.picture;
+      await identityDB.exec`
+        UPDATE users
+        SET google_sub = ${googleUser.sub},
+            email_verified = ${true},
+            photo_url = ${nextPhotoUrl},
+            last_login_at = ${now},
+            updated_at = ${now}
+        WHERE id = ${existingByEmail.id}
+      `;
+
+      return issueSession(mapUser({
+        ...existingByEmail,
+        google_sub: googleUser.sub,
+        email_verified: true,
+        photo_url: nextPhotoUrl,
+        last_login_at: now,
+        updated_at: now,
+      }));
+    }
+
+    const role = resolveGoogleSignupRole(params.role);
+    const email = normalizeEmail(googleUser.email);
+    const id = randomUUID();
+    const referralCode = `${makeReferralCode(email)}${Math.floor(Math.random() * 900 + 100)}`;
+    const displayName = googleUser.name || email.split("@")[0];
+
+    await identityDB.exec`
+      INSERT INTO users (
+        id, email, email_verified, display_name, password_hash, photo_url, role, is_admin, host_plan, kyc_status, account_status, balance, referral_count, tier, referral_code, referred_by_code, google_sub, last_login_at, created_at, updated_at
+      )
+      VALUES (
+        ${id}, ${email}, ${true}, ${displayName}, ${null}, ${googleUser.picture}, ${role}, ${false}, ${"standard"}, ${"none"}, ${"active"}, ${0}, ${0}, ${"bronze"}, ${referralCode}, ${params.referredByCode ?? null}, ${googleUser.sub}, ${now}, ${now}, ${now}
+      )
+    `;
+
+    const user: UserProfile = {
+      id,
+      email,
+      emailVerified: true,
+      displayName,
+      photoUrl: googleUser.picture,
+      role,
+      isAdmin: false,
+      hostPlan: "standard",
+      kycStatus: "none",
+      accountStatus: "active",
+      accountStatusReason: null,
+      accountStatusChangedAt: null,
+      accountStatusChangedBy: null,
+      balance: 0,
+      referralCount: 0,
+      tier: "bronze",
+      referralCode,
+      referredByCode: params.referredByCode ?? null,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await platformEvents.publish({
+      type: "user.registered",
+      aggregateId: user.id,
+      actorId: user.id,
+      occurredAt: now,
+      payload: JSON.stringify({ role: user.role, email: user.email }),
+    });
+
+    return issueSession(user);
+  },
+);
+
 export const devLogin = api<DevLoginParams, DevLoginResponse>(
   { expose: true, method: "POST", path: "/auth/dev-login" },
   async (params) => {
@@ -756,10 +898,18 @@ export const requestEmailVerification = api<void, { ok: true }>(
   },
 );
 
-export const verifyEmail = api<VerifyEmailParams, { ok: true }>(
+export const verifyEmail = api<VerifyEmailParams, { ok: true; voucherEmailStatus: VoucherEmailStatus; voucherCodeAssigned: boolean }>(
   { expose: true, method: "POST", path: "/auth/verify-email" },
   async ({ token }) => {
     const authToken = await consumeAuthToken(token, "verify_email");
+    const existing = await identityDB.rawQueryRow<UserRow>(
+      `${USER_SELECT} WHERE id = $1`,
+      authToken.user_id,
+    );
+    if (!existing) {
+      throw APIError.notFound("User not found.");
+    }
+
     const now = new Date().toISOString();
     await identityDB.exec`
       UPDATE users
@@ -767,7 +917,38 @@ export const verifyEmail = api<VerifyEmailParams, { ok: true }>(
           updated_at = ${now}
       WHERE id = ${authToken.user_id}
     `;
-    return { ok: true };
+
+    let voucherEmailStatus: VoucherEmailStatus = "not_applicable";
+    let voucherCodeAssigned = false;
+
+    if (existing.role === "host") {
+      const voucher = await assignFoundingHostVoucher(existing.id);
+      if (voucher) {
+        voucherCodeAssigned = true;
+        if (voucher.emailAlreadySent) {
+          voucherEmailStatus = "sent";
+        } else {
+          try {
+            await sendHostVoucherEmail({
+              to: existing.email,
+              displayName: existing.display_name,
+              code: voucher.code,
+              durationMonths: voucher.durationMonths,
+            });
+            await markFoundingHostVoucherEmailSent(existing.id, voucher.code);
+            voucherEmailStatus = "sent";
+          } catch (error) {
+            voucherEmailStatus = "failed";
+            console.error(
+              `Founding host voucher email failed for ${existing.email}:`,
+              error instanceof Error ? error.message : error,
+            );
+          }
+        }
+      }
+    }
+
+    return { ok: true, voucherEmailStatus, voucherCodeAssigned };
   },
 );
 

@@ -13,8 +13,6 @@ import {
   Building2,
   DollarSign,
   Activity,
-  TimerReset,
-  CircleDollarSign,
   AlertTriangle,
   type LucideIcon,
 } from 'lucide-react';
@@ -159,13 +157,13 @@ export default function HostDashboard({
   const groupedBookings = useMemo(() => groupHostInquiries(localBookings), [localBookings]);
   const needsResponseBookings = groupedBookings.needsResponse;
   const awaitingGuestPaymentBookings = groupedBookings.awaitingGuestPayment;
-  const paymentReviewBookings = groupedBookings.paymentReview;
   const bookedStayCount = localBookings.filter(isBookedStay).length;
   const totalRevenue = localBookings
     .filter(isBookedStay)
     .reduce((sum, b) => sum + b.totalPrice, 0);
   const isGreylisted = billingAccount?.billingStatus === 'greylisted';
   const isVoucherHost = billingAccount?.billingSource === 'voucher';
+  const hasActiveHostPlan = billingAccount?.billingSource === 'voucher' || billingAccount?.billingSource === 'paid';
   const billingTimeline = getHostBillingTimelinePresentation(billingAccount);
   const billingTimelineBadgeVariant =
     billingTimeline.urgencyTone === 'danger'
@@ -176,7 +174,7 @@ export default function HostDashboard({
           ? 'success'
           : 'neutral';
   const approvedHoldWatchlist = useMemo(() => {
-    return [...awaitingGuestPaymentBookings, ...paymentReviewBookings]
+    return [...awaitingGuestPaymentBookings, ...groupedBookings.paymentReview]
       .map((booking) => ({
         booking,
         urgency: getInquiryDeadlineUrgency(booking),
@@ -186,15 +184,8 @@ export default function HostDashboard({
         const rightDeadline = right.urgency ? new Date(right.urgency.deadlineAt).getTime() : Number.POSITIVE_INFINITY;
         return leftDeadline - rightDeadline;
       });
-  }, [awaitingGuestPaymentBookings, paymentReviewBookings]);
-
-  const guestPaymentUrgentCount = approvedHoldWatchlist.filter(
-    ({ booking, urgency }) => groupedBookings.awaitingGuestPayment.some((item) => item.id === booking.id) && urgency?.within24Hours,
-  ).length;
-  const paymentReviewUrgentCount = approvedHoldWatchlist.filter(
-    ({ booking, urgency }) => groupedBookings.paymentReview.some((item) => item.id === booking.id) && urgency?.within24Hours,
-  ).length;
-  const activeQueueCount = needsResponseBookings.length + awaitingGuestPaymentBookings.length + paymentReviewBookings.length;
+  }, [awaitingGuestPaymentBookings, groupedBookings.paymentReview]);
+  const activeQueueCount = needsResponseBookings.length + awaitingGuestPaymentBookings.length + groupedBookings.paymentReview.length;
   const mostUrgentApprovedHold = approvedHoldWatchlist[0] ?? null;
 
   async function handleDeclineBooking(payload: {
@@ -259,7 +250,7 @@ export default function HostDashboard({
       </div>
 
       {/* Key Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <HostMetricCard
           title="Total Bookings"
           value={localBookings.length}
@@ -276,24 +267,6 @@ export default function HostDashboard({
           iconClassName="text-amber-500"
           percentage={getMetricPercentage(needsResponseBookings.length, activeQueueCount)}
           notificationCount={needsResponseBookings.length}
-        />
-        <HostMetricCard
-          title="Awaiting Guest Payment"
-          value={awaitingGuestPaymentBookings.length}
-          icon={CircleDollarSign}
-          accentClassName={guestPaymentUrgentCount > 0 ? 'border-l-red-500' : 'border-l-slate-400'}
-          iconClassName={guestPaymentUrgentCount > 0 ? 'text-red-500' : 'text-slate-500'}
-          percentage={getMetricPercentage(awaitingGuestPaymentBookings.length, activeQueueCount)}
-          notificationCount={awaitingGuestPaymentBookings.length}
-        />
-        <HostMetricCard
-          title="Payment Confirmation"
-          value={paymentReviewBookings.length}
-          icon={TimerReset}
-          accentClassName={paymentReviewUrgentCount > 0 ? 'border-l-red-500' : 'border-l-slate-400'}
-          iconClassName={paymentReviewUrgentCount > 0 ? 'text-red-500' : 'text-slate-500'}
-          percentage={getMetricPercentage(paymentReviewBookings.length, activeQueueCount)}
-          notificationCount={paymentReviewBookings.length}
         />
         <HostMetricCard
           title="Active Listings"
@@ -527,15 +500,19 @@ export default function HostDashboard({
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <h3 className="text-lg font-bold">Current Plan: <span className="capitalize">{profile?.hostPlan || 'Standard'}</span></h3>
+                <h3 className="text-lg font-bold">
+                  {hasActiveHostPlan ? 'Current Plan' : 'Base Tier'}: <span className="capitalize">{profile?.hostPlan || 'Standard'}</span>
+                </h3>
                 {(billingAccount?.billingStatus || profile?.hostPlan) && (
-                  <Badge variant={isGreylisted ? 'warning' : 'success'} className="flex items-center gap-1">
-                    <Crown className="w-3 h-3" /> {isGreylisted ? 'Greylisted' : 'Active'}
+                  <Badge variant={isGreylisted ? 'warning' : hasActiveHostPlan ? 'success' : 'secondary'} className="flex items-center gap-1">
+                    <Crown className="w-3 h-3" /> {isGreylisted ? 'Greylisted' : hasActiveHostPlan ? 'Active' : 'Inactive'}
                   </Badge>
                 )}
               </div>
               <p className="text-on-surface-variant text-sm max-w-md">
-                {profile?.hostPlan === 'premium' 
+                {!hasActiveHostPlan
+                  ? 'Your host account is set to the Standard base tier, but hosting billing is not active yet. Redeem your voucher or start a paid plan to go live properly.'
+                  : profile?.hostPlan === 'premium' 
                   ? 'You are on the highest tier. Enjoy all premium features including priority support and advanced analytics.'
                   : profile?.hostPlan === 'professional'
                   ? 'You have access to the content studio and advanced listing features. Upgrade to Premium for priority support.'

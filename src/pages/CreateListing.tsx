@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, Link, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,33 +34,11 @@ import { getErrorMessage } from "@/lib/errors";
 import { Listing } from "@/types";
 import KYCModal from "@/components/KYCModal";
 import { useEffectiveKycStatus } from "@/hooks/use-effective-kyc-status";
+import GoogleCoordinatePicker from "@/components/GoogleCoordinatePicker";
+import { fetchPlaceAutocomplete, fetchPlaceDetails, resolveAreaFromPlace, resolveProvinceFromPlace } from "@/lib/google-places";
 
 import { CATEGORIES, AMENITIES, FACILITIES, PROVINCES } from "@/constants/categories";
 import { CATEGORY_ICONS } from "@/components/icons/CategoryIcons";
-
-import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
-
-// Fix for default marker icon using CDN
-const DefaultIcon = L.icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-});
-
-L.Marker.prototype.options.icon = DefaultIcon;
-
-function LocationPicker({ value, onChange }: { value: { lat: number; lng: number } | null, onChange: (coords: { lat: number; lng: number }) => void }) {
-  const map = useMapEvents({
-    click(e) {
-      onChange(e.latlng);
-    },
-  });
-
-  return value ? <Marker position={[value.lat, value.lng]} /> : null;
-}
 
 export default function CreateListing() {
   const navigate = useNavigate();
@@ -105,6 +83,13 @@ export default function CreateListing() {
   const [plan, setPlan] = useState<'standard' | 'professional' | 'premium'>('standard');
   const [checkingLimit, setCheckingLimit] = useState(true);
   const [canCreate, setCanCreate] = useState(true);
+  const [addressSuggestions, setAddressSuggestions] = useState<Array<{ label: string; placeId: string; secondaryText: string }>>([]);
+  const [showAddressSuggestions, setShowAddressSuggestions] = useState(false);
+  const [activeAddressIndex, setActiveAddressIndex] = useState(-1);
+  const [addressLoading, setAddressLoading] = useState(false);
+  const addressInputRef = useRef<HTMLInputElement | null>(null);
+  const addressDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const latestAddressRef = useRef("");
   const nightlyRate = Number(formData.pricePerNight) || 0;
   const discountAmount = Math.round(nightlyRate * (Number(formData.discount) / 100));
   const estimatedNightlyEarnings = Math.max(0, Math.round(nightlyRate - discountAmount));
@@ -237,6 +222,113 @@ export default function CreateListing() {
         : [...prev.restaurantOffers, offer]
     }));
   }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (addressInputRef.current && !addressInputRef.current.contains(event.target as Node)) {
+        setShowAddressSuggestions(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleAddressChange = useCallback((value: string) => {
+    latestAddressRef.current = value;
+    updateData("location", value);
+    setShowAddressSuggestions(true);
+    setActiveAddressIndex(-1);
+
+    if (addressDebounceRef.current) {
+      clearTimeout(addressDebounceRef.current);
+    }
+
+    if (!value.trim()) {
+      setAddressSuggestions([]);
+      setAddressLoading(false);
+      return;
+    }
+
+    setAddressLoading(true);
+    addressDebounceRef.current = setTimeout(() => {
+      const requestQuery = value.trim();
+      void fetchPlaceAutocomplete(requestQuery, { regionCodes: ["za"], limit: 6 })
+        .then((predictions) => {
+          if (latestAddressRef.current.trim() !== requestQuery) {
+            return;
+          }
+
+          setAddressSuggestions(predictions.map((prediction) => ({
+            label: prediction.label,
+            placeId: prediction.placeId,
+            secondaryText: prediction.secondaryText,
+          })));
+        })
+        .catch(() => {
+          if (latestAddressRef.current.trim() === requestQuery) {
+            setAddressSuggestions([]);
+          }
+        })
+        .finally(() => {
+          if (latestAddressRef.current.trim() === requestQuery) {
+            setAddressLoading(false);
+          }
+        });
+    }, 250);
+  }, [updateData]);
+
+  const pickAddressSuggestion = useCallback(async (placeId: string, fallbackLabel: string) => {
+    try {
+      const placeDetails = await fetchPlaceDetails(placeId);
+      updateData("location", placeDetails.formattedAddress || fallbackLabel);
+      updateData("coordinates", placeDetails.coordinates);
+      const province = resolveProvinceFromPlace(placeDetails);
+      const area = resolveAreaFromPlace(placeDetails);
+      if (province) {
+        updateData("province", province);
+      }
+      if (area) {
+        updateData("area", area);
+      }
+    } catch {
+      updateData("location", fallbackLabel);
+    } finally {
+      setShowAddressSuggestions(false);
+      setActiveAddressIndex(-1);
+    }
+  }, [updateData]);
+
+  const handleAddressKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!showAddressSuggestions || addressSuggestions.length === 0) {
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveAddressIndex((current) => Math.min(addressSuggestions.length - 1, current + 1));
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveAddressIndex((current) => Math.max(0, current - 1));
+      return;
+    }
+
+    if (event.key === "Enter" && activeAddressIndex >= 0) {
+      event.preventDefault();
+      const selected = addressSuggestions[activeAddressIndex];
+      if (selected) {
+        void pickAddressSuggestion(selected.placeId, selected.label);
+      }
+      return;
+    }
+
+    if (event.key === "Escape") {
+      setShowAddressSuggestions(false);
+    }
+  }, [activeAddressIndex, addressSuggestions, pickAddressSuggestion, showAddressSuggestions]);
 
   const handleSubmit = useCallback(async () => {
     if (!user) {
@@ -574,40 +666,56 @@ export default function CreateListing() {
 
                   <div className="md:col-span-2 space-y-2">
                     <Label>Full Address</Label>
-                    <div className="relative">
+                    <div className="relative" ref={addressInputRef}>
                       <MapPin className="absolute left-3 top-3 w-5 h-5 text-outline-variant" />
                       <Input
                         placeholder="Enter full street address"
                         className="pl-10 h-12"
                         value={formData.location}
-                        onChange={(e) => updateData("location", e.target.value)}
+                        onChange={(e) => handleAddressChange(e.target.value)}
+                        onFocus={() => setShowAddressSuggestions(addressSuggestions.length > 0 || !!formData.location.trim())}
+                        onKeyDown={handleAddressKeyDown}
                       />
+                      {showAddressSuggestions && (
+                        <div className="absolute left-0 top-full z-30 mt-3 w-full overflow-hidden rounded-2xl border border-outline-variant bg-surface shadow-[0_10px_40px_rgba(18,28,42,0.06)]">
+                          {addressLoading ? (
+                            <div className="px-4 py-4 text-sm text-on-surface-variant">Searching addresses...</div>
+                          ) : addressSuggestions.length > 0 ? (
+                            <ul className="max-h-72 overflow-auto py-2">
+                              {addressSuggestions.map((suggestion, index) => (
+                                <li key={suggestion.placeId}>
+                                  <button
+                                    type="button"
+                                    className={cn(
+                                      "w-full px-4 py-3 text-left transition-colors hover:bg-surface-container-low",
+                                      activeAddressIndex === index && "bg-surface-container-low",
+                                    )}
+                                    onMouseEnter={() => setActiveAddressIndex(index)}
+                                    onClick={() => void pickAddressSuggestion(suggestion.placeId, suggestion.label)}
+                                  >
+                                    <div className="font-medium text-on-surface">{suggestion.label}</div>
+                                    <div className="text-xs text-on-surface-variant">{suggestion.secondaryText || "Google place match"}</div>
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : formData.location.trim() ? (
+                            <div className="px-4 py-4 text-sm text-on-surface-variant">No address matches found.</div>
+                          ) : null}
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   <div className="md:col-span-2 space-y-2">
                     <Label>Pin Location on Map</Label>
-                    <p className="text-sm text-on-surface-variant mb-2">Click on the map to set the exact location of your property.</p>
-                    <div className="h-[300px] w-full rounded-xl overflow-hidden border border-outline-variant z-0 relative">
-                      <MapContainer
-                        {...({
-                          center: formData.coordinates || [-29.8587, 31.0218],
-                          zoom: 13,
-                          style: { width: "100%", height: "100%" }
-                        } as any)}
-                      >
-                        <TileLayer
-                          {...({
-                            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-                            url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                          } as any)}
-                        />
-                        <LocationPicker 
-                          value={formData.coordinates} 
-                          onChange={(coords) => updateData("coordinates", coords)} 
-                        />
-                      </MapContainer>
-                    </div>
+                    <p className="mb-2 text-sm text-on-surface-variant">
+                      Click on the map to drop a precise Google pin for your property.
+                    </p>
+                    <GoogleCoordinatePicker
+                      value={formData.coordinates}
+                      onChange={(coords) => updateData("coordinates", coords)}
+                    />
                   </div>
                 </div>
               </div>

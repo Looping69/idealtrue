@@ -144,9 +144,13 @@ async function startServer() {
         headers: req.headers,
         cookieHeader: req.headers.cookie,
         env: process.env,
+        requireAuth: true,
       });
       enforceAiRateLimit("tripPlanner", actor);
-      const reply = await generateTripPlannerReply(req.body?.messages, process.env);
+      const reply = await generateTripPlannerReply(req.body?.messages, {
+        user: actor.user,
+        env: process.env,
+      });
       res.json({ reply });
     } catch (error) {
       if (error instanceof AiRequestError && error.retryAfterSec) {

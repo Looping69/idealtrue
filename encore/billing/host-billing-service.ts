@@ -46,7 +46,10 @@ type VoucherCodeRow = {
   code: string;
   campaign: string;
   duration_months: number;
-  status: "available" | "redeemed";
+  status: "available" | "assigned" | "redeemed";
+  assigned_to: string | null;
+  assigned_at: string | null;
+  email_sent_at: string | null;
   redeemed_by: string | null;
   redeemed_at: string | null;
   free_starts_at: string | null;
@@ -155,6 +158,8 @@ function mapBillingAccount(row: BillingAccountRow): HostBillingAccount {
   };
 }
 
+const FOUNDING_HOST_VOUCHER_CAMPAIGN = "founding-hosts-2026-q2";
+
 async function appendBillingEvent(params: {
   userId: string;
   eventType: string;
@@ -231,6 +236,15 @@ export async function assertHostBillingOperationalAccess(
   area: HostBillingRestrictedArea = "hosting",
 ) {
   const billingStatus = await getHostBillingStatus(userId);
+  if (billingStatus === "inactive") {
+    if (area === "listings") {
+      throw APIError.permissionDenied("Your host billing is not active yet. Redeem your voucher or choose a paid plan before editing listings.");
+    }
+    if (area === "bookings") {
+      throw APIError.permissionDenied("Your host billing is not active yet. Redeem your voucher or choose a paid plan before handling bookings.");
+    }
+    throw APIError.permissionDenied("Your host billing is not active yet. Redeem your voucher or choose a paid plan to continue.");
+  }
   if (isHostBillingRestricted(billingStatus)) {
     throw APIError.permissionDenied(getHostBillingRestrictionMessage(area));
   }
@@ -350,8 +364,14 @@ export async function redeemHostVoucher(userId: string, rawCode: string) {
     if (!voucher) {
       throw APIError.notFound("Voucher PIN was not found.");
     }
-    if (voucher.status !== "available" || voucher.redeemed_by) {
+    if (voucher.redeemed_by || voucher.status === "redeemed") {
       throw APIError.failedPrecondition("That voucher PIN has already been used.");
+    }
+    if (voucher.assigned_to && voucher.assigned_to !== userId) {
+      throw APIError.permissionDenied("That voucher PIN is assigned to a different host account.");
+    }
+    if (voucher.status !== "available" && voucher.status !== "assigned") {
+      throw APIError.failedPrecondition("That voucher PIN is not ready to redeem.");
     }
 
     const now = new Date().toISOString();
@@ -406,6 +426,8 @@ export async function redeemHostVoucher(userId: string, rawCode: string) {
     await tx.exec`
       UPDATE host_voucher_codes
       SET status = ${"redeemed"},
+          assigned_to = COALESCE(assigned_to, ${userId}),
+          assigned_at = COALESCE(assigned_at, ${now}),
           redeemed_by = ${userId},
           redeemed_at = ${now},
           free_starts_at = ${window.currentPeriodStart},
@@ -440,6 +462,93 @@ export async function redeemHostVoucher(userId: string, rawCode: string) {
     await tx.rollback();
     throw error;
   }
+}
+
+export async function assignFoundingHostVoucher(userId: string) {
+  const tx = await billingDB.begin();
+
+  try {
+    const existing = await tx.queryRow<VoucherCodeRow>`
+      SELECT *
+      FROM host_voucher_codes
+      WHERE campaign = ${FOUNDING_HOST_VOUCHER_CAMPAIGN}
+        AND (assigned_to = ${userId} OR redeemed_by = ${userId})
+      ORDER BY created_at ASC, id ASC
+      LIMIT 1
+      FOR UPDATE
+    `;
+
+    if (existing) {
+      await tx.commit();
+      return {
+        code: existing.code,
+        durationMonths: existing.duration_months,
+        emailAlreadySent: existing.email_sent_at != null,
+      };
+    }
+
+    const voucher = await tx.queryRow<VoucherCodeRow>`
+      SELECT *
+      FROM host_voucher_codes
+      WHERE campaign = ${FOUNDING_HOST_VOUCHER_CAMPAIGN}
+        AND status = ${"available"}
+        AND assigned_to IS NULL
+        AND redeemed_by IS NULL
+      ORDER BY created_at ASC, id ASC
+      LIMIT 1
+      FOR UPDATE SKIP LOCKED
+    `;
+
+    if (!voucher) {
+      await tx.commit();
+      return null;
+    }
+
+    const now = new Date().toISOString();
+    await tx.exec`
+      UPDATE host_voucher_codes
+      SET status = ${"assigned"},
+          assigned_to = ${userId},
+          assigned_at = ${now},
+          updated_at = ${now}
+      WHERE id = ${voucher.id}
+    `;
+
+    await tx.exec`
+      INSERT INTO host_billing_events (id, user_id, event_type, actor_id, metadata, created_at)
+      VALUES (
+        ${randomUUID()},
+        ${userId},
+        ${"voucher_assigned"},
+        ${userId},
+        ${JSON.stringify({ code: voucher.code, campaign: voucher.campaign })}::jsonb,
+        ${now}
+      )
+    `;
+
+    await tx.commit();
+
+    return {
+      code: voucher.code,
+      durationMonths: voucher.duration_months,
+      emailAlreadySent: false,
+    };
+  } catch (error) {
+    await tx.rollback();
+    throw error;
+  }
+}
+
+export async function markFoundingHostVoucherEmailSent(userId: string, code: string) {
+  const now = new Date().toISOString();
+  await billingDB.exec`
+    UPDATE host_voucher_codes
+    SET email_sent_at = ${now},
+        updated_at = ${now}
+    WHERE code = ${code}
+      AND assigned_to = ${userId}
+      AND campaign = ${FOUNDING_HOST_VOUCHER_CAMPAIGN}
+  `;
 }
 
 export async function syncPaidBillingAccount(params: {

@@ -157,7 +157,7 @@ function AppContent() {
   }
 
   return (
-    <div className={cn('min-h-screen font-sans text-on-surface', isHostRoute ? 'bg-surface' : 'bg-surface-container-high')}>
+    <div className={cn('min-h-screen flex flex-col font-sans text-on-surface', isHostRoute ? 'bg-surface' : 'bg-[#dbe5f2]')}>
       <Toaster position="top-center" richColors />
       <AppNavigation
         isAdmin={isAdmin}
@@ -172,7 +172,7 @@ function AppContent() {
         user={user}
       />
 
-      <main className={cn(!isHostRoute && !isAdminRoute ? 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8' : 'w-full h-screen')}>
+      <main className={cn('flex-1', !isHostRoute && !isAdminRoute ? 'max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8' : 'w-full')}>
         <AppRoutes
           hostBookings={hostBookings}
           isAdmin={isAdmin}

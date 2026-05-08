@@ -11,6 +11,9 @@ import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { startOfDay } from 'date-fns';
 import { stayOverlapsListingAvailability } from '@/lib/listing-availability';
+import { useAuth } from '@/contexts/AuthContext';
+import { buildPlannerAuthPath } from '@/lib/booking-auth-intent';
+import { toast } from 'sonner';
 
 const DEFAULT_LISTING_FILTERS: ListingFilters = {
   minPrice: "",
@@ -25,6 +28,7 @@ const DEFAULT_LISTING_FILTERS: ListingFilters = {
 
 export default function ExploreView({ listings, onBook }: { listings: Listing[], onBook: (l: Listing) => void }) {
   const navigate = useNavigate();
+  const { profile } = useAuth();
   const [searchFilters, setSearchFilters] = useState<SearchFilterState>({ query: "", guests: 1 });
   const [viewMode, setViewMode] = useState<'grid' | 'map'>('grid');
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
@@ -91,6 +95,22 @@ export default function ExploreView({ listings, onBook }: { listings: Listing[],
       .slice(0, 8);
   }, [filteredListings]);
 
+  const handlePlannerMessage = (message: string) => {
+    if (!message.trim()) {
+      return;
+    }
+
+    if (!profile) {
+      toast.message('Sign in required', {
+        description: 'Sign in to use the AI trip planner.',
+      });
+      navigate(buildPlannerAuthPath(message));
+      return;
+    }
+
+    navigate(`/planner?q=${encodeURIComponent(message)}`);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col items-center gap-4">
@@ -119,7 +139,7 @@ export default function ExploreView({ listings, onBook }: { listings: Listing[],
             <SearchFilterBar 
               listings={listings}
               onChange={setSearchFilters} 
-              onSendMessage={(msg) => navigate(`/planner?q=${encodeURIComponent(msg)}`)}
+              onSendMessage={handlePlannerMessage}
             />
           </div>
         </div>

@@ -23,7 +23,6 @@ export default function AppFooter() {
           </div>
 
           <nav aria-label="Documentation" className="flex max-w-3xl flex-wrap gap-x-4 gap-y-2 text-sm">
-            <span className="w-full font-semibold text-on-surface md:w-auto">Documentation</span>
             {documentationLinks.map((link) => (
               <Link
                 key={link.to}

@@ -14,6 +14,7 @@ import {
   listReferralLeaderboard,
   requestEmailVerification,
   requestPasswordReset,
+  signInWithGoogle,
   resetPasswordWithToken,
   signInWithPassword,
   signUpWithPassword,
@@ -107,7 +108,7 @@ test('auth and account lifecycle clients call the canonical identity endpoints',
     if (url.endsWith('/auth/signup')) return createJsonResponse({ user: encoreUser({ id: 'signed-up-user' }) });
     if (url.endsWith('/auth/login')) return createJsonResponse({ user: encoreUser({ id: 'signed-in-user' }) });
     if (url.endsWith('/auth/request-email-verification')) return createJsonResponse({ ok: true });
-    if (url.endsWith('/auth/verify-email')) return createJsonResponse({ ok: true });
+    if (url.endsWith('/auth/verify-email')) return createJsonResponse({ ok: true, voucherEmailStatus: 'sent', voucherCodeAssigned: true });
     if (url.endsWith('/auth/request-password-reset')) return createJsonResponse({ ok: true });
     if (url.endsWith('/auth/reset-password')) return createJsonResponse({ ok: true });
     if (url.endsWith('/users/me')) return createJsonResponse({ user: encoreUser({ displayName: 'Updated Guest', role: 'host' }) });
@@ -122,7 +123,7 @@ test('auth and account lifecycle clients call the canonical identity endpoints',
   });
   const signedIn = await signInWithPassword({ email: workflowUsers.guest.email, password: 'password123' });
   await requestEmailVerification();
-  await verifyEmailToken('verify-token-1');
+  const verified = await verifyEmailToken('verify-token-1');
   await requestPasswordReset(workflowUsers.guest.email);
   await resetPasswordWithToken({ token: 'reset-token-1', password: 'new-password123' });
   const updated = await updateEncoreProfile({ displayName: 'Updated Guest', role: 'host' });
@@ -130,6 +131,8 @@ test('auth and account lifecycle clients call the canonical identity endpoints',
   assert.equal(signedUp.profile.id, 'signed-up-user');
   assert.equal(signedUp.verificationEmailStatus, 'sent');
   assert.equal(signedIn.id, 'signed-in-user');
+  assert.equal(verified.voucherEmailStatus, 'sent');
+  assert.equal(verified.voucherCodeAssigned, true);
   assert.equal(updated.displayName, 'Updated Guest');
   assert.deepEqual(
     fetchCalls.map((call) => `${call.init?.method || 'GET'} ${call.url.replace(DEFAULT_ENCORE_API_URL, '')}`),
@@ -146,6 +149,33 @@ test('auth and account lifecycle clients call the canonical identity endpoints',
   assert.equal(requestBody(0).referredByCode, workflowUsers.host.referralCode);
   assert.equal(requestBody(3).token, 'verify-token-1');
   assert.equal(requestBody(5).token, 'reset-token-1');
+});
+
+test('google auth client posts the credential plus first-time signup role through the canonical identity endpoint', async () => {
+  installFetch((url) => {
+    if (url.endsWith('/auth/google')) {
+      return createJsonResponse({ user: encoreUser({ id: 'google-user-1', role: 'host', emailVerified: true }) });
+    }
+    throw new Error(`Unhandled google auth endpoint: ${url}`);
+  });
+
+  const profile = await signInWithGoogle({
+    credential: 'google-id-token',
+    role: 'host',
+    referredByCode: workflowUsers.host.referralCode,
+  });
+
+  assert.equal(profile.id, 'google-user-1');
+  assert.equal(profile.role, 'host');
+  assert.deepEqual(
+    fetchCalls.map((call) => `${call.init?.method || 'GET'} ${call.url.replace(DEFAULT_ENCORE_API_URL, '')}`),
+    ['POST /auth/google'],
+  );
+  assert.deepEqual(requestBody(0), {
+    credential: 'google-id-token',
+    role: 'host',
+    referredByCode: workflowUsers.host.referralCode,
+  });
 });
 
 test('content studio clients cover entitlements, draft lifecycle, credit checkout, and checkout status', async () => {

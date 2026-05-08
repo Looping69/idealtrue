@@ -80,7 +80,7 @@ export default function FilterBar({ activeCategory, onFilterChange, onOpenFilter
           className={cn(
             "overflow-x-auto no-scrollbar flex items-center transition-all duration-300 mx-auto",
             isCollapsed
-              ? "bg-surface/90 backdrop-blur-md border border-outline-variant shadow-lg rounded-full px-2 py-0.5 gap-0.5 max-w-[95vw]"
+              ? "max-w-[calc(100vw-1rem)] gap-0 rounded-full border border-outline-variant bg-surface/90 px-1 py-0.5 shadow-lg backdrop-blur-md sm:max-w-[95vw] sm:gap-0.5 sm:px-2"
               : "w-full gap-1.5 md:gap-2 justify-start md:justify-center"
           )}
         >
@@ -110,7 +110,7 @@ export default function FilterBar({ activeCategory, onFilterChange, onOpenFilter
             onClick={() => { setSelectedCategory("all"); setActiveSubCategory(null); onFilterChange("all"); }}
             className={cn(
               "flex flex-col items-center cursor-pointer rounded-full relative shrink-0 transition-all duration-150 backdrop-blur-md",
-              isCollapsed ? "min-w-[35px] p-1" : "min-w-[50px] md:min-w-[64px] p-1 md:p-2 gap-0.5 md:gap-2",
+              isCollapsed ? "min-w-[30px] p-0.5 sm:min-w-[35px] sm:p-1" : "min-w-[50px] md:min-w-[64px] p-1 md:p-2 gap-0.5 md:gap-2",
             selectedCategory === "all" ? "text-primary" : "text-on-surface-variant hover:text-on-surface"
           )}
         >
@@ -161,14 +161,14 @@ export default function FilterBar({ activeCategory, onFilterChange, onOpenFilter
                   <IconComponent
                     className={cn(
                       "relative z-10 transition-transform duration-200 group-hover:scale-110",
-                      isCollapsed ? "w-4 h-4" : "w-5 h-5 md:w-8 md:h-8"
+                      isCollapsed ? "h-3.5 w-3.5 sm:h-4 sm:w-4" : "w-5 h-5 md:w-8 md:h-8"
                     )}
                   />
                 ) : (
                   <span
                     className={cn(
                       "relative z-10 transition-transform duration-200 group-hover:scale-110",
-                      isCollapsed ? "text-sm" : "text-lg md:text-2xl"
+                      isCollapsed ? "text-xs sm:text-sm" : "text-lg md:text-2xl"
                     )}
                   >
                     {category.label[0]}
