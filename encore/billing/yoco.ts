@@ -7,7 +7,7 @@ export const yocoWebhookSecret = secret<"YOCO_WEBHOOK_SECRET">("YOCO_WEBHOOK_SEC
 export const idealStayAppUrl = secret<"IDEAL_STAY_APP_URL">("IDEAL_STAY_APP_URL");
 
 const YOCO_API_BASE = process.env.YOCO_API_BASE || "https://payments.yoco.com/api";
-const DEFAULT_APP_URL = "https://ideal-stay.vercel.app";
+const DEFAULT_APP_URL = "https://idealstay.co.za";
 
 export interface YocoCheckoutRequest {
   amount: number;

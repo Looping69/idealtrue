@@ -56,7 +56,6 @@ type BookingRow = {
   payment_instructions: string | null;
   payment_reference: string | null;
   payment_proof_key: string | null;
-  payment_proof_url: string | null;
   decline_reason: InquiryDeclineReason | null;
   decline_reason_note: string | null;
   viewed_at: string | null;
@@ -111,7 +110,6 @@ interface SubmitPaymentProofParams {
   paymentProofFilename?: string | null;
   paymentProofContentType?: string | null;
   paymentProofDataBase64?: string | null;
-  paymentProofUrl?: string | null;
 }
 
 interface ConfirmPaymentParams {
@@ -135,8 +133,8 @@ function mapBooking(row: BookingRow): BookingRecord {
     paymentMethod: row.payment_method,
     paymentInstructions: row.payment_instructions,
     paymentReference: row.payment_reference,
-    paymentProofKey: row.payment_proof_key,
-    paymentProofUrl: row.payment_proof_url,
+    paymentProofAccessible: false,
+    paymentProofAccessUrl: null,
     declineReason: row.decline_reason,
     declineReasonNote: row.decline_reason_note,
     viewedAt: row.viewed_at,
@@ -228,18 +226,27 @@ function buildHostPaymentReference(prefix: string | null, inquiryId: string) {
 }
 
 async function resolvePaymentProofUrl(row: BookingRow) {
-  if (row.payment_proof_key) {
-    const signed = await bookingEvidenceBucket.signedDownloadUrl(row.payment_proof_key, { ttl: 900 });
-    return signed.url;
+  if (!row.payment_proof_key) {
+    return null;
   }
 
-  return row.payment_proof_url;
+  const signed = await bookingEvidenceBucket.signedDownloadUrl(row.payment_proof_key, { ttl: 900 });
+  return signed.url;
 }
 
 async function mapBookingAccessRecord(row: BookingRow): Promise<BookingRecord> {
+  let paymentProofAccessUrl: string | null = null;
+
+  try {
+    paymentProofAccessUrl = await resolvePaymentProofUrl(row);
+  } catch {
+    paymentProofAccessUrl = null;
+  }
+
   return {
     ...mapBooking(row),
-    paymentProofUrl: await resolvePaymentProofUrl(row),
+    paymentProofAccessible: paymentProofAccessUrl !== null,
+    paymentProofAccessUrl,
   };
 }
 
@@ -434,7 +441,6 @@ async function persistPaymentStateChange(params: {
   now: string;
   paymentReference?: string | null;
   paymentProofKey?: string | null;
-  paymentProofUrl?: string | null;
   paymentSubmittedAt?: string | null;
   paymentConfirmedAt?: string | null;
 }) {
@@ -448,7 +454,6 @@ async function persistPaymentStateChange(params: {
     status: deriveLegacyStatus(params.inquiry.inquiry_state, params.nextPaymentState),
     payment_reference: params.paymentReference ?? params.inquiry.payment_reference,
     payment_proof_key: params.paymentProofKey ?? params.inquiry.payment_proof_key,
-    payment_proof_url: params.paymentProofUrl ?? params.inquiry.payment_proof_url,
     payment_submitted_at: params.paymentSubmittedAt ?? params.inquiry.payment_submitted_at,
     payment_confirmed_at: params.paymentConfirmedAt ?? params.inquiry.payment_confirmed_at,
     updated_at: params.now,
@@ -460,7 +465,6 @@ async function persistPaymentStateChange(params: {
         status = ${nextRow.status},
         payment_reference = ${nextRow.payment_reference},
         payment_proof_key = ${nextRow.payment_proof_key},
-        payment_proof_url = ${nextRow.payment_proof_url},
         payment_submitted_at = ${nextRow.payment_submitted_at},
         payment_confirmed_at = ${nextRow.payment_confirmed_at},
         updated_at = ${nextRow.updated_at}
@@ -495,13 +499,11 @@ async function persistPaymentProofSubmission(params: {
   now: string;
   paymentReference?: string | null;
   paymentProofKey?: string | null;
-  paymentProofUrl?: string | null;
 }) {
   const nextRow: BookingRow = {
     ...params.inquiry,
     payment_reference: params.paymentReference ?? params.inquiry.payment_reference,
     payment_proof_key: params.paymentProofKey ?? params.inquiry.payment_proof_key,
-    payment_proof_url: params.paymentProofUrl ?? params.inquiry.payment_proof_url,
     payment_submitted_at: params.now,
     updated_at: params.now,
   };
@@ -510,7 +512,6 @@ async function persistPaymentProofSubmission(params: {
     UPDATE bookings
     SET payment_reference = ${nextRow.payment_reference},
         payment_proof_key = ${nextRow.payment_proof_key},
-        payment_proof_url = ${nextRow.payment_proof_url},
         payment_submitted_at = ${nextRow.payment_submitted_at},
         updated_at = ${nextRow.updated_at}
     WHERE id = ${nextRow.id}
@@ -904,7 +905,6 @@ export const submitPaymentProof = api<SubmitPaymentProofParams, { booking: Booki
     }
 
     let paymentProofKey = existing.payment_proof_key;
-    let paymentProofUrl = existing.payment_proof_url;
 
     if (params.paymentProofDataBase64) {
       if (!params.paymentProofFilename || !params.paymentProofContentType) {
@@ -924,13 +924,10 @@ export const submitPaymentProof = api<SubmitPaymentProofParams, { booking: Booki
         contentType: params.paymentProofContentType,
       });
       paymentProofKey = objectKey;
-      paymentProofUrl = null;
-    } else if (params.paymentProofUrl !== undefined) {
-      paymentProofUrl = params.paymentProofUrl ?? null;
     }
 
-    if (!paymentProofKey && !paymentProofUrl) {
-      throw APIError.invalidArgument("Attach a payment proof image or provide a hosted proof link.");
+    if (!paymentProofKey) {
+      throw APIError.invalidArgument("Attach a payment proof image before submitting.");
     }
 
     const now = new Date().toISOString();
@@ -940,7 +937,6 @@ export const submitPaymentProof = api<SubmitPaymentProofParams, { booking: Booki
       now,
       paymentReference: params.paymentReference ?? existing.payment_reference,
       paymentProofKey,
-      paymentProofUrl,
     });
 
     return {
@@ -963,8 +959,23 @@ export const confirmPayment = api<ConfirmPaymentParams, { booking: BookingRecord
     if (!existing.payment_submitted_at) {
       throw APIError.failedPrecondition("The guest has not submitted payment proof yet.");
     }
-    if (!existing.payment_proof_key && !existing.payment_proof_url) {
+    if (!existing.payment_proof_key) {
       throw APIError.failedPrecondition("Payment proof is missing for this inquiry.");
+    }
+    try {
+      const paymentProofAccessUrl = await resolvePaymentProofUrl(existing);
+      if (!paymentProofAccessUrl) {
+        throw APIError.failedPrecondition(
+          "Payment proof is stored but not currently accessible. Restore proof access before confirming payment.",
+        );
+      }
+    } catch (error) {
+      if (error instanceof APIError) {
+        throw error;
+      }
+      throw APIError.failedPrecondition(
+        "Payment proof is stored but not currently accessible. Restore proof access before confirming payment.",
+      );
     }
     const paymentTransitionError = getPaymentStateTransitionError(existing.inquiry_state, existing.payment_state, "COMPLETED", "host");
     if (paymentTransitionError) {

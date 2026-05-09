@@ -109,7 +109,8 @@ export interface EncoreBooking {
   paymentMethod?: string | null;
   paymentInstructions?: string | null;
   paymentReference?: string | null;
-  paymentProofUrl?: string | null;
+  paymentProofAccessible?: boolean;
+  paymentProofAccessUrl?: string | null;
   declineReason?: Booking['declineReason'];
   declineReasonNote?: string | null;
   viewedAt?: string | null;
@@ -336,7 +337,8 @@ export function mapEncoreBooking(booking: EncoreBooking): Booking {
     paymentMethod: booking.paymentMethod || null,
     paymentInstructions: booking.paymentInstructions || null,
     paymentReference: booking.paymentReference || null,
-    paymentProofUrl: booking.paymentProofUrl || null,
+    paymentProofAccessible: Boolean(booking.paymentProofAccessible),
+    paymentProofAccessUrl: booking.paymentProofAccessUrl || null,
     declineReason: booking.declineReason || null,
     declineReasonNote: booking.declineReasonNote || null,
     viewedAt: booking.viewedAt || null,

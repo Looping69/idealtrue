@@ -20,8 +20,8 @@ import { rewardSubscriptionReferralConversion } from "../referrals/api";
 import {
   getHostBillingAccount,
   listAdminHostBillingAccounts,
+  markHostBillingSetupComplete,
   redeemHostVoucher,
-  saveHostBillingCard,
   setHostGreylist,
   syncPaidBillingAccount,
   type AdminHostBillingAccount,
@@ -43,7 +43,7 @@ import {
 
 type BillingInterval = "monthly" | "annual";
 type ContentDraftStatus = "draft" | "scheduled" | "published";
-type CheckoutType = "subscription" | "content_credits";
+type CheckoutType = "subscription" | "content_credits" | "host_billing_setup";
 type CheckoutStatus = "pending" | "paid" | "failed" | "cancelled";
 
 interface SubscriptionCheckoutParams {
@@ -57,14 +57,6 @@ interface PurchaseCreditsParams {
 
 interface RedeemHostVoucherParams {
   code: string;
-}
-
-interface SaveBillingCardParams {
-  cardholderName: string;
-  brand: string;
-  last4: string;
-  expiryMonth: number;
-  expiryYear: number;
 }
 
 interface AdminSetHostGreylistParams {
@@ -217,6 +209,7 @@ type QueryExecutor = Pick<typeof billingDB, "queryRow" | "queryAll" | "exec">;
 
 const CONTENT_DRAFT_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const CONTENT_DRAFT_RATE_LIMIT_MAX = 5;
+const HOST_BILLING_SETUP_AMOUNT = 2;
 const contentDraftRateLimitStore = new Map<string, number[]>();
 
 function getCreditPrice(credits: number) {
@@ -242,11 +235,30 @@ function getPlanAmount(plan: HostPlan, billingInterval: BillingInterval) {
 
 function buildBillingUrls(kind: CheckoutType, id: string) {
   const base = getAppUrl();
-  const root = kind === "subscription" ? "/pricing" : "/host/social";
+  const root =
+    kind === "subscription"
+      ? "/pricing"
+      : kind === "content_credits"
+        ? "/host/social"
+        : "/host";
+  const searchParams = new URLSearchParams({
+    billing_status: "success",
+    checkout_id: id,
+  });
+  if (kind === "host_billing_setup") {
+    searchParams.set("billing_context", "host_card_setup");
+  }
+
+  const successUrl = `${base}${root}?${searchParams.toString()}`;
+  searchParams.set("billing_status", "cancelled");
+  const cancelUrl = `${base}${root}?${searchParams.toString()}`;
+  searchParams.set("billing_status", "failed");
+  const failureUrl = `${base}${root}?${searchParams.toString()}`;
+
   return {
-    successUrl: `${base}${root}?billing_status=success&checkout_id=${encodeURIComponent(id)}`,
-    cancelUrl: `${base}${root}?billing_status=cancelled&checkout_id=${encodeURIComponent(id)}`,
-    failureUrl: `${base}${root}?billing_status=failed&checkout_id=${encodeURIComponent(id)}`,
+    successUrl,
+    cancelUrl,
+    failureUrl,
   };
 }
 
@@ -649,7 +661,7 @@ async function fulfilSuccessfulCheckout(session: CheckoutSessionRow, providerPay
         console.error("Failed to notify subscription activation:", error);
       }
     }
-  } else {
+  } else if (session.checkout_type === "content_credits") {
     await creditWalletFromCheckout(session);
     if (session.credit_quantity) {
       try {
@@ -661,6 +673,13 @@ async function fulfilSuccessfulCheckout(session: CheckoutSessionRow, providerPay
         console.error("Failed to notify content credit purchase:", error);
       }
     }
+  } else {
+    await markHostBillingSetupComplete({
+      userId: session.user_id,
+      provider: "yoco",
+      checkoutId: session.id,
+      providerPaymentId,
+    });
   }
 
   await markCheckoutPaid(session, providerPaymentId);
@@ -896,11 +915,49 @@ export const redeemVoucher = api<RedeemHostVoucherParams, { account: HostBilling
   },
 );
 
-export const saveBillingCard = api<SaveBillingCardParams, { account: HostBillingAccount }>(
-  { expose: true, method: "POST", path: "/billing/host/card", auth: true },
-  async (params) => {
+export const createHostBillingSetupCheckout = api<void, { checkoutId: string; redirectUrl: string }>(
+  { expose: true, method: "POST", path: "/billing/host/setup-checkout", auth: true },
+  async () => {
     const auth = requireRole("host", "admin");
-    return { account: await saveHostBillingCard(auth.userID, params) };
+    const account = await getHostBillingAccount(auth.userID);
+
+    if (account.cardOnFile) {
+      throw APIError.failedPrecondition("A provider-backed billing card is already on file.");
+    }
+
+    const urls = buildBillingUrls("host_billing_setup", randomUUID());
+    const checkoutId = await createCheckoutSessionRow({
+      userId: auth.userID,
+      checkoutType: "host_billing_setup",
+      amount: HOST_BILLING_SETUP_AMOUNT,
+      hostPlan: account.plan,
+      successUrl: urls.successUrl,
+      cancelUrl: urls.cancelUrl,
+      failureUrl: urls.failureUrl,
+    });
+
+    const yoco = await createYocoCheckout({
+      amount: toMinorUnits(HOST_BILLING_SETUP_AMOUNT),
+      currency: "ZAR",
+      successUrl: urls.successUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
+      cancelUrl: urls.cancelUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
+      failureUrl: urls.failureUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
+      metadata: {
+        checkoutId,
+        checkoutType: "host_billing_setup",
+        userId: auth.userID,
+        plan: account.plan,
+      },
+    });
+
+    await storeProviderCheckout({
+      checkoutId,
+      providerCheckoutId: yoco.id,
+      providerMode: yoco.mode,
+      redirectUrl: yoco.redirectUrl,
+    });
+
+    return { checkoutId, redirectUrl: yoco.redirectUrl };
   },
 );
 

@@ -200,7 +200,6 @@ export async function submitPaymentProof(params: {
   id: string;
   paymentReference?: string | null;
   paymentProof?: SerializedImageAsset | null;
-  paymentProofUrl?: string | null;
 }) {
   const response = await encoreRequest<{ booking: EncoreBooking }>(
     `/bookings/${params.id}/payment-proof`,
@@ -211,7 +210,6 @@ export async function submitPaymentProof(params: {
         paymentProofFilename: params.paymentProof?.filename ?? null,
         paymentProofContentType: params.paymentProof?.contentType ?? null,
         paymentProofDataBase64: params.paymentProof?.dataBase64 ?? null,
-        paymentProofUrl: params.paymentProofUrl ?? null,
       }),
     },
     { auth: true },

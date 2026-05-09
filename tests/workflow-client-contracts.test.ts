@@ -3,6 +3,7 @@ import test, { afterEach } from 'node:test';
 import { DEFAULT_ENCORE_API_URL } from '../src/lib/encore-client';
 import {
   createContentCreditsCheckout,
+  createHostBillingSetupCheckout,
   createSubscriptionCheckout,
   generateContentDraft,
   getCheckoutStatus,
@@ -396,4 +397,30 @@ test('subscription checkout client posts plan interval and reads checkout status
   assert.equal(status.checkoutType, 'subscription');
   assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/billing/subscriptions/checkout`);
   assert.deepEqual(requestBody(0), { plan: 'professional', billingInterval: 'monthly' });
+});
+
+test('host billing setup checkout client posts to the dedicated Yoco-backed setup endpoint', async () => {
+  installFetch((url) => {
+    if (url.endsWith('/billing/host/setup-checkout')) {
+      return createJsonResponse({
+        checkoutId: workflowBilling.hostCardSetupPaid.checkoutId,
+        redirectUrl: 'https://pay.example/host-card-setup',
+      });
+    }
+    if (url.endsWith(`/billing/checkouts/${workflowBilling.hostCardSetupPaid.checkoutId}`)) {
+      return createJsonResponse({
+        status: workflowBilling.hostCardSetupPaid.status,
+        checkoutType: workflowBilling.hostCardSetupPaid.checkoutType,
+      });
+    }
+    throw new Error(`Unhandled host billing setup endpoint: ${url}`);
+  });
+
+  const checkout = await createHostBillingSetupCheckout();
+  const status = await getCheckoutStatus(checkout.checkoutId);
+
+  assert.equal(checkout.redirectUrl, 'https://pay.example/host-card-setup');
+  assert.equal(status.checkoutType, 'host_billing_setup');
+  assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/billing/host/setup-checkout`);
+  assert.equal(fetchCalls[0]?.init?.method, 'POST');
 });

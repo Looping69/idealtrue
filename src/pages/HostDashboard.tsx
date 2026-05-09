@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Booking, HostBillingAccount, Listing, UserProfile } from '../types';
 import { 
   LayoutDashboard, 
@@ -19,12 +19,15 @@ import {
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
-import { Input } from '../components/ui/input';
 import InquiryDeclineDialog from '@/components/InquiryDeclineDialog';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { toast } from 'sonner';
 import { updateBookingStatus } from '@/lib/platform-client';
-import { getMyHostBillingAccount, saveHostBillingCard } from '@/lib/billing-client';
+import {
+  createHostBillingSetupCheckout,
+  getCheckoutStatus,
+  getMyHostBillingAccount,
+} from '@/lib/billing-client';
 import { formatRand } from '@/lib/currency';
 import { getHostBillingTimelinePresentation } from '@/lib/host-billing-ui';
 import {
@@ -113,30 +116,30 @@ export default function HostDashboard({
   onBookingUpdated: (booking: Booking) => void,
 }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [localBookings, setLocalBookings] = useState(bookings);
   const [billingAccount, setBillingAccount] = useState<HostBillingAccount | null>(null);
-  const [billingCardForm, setBillingCardForm] = useState({
-    cardholderName: '',
-    brand: 'Visa',
-    last4: '',
-    expiryMonth: '',
-    expiryYear: '',
-  });
-  const [savingBillingCard, setSavingBillingCard] = useState(false);
   const [decliningBooking, setDecliningBooking] = useState<Booking | null>(null);
+  const [startingBillingSetup, setStartingBillingSetup] = useState(false);
 
   useEffect(() => {
     setLocalBookings(bookings);
   }, [bookings]);
 
+  const loadBillingAccount = useCallback(async () => {
+    if (profile?.role !== 'host') {
+      return null;
+    }
+
+    const account = await getMyHostBillingAccount();
+    setBillingAccount(account);
+    return account;
+  }, [profile?.role]);
+
   useEffect(() => {
     let cancelled = false;
 
-    async function loadBillingAccount() {
-      if (profile?.role !== 'host') {
-        return;
-      }
-
+    async function syncBillingAccount() {
       try {
         const account = await getMyHostBillingAccount();
         if (!cancelled) {
@@ -147,11 +150,92 @@ export default function HostDashboard({
       }
     }
 
-    void loadBillingAccount();
+    if (profile?.role === 'host') {
+      void syncBillingAccount();
+    }
+
     return () => {
       cancelled = true;
     };
   }, [profile?.role]);
+
+  useEffect(() => {
+    if (profile?.role !== 'host') {
+      return;
+    }
+
+    const billingStatus = searchParams.get('billing_status');
+    const checkoutId = searchParams.get('checkout_id');
+    const billingContext = searchParams.get('billing_context');
+
+    if (!billingStatus || !checkoutId || billingContext !== 'host_card_setup') {
+      return;
+    }
+
+    let cancelled = false;
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    async function resolveBillingSetup() {
+      try {
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          const result = await getCheckoutStatus(checkoutId);
+          if (cancelled) {
+            return;
+          }
+
+          if (result.checkoutType !== 'host_billing_setup') {
+            navigate('/host', { replace: true });
+            return;
+          }
+
+          if (result.status === 'paid') {
+            const account = await loadBillingAccount();
+            if (cancelled) {
+              return;
+            }
+            toast.success(
+              account?.billingStatus === 'active'
+                ? 'Billing setup confirmed. Your host billing access is active again.'
+                : 'Billing setup confirmed.',
+            );
+            navigate('/host', { replace: true });
+            return;
+          }
+
+          if (billingStatus === 'cancelled' || result.status === 'cancelled') {
+            toast.message('Billing setup checkout was cancelled. No billing changes were applied.');
+            navigate('/host', { replace: true });
+            return;
+          }
+
+          if (billingStatus === 'failed' || result.status === 'failed') {
+            toast.error('Billing setup failed. No billing changes were applied.');
+            navigate('/host', { replace: true });
+            return;
+          }
+
+          if (attempt < 7) {
+            await wait(2000);
+          }
+        }
+
+        toast.message('Billing setup is still being confirmed. Give the webhook a moment, then refresh if needed.');
+        navigate('/host', { replace: true });
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Failed to resolve host billing setup checkout', error);
+          toast.error('Could not verify billing setup yet. Refresh the dashboard in a moment.');
+          navigate('/host', { replace: true });
+        }
+      }
+    }
+
+    void resolveBillingSetup();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadBillingAccount, navigate, profile?.role, searchParams]);
 
   const activeListings = listings.filter(l => l.status === 'active');
   const groupedBookings = useMemo(() => groupHostInquiries(localBookings), [localBookings]);
@@ -164,6 +248,11 @@ export default function HostDashboard({
   const isGreylisted = billingAccount?.billingStatus === 'greylisted';
   const isVoucherHost = billingAccount?.billingSource === 'voucher';
   const hasActiveHostPlan = billingAccount?.billingSource === 'voucher' || billingAccount?.billingSource === 'paid';
+  const canStartBillingSetup = Boolean(
+    billingAccount &&
+    !billingAccount.cardOnFile &&
+    (billingAccount.billingSource === 'voucher' || billingAccount.billingStatus === 'greylisted'),
+  );
   const billingTimeline = getHostBillingTimelinePresentation(billingAccount);
   const billingTimelineBadgeVariant =
     billingTimeline.urgencyTone === 'danger'
@@ -187,6 +276,18 @@ export default function HostDashboard({
   }, [awaitingGuestPaymentBookings, groupedBookings.paymentReview]);
   const activeQueueCount = needsResponseBookings.length + awaitingGuestPaymentBookings.length + groupedBookings.paymentReview.length;
   const mostUrgentApprovedHold = approvedHoldWatchlist[0] ?? null;
+
+  async function handleStartBillingSetup() {
+    setStartingBillingSetup(true);
+    try {
+      const checkout = await createHostBillingSetupCheckout();
+      window.location.assign(checkout.redirectUrl);
+    } catch (error) {
+      console.error('Failed to start host billing setup checkout:', error);
+      toast.error(error instanceof Error ? error.message : 'Could not start billing setup.');
+      setStartingBillingSetup(false);
+    }
+  }
 
   async function handleDeclineBooking(payload: {
     declineReason: Booking['declineReason'];
@@ -556,7 +657,7 @@ export default function HostDashboard({
               </div>
               <p className="mt-3 text-sm font-bold">{billingTimeline.actionLabel}</p>
               <p className="mt-1 text-xs text-on-surface-variant">
-                {billingAccount?.cardOnFile ? 'Billing follow-up is covered.' : 'Saving a billing card clears the voucher follow-up path.'}
+                {billingAccount?.cardOnFile ? 'Provider-backed billing setup is confirmed.' : 'A provider-backed billing setup checkout is still required.'}
               </p>
             </div>
           </div>
@@ -588,7 +689,7 @@ export default function HostDashboard({
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">Required Action</p>
                   <p className="mt-2 text-base font-bold">{billingTimeline.actionLabel}</p>
                   <p className="mt-1 text-xs text-on-surface-variant">
-                    {billingAccount?.cardOnFile ? 'No extra billing capture is needed right now.' : 'Use the billing card form below to stop the reminder path.'}
+                    {billingAccount?.cardOnFile ? 'No extra billing capture is needed right now.' : 'Finish the Yoco billing setup checkout before the voucher window expires.'}
                   </p>
                 </div>
               </div>
@@ -602,40 +703,32 @@ export default function HostDashboard({
           ) : null}
 
           {!billingAccount?.cardOnFile ? (
-            <form
-              className="mt-6 grid gap-3 rounded-2xl border border-outline-variant bg-surface-container-low p-4 md:grid-cols-5"
-              onSubmit={async (event) => {
-                event.preventDefault();
-                setSavingBillingCard(true);
-                try {
-                  const nextAccount = await saveHostBillingCard({
-                    cardholderName: billingCardForm.cardholderName,
-                    brand: billingCardForm.brand,
-                    last4: billingCardForm.last4,
-                    expiryMonth: Number(billingCardForm.expiryMonth),
-                    expiryYear: Number(billingCardForm.expiryYear),
-                  });
-                  setBillingAccount(nextAccount);
-                  toast.success('Billing card saved. Reminder notifications will stop.');
-                } catch (error) {
-                  console.error('Failed to save billing card', error);
-                  toast.error('Could not save the billing card details.');
-                } finally {
-                  setSavingBillingCard(false);
-                }
-              }}
-            >
-              <Input placeholder="Cardholder name" value={billingCardForm.cardholderName} onChange={(event) => setBillingCardForm((current) => ({ ...current, cardholderName: event.target.value }))} />
-              <Input placeholder="Brand" value={billingCardForm.brand} onChange={(event) => setBillingCardForm((current) => ({ ...current, brand: event.target.value }))} />
-              <Input placeholder="Last 4 digits" maxLength={4} value={billingCardForm.last4} onChange={(event) => setBillingCardForm((current) => ({ ...current, last4: event.target.value.replace(/\D/g, '') }))} />
-              <Input placeholder="MM" maxLength={2} value={billingCardForm.expiryMonth} onChange={(event) => setBillingCardForm((current) => ({ ...current, expiryMonth: event.target.value.replace(/\D/g, '') }))} />
-              <div className="flex gap-3">
-                <Input placeholder="YYYY" maxLength={4} value={billingCardForm.expiryYear} onChange={(event) => setBillingCardForm((current) => ({ ...current, expiryYear: event.target.value.replace(/\D/g, '') }))} />
-                <Button type="submit" disabled={savingBillingCard}>
-                  {savingBillingCard ? 'Saving...' : 'Add Card'}
+            <div className="mt-6 rounded-2xl border border-outline-variant bg-surface-container-low p-4">
+              <p className="text-sm font-semibold text-on-surface">Provider-backed billing card setup is required.</p>
+              <p className="mt-2 text-sm text-on-surface-variant">
+                Billing card setup now runs through a real Yoco checkout. We only mark the card as covered after the provider webhook confirms payment, and we do not invent card details we never received.
+              </p>
+              {billingAccount?.cardLabel ? (
+                <p className="mt-2 text-xs text-on-surface-variant">Latest provider state: {billingAccount.cardLabel}.</p>
+              ) : null}
+              {canStartBillingSetup ? (
+                <p className="mt-2 text-xs text-on-surface-variant">
+                  The checkout charges a small {formatRand(2)} billing setup verification payment so the card state is backed by a real Yoco transaction.
+                </p>
+              ) : null}
+              <div className="mt-4 flex flex-wrap gap-3">
+                {canStartBillingSetup ? (
+                  <Button onClick={handleStartBillingSetup} disabled={startingBillingSetup}>
+                    {startingBillingSetup ? 'Redirecting to Yoco...' : 'Set Up Billing Card'}
+                  </Button>
+                ) : (
+                  <Button onClick={() => navigate('/pricing')}>View Billing Options</Button>
+                )}
+                <Button variant="outline" onClick={() => navigate('/host/listings')}>
+                  Review Listings
                 </Button>
               </div>
-            </form>
+            </div>
           ) : null}
         </Card>
       </div>

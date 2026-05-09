@@ -635,7 +635,7 @@ export default function AdminDashboard() {
               </div>
               <div className="space-y-2 rounded-xl bg-slate-50 p-4">
                 <div className="flex justify-between text-sm"><span className="text-slate-500">Full Name</span><span className="font-bold">{viewingKYCSubmission.user?.displayName || 'Unknown user'}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-slate-500">ID Number</span><span className="font-bold">{viewingKYCSubmission.idNumber}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-slate-500">Document Number</span><span className="font-bold">{viewingKYCSubmission.idNumberMasked}</span></div>
                 <div className="flex justify-between text-sm"><span className="text-slate-500">Email</span><span className="font-bold">{viewingKYCSubmission.user?.email || 'Unknown'}</span></div>
               </div>
             </div>

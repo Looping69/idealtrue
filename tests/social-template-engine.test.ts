@@ -54,7 +54,7 @@ test("story pack always returns a 3-story asset set", async () => {
     includePrice: true,
     includeSpecialOffer: true,
     customHeadline: "",
-    env: { IDEAL_STAY_APP_URL: "https://ideal-stay.vercel.app" },
+    env: { IDEAL_STAY_APP_URL: "https://idealstay.co.za" },
   });
 
   assert.equal(creative.templateId, "story_pack");
@@ -74,7 +74,7 @@ test("stay carousel always returns 5 slides even when the listing has too few ph
     includePrice: true,
     includeSpecialOffer: false,
     customHeadline: "",
-    env: { IDEAL_STAY_APP_URL: "https://ideal-stay.vercel.app" },
+    env: { IDEAL_STAY_APP_URL: "https://idealstay.co.za" },
   });
 
   assert.equal(creative.templateId, "stay_carousel");

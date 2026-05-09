@@ -12,6 +12,7 @@ import { opsDB } from "./db";
 import { referralsDB } from "../referrals/db";
 import { reviewsDB } from "../reviews/db";
 import { kycDocumentsBucket } from "./storage";
+import { decryptSensitiveString, encryptSensitiveString, maskSensitiveString } from "./kyc-crypto";
 import { requireRole } from "../shared/auth";
 import { requireAuth } from "../shared/auth";
 
@@ -87,6 +88,7 @@ interface KycSubmission {
   userId: string;
   idType: "id_card" | "passport" | "drivers_license";
   idNumber: string;
+  idNumberMasked: string;
   idImageKey: string;
   selfieImageKey: string;
   status: "pending" | "verified" | "rejected";
@@ -160,12 +162,14 @@ export const observabilityDbPing = new GaugeGroup<{ database: string }>("admin_o
 export const observabilityDbHealthy = new GaugeGroup<{ database: string }>("admin_observability_db_healthy");
 export const observabilityUptime = new Gauge("admin_observability_uptime_seconds");
 
-function mapKycSubmission(row: KycSubmissionRow): KycSubmission {
+function mapKycSubmission(row: KycSubmissionRow, options?: { includeSensitiveIdNumber?: boolean }): KycSubmission {
+  const decryptedIdNumber = decryptSensitiveString(row.id_number);
   return {
     id: row.id,
     userId: row.user_id,
     idType: row.id_type,
-    idNumber: row.id_number,
+    idNumber: options?.includeSensitiveIdNumber ? decryptedIdNumber : maskSensitiveString(decryptedIdNumber),
+    idNumberMasked: maskSensitiveString(decryptedIdNumber),
     idImageKey: row.id_image_key,
     selfieImageKey: row.selfie_image_key,
     status: row.status,
@@ -332,6 +336,7 @@ export const submitKyc = api<{
   async (params) => {
     const auth = requireRole("host", "admin");
     const now = new Date().toISOString();
+    const encryptedIdNumber = encryptSensitiveString(params.idNumber.trim());
     let idImageKey = params.idImageKey;
     let selfieImageKey = params.selfieImageKey;
 
@@ -373,7 +378,7 @@ export const submitKyc = api<{
       await opsDB.exec`
         UPDATE kyc_submissions
         SET id_type = ${params.idType},
-            id_number = ${params.idNumber},
+            id_number = ${encryptedIdNumber},
             id_image_key = ${idImageKey},
             selfie_image_key = ${selfieImageKey},
             status = ${"pending"},
@@ -386,9 +391,10 @@ export const submitKyc = api<{
 
       return {
         submission: {
-          ...mapKycSubmission(existing),
+          ...mapKycSubmission(existing, { includeSensitiveIdNumber: true }),
           idType: params.idType,
           idNumber: params.idNumber,
+          idNumberMasked: maskSensitiveString(params.idNumber.trim()),
           idImageKey,
           selfieImageKey,
           status: "pending",
@@ -406,7 +412,7 @@ export const submitKyc = api<{
         id, user_id, id_type, id_number, id_image_key, selfie_image_key, status, submitted_at
       )
       VALUES (
-        ${id}, ${auth.userID}, ${params.idType}, ${params.idNumber}, ${idImageKey}, ${selfieImageKey}, ${"pending"}, ${now}
+        ${id}, ${auth.userID}, ${params.idType}, ${encryptedIdNumber}, ${idImageKey}, ${selfieImageKey}, ${"pending"}, ${now}
       )
     `;
 
@@ -416,6 +422,7 @@ export const submitKyc = api<{
         userId: auth.userID,
         idType: params.idType,
         idNumber: params.idNumber,
+        idNumberMasked: maskSensitiveString(params.idNumber.trim()),
         idImageKey,
         selfieImageKey,
         status: "pending",
@@ -435,7 +442,7 @@ export const getMyKycSubmission = api<void, { submission: KycSubmission | null }
     const submission = await opsDB.queryRow<KycSubmissionRow>`
       SELECT * FROM kyc_submissions WHERE user_id = ${auth.userID}
     `;
-    return { submission: submission ? mapKycSubmission(submission) : null };
+    return { submission: submission ? mapKycSubmission(submission, { includeSensitiveIdNumber: true }) : null };
   },
 );
 
@@ -446,7 +453,7 @@ export const listKycSubmissions = api<void, { submissions: KycSubmission[] }>(
     const submissions = await opsDB.rawQueryAll<KycSubmissionRow>(
       `SELECT * FROM kyc_submissions ORDER BY submitted_at DESC`,
     );
-    return { submissions: submissions.map(mapKycSubmission) };
+    return { submissions: submissions.map((submission) => mapKycSubmission(submission)) };
   },
 );
 

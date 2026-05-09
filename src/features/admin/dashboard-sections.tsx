@@ -1123,7 +1123,18 @@ export function FinancialsSection({
             <tbody className="divide-y divide-slate-100">
               {sortedCheckouts.map((checkout) => {
                 const user = allUsers.find((candidate) => candidate.id === checkout.userId);
-                const detail = checkout.checkoutType === 'subscription' ? `${checkout.hostPlan || 'unknown'} • ${checkout.billingInterval || 'n/a'}` : `${checkout.creditQuantity || 0} credits`;
+                const detail =
+                  checkout.checkoutType === 'subscription'
+                    ? `${checkout.hostPlan || 'unknown'} • ${checkout.billingInterval || 'n/a'}`
+                    : checkout.checkoutType === 'host_billing_setup'
+                      ? 'Provider-backed host billing card setup'
+                      : `${checkout.creditQuantity || 0} credits`;
+                const checkoutLabel =
+                  checkout.checkoutType === 'subscription'
+                    ? 'Subscription'
+                    : checkout.checkoutType === 'host_billing_setup'
+                      ? 'Card setup'
+                      : 'Credits';
                 return (
                   <tr key={checkout.id} className="transition-colors hover:bg-slate-50">
                     <td className="px-6 py-4">
@@ -1132,7 +1143,7 @@ export function FinancialsSection({
                         <p className="text-xs text-slate-500">{user?.email || checkout.userId}</p>
                       </div>
                     </td>
-                    <td className="px-6 py-4"><Badge variant="secondary" className="text-[10px] font-bold uppercase">{checkout.checkoutType === 'subscription' ? 'Subscription' : 'Credits'}</Badge></td>
+                    <td className="px-6 py-4"><Badge variant="secondary" className="text-[10px] font-bold uppercase">{checkoutLabel}</Badge></td>
                     <td className="px-6 py-4"><p className="text-sm text-slate-700">{detail}</p></td>
                     <td className="px-6 py-4"><p className="text-sm font-bold text-slate-900">R{checkout.amount}</p></td>
                     <td className="px-6 py-4">
@@ -1406,7 +1417,7 @@ export function KycSection({
               <tr className="border-b border-slate-100 bg-[#f8fafc]">
                 <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-500">User</th>
                 <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-500">ID Type</th>
-                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-500">ID Number</th>
+                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-500">Masked ID</th>
                 <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-500">Status</th>
                 <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                   <SortHeader label="Submitted" direction={sortDirection} onToggle={() => setSortDirection((current) => current === 'desc' ? 'asc' : 'desc')} />
@@ -1431,7 +1442,7 @@ export function KycSection({
                       </div>
                     </td>
                     <td className="px-6 py-4"><Badge variant="neutral" className="capitalize">{submission.idType.replace('_', ' ')}</Badge></td>
-                    <td className="px-6 py-4"><p className="text-sm font-medium">{submission.idNumber}</p></td>
+                    <td className="px-6 py-4"><p className="text-sm font-medium">{submission.idNumberMasked}</p></td>
                     <td className="px-6 py-4"><Badge variant={submission.status === 'verified' ? 'success' : submission.status === 'rejected' ? 'danger' : 'warning'} className="text-[10px] uppercase">{submission.status}</Badge></td>
                     <td className="px-6 py-4"><p className="text-xs text-slate-500">{new Date(submission.submittedAt).toLocaleString()}</p></td>
                     <td className="px-6 py-4 text-right">

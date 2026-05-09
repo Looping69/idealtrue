@@ -4,7 +4,14 @@ import { secret } from "encore.dev/config";
 const googleOauthClientId = secret("GOOGLE_OAUTH_CLIENT_ID");
 const GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs";
 
-type GoogleJwk = JsonWebKey & { kid?: string; alg?: string; use?: string };
+type GoogleJwk = {
+  kty: string;
+  e?: string;
+  n?: string;
+  alg?: string;
+  use?: string;
+  kid?: string;
+};
 
 type GoogleJwksResponse = {
   keys?: GoogleJwk[];

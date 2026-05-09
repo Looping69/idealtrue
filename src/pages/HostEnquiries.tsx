@@ -257,17 +257,17 @@ export default function HostEnquiries({
             </div>
 
             {options?.showPaymentConfirm && (
-              booking.paymentProofUrl ? (
+              booking.paymentProofAccessible && booking.paymentProofAccessUrl ? (
                 <a
-                  href={booking.paymentProofUrl}
+                  href={booking.paymentProofAccessUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex text-sm font-medium text-primary underline-offset-4 hover:underline"
                 >
-                  Open payment proof
+                  Open private proof
                 </a>
               ) : (
-                <p className="text-sm text-red-600">Payment proof link unavailable. Confirmation should stay blocked until proof is accessible.</p>
+                <p className="text-sm text-red-600">Private payment proof is not accessible right now. Confirmation stays blocked until the stored asset can be opened.</p>
               )
             )}
           </div>
@@ -317,7 +317,7 @@ export default function HostEnquiries({
               <Button
                 className="w-full lg:w-auto bg-green-600 hover:bg-green-700 text-white"
                 onClick={() => handlePaymentConfirmation(booking)}
-                disabled={isProcessing === booking.id || !booking.paymentProofUrl}
+                disabled={isProcessing === booking.id || !booking.paymentProofAccessible || !booking.paymentProofAccessUrl}
               >
                 <CheckCircle2 className="w-4 h-4 mr-2" /> Confirm Payment
               </Button>

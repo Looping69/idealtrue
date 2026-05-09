@@ -5,6 +5,7 @@ export interface KycSubmission {
   userId: string;
   idType: 'id_card' | 'passport' | 'drivers_license';
   idNumber: string;
+  idNumberMasked: string;
   idImageKey: string;
   selfieImageKey: string;
   status: 'pending' | 'verified' | 'rejected';

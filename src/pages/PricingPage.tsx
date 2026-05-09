@@ -1,616 +1,673 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { ArrowRight, BadgeCheck, Eye, Loader2, MessageSquareMore, ShieldCheck, Wallet } from "lucide-react";
+import { toast } from "sonner";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowRight, Check, Loader2, Megaphone, ShieldCheck, Sparkles, Smartphone, Video, BarChart4, Users, Share2, LineChart, BadgeCheck } from "lucide-react";
-import { toast } from 'sonner';
 import { useAuth } from "@/contexts/AuthContext";
-import { createSubscriptionCheckout, getCheckoutStatus, getMyHostBillingAccount, redeemHostVoucher } from "@/lib/billing-client";
+import { createSubscriptionCheckout, getCheckoutStatus, getMyHostBillingAccount } from "@/lib/billing-client";
 import type { HostBillingAccount } from "@/types";
 
-type PlanTier = 'standard' | 'professional' | 'premium';
-type BillingInterval = 'monthly' | 'annual';
+type PlanTier = "standard" | "professional" | "premium";
 
 interface PlanFeature {
-    text: string;
-    included: boolean;
+  text: string;
 }
 
 interface Plan {
-    id: PlanTier;
-    name: string;
-    price: string;
-    description: string;
-    features: PlanFeature[];
-    highlight?: string;
-    color: string;
-    cta: string;
+  id: PlanTier;
+  name: string;
+  price: string;
+  description: string;
+  bestFor: string;
+  cta: string;
+  badge?: string;
+  tone: string;
+  features: PlanFeature[];
 }
 
 const plans: Plan[] = [
-    {
-        id: 'standard',
-        name: "Standard",
-        price: "R149",
-        description: "A strong starting plan for hosts who want one polished listing with real visibility support.",
-        highlight: "Most Popular",
-        color: "bg-primary/10 border-blue-200",
-        cta: "Start on Standard",
-        features: [
-            { text: "1 active listing", included: true },
-            { text: "Stronger search placement", included: true },
-            { text: "Up to 10 listing photos", included: true },
-            { text: "Monthly social visibility support", included: true },
-            { text: "Verified host badge", included: true },
-            { text: "Placement in seasonal campaigns", included: true },
-            { text: "Access to host promotions", included: true },
-            { text: "Styled social content for your listing", included: true },
-        ]
-    },
-    {
-        id: 'professional',
-        name: "Professional",
-        price: "R350",
-        description: "For hosts who want more reach, more promotion, and room to market multiple properties properly.",
-        color: "bg-primary/10/50 border-blue-100",
-        cta: "Go Professional",
-        features: [
-            { text: "Everything in Standard", included: true },
-            { text: "Extra monthly social promos", included: true },
-            { text: "Advanced performance insights", included: true },
-            { text: "Custom marketing templates", included: true },
-            { text: "Multiple active listings", included: true },
-            { text: "Showcase video support", included: true },
-            { text: "Featured Top Picks opportunities", included: false },
-            { text: "Priority support", included: false },
-            { text: "Multi-platform social copy", included: true },
-        ]
-    },
-    {
-        id: 'premium',
-        name: "Premium",
-        price: "R499",
-        description: "Full promotion support for hosts who want premium placement, faster help, and the strongest visibility stack.",
-        highlight: "Best Value",
-        color: "bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-200",
-        cta: "Go Premium",
-        features: [
-            { text: "Everything in Standard", included: true },
-            { text: "Showcase video placement", included: true },
-            { text: "Priority social promo support", included: true },
-            { text: "Featured Top Picks opportunities", included: true },
-            { text: "Priority holiday traffic placement", included: true },
-            { text: "Direct WhatsApp support", included: true },
-            { text: "Custom marketing templates", included: true },
-            { text: "Priority partner campaign access", included: true },
-            { text: "Campaign-ready content across networks", included: true },
-        ]
-    }
+  {
+    id: "standard",
+    name: "Standard",
+    price: "R149 / month",
+    description: "For hosts who want an affordable way to get listed, get seen, and start receiving direct enquiries.",
+    bestFor: "Apartments, cottages, guest rooms, small BnBs, and hosts who want to test Ideal Stay without high monthly costs.",
+    cta: "Start with Standard",
+    tone: "border-slate-200 bg-white",
+    features: [
+      { text: "1 active property listing" },
+      { text: "Up to 10 property photos" },
+      { text: "Direct guest enquiries" },
+      { text: "Host dashboard access" },
+      { text: "Basic listing visibility" },
+      { text: "0% booking commission" },
+    ],
+  },
+  {
+    id: "professional",
+    name: "Professional",
+    price: "R350 / month",
+    description: "For hosts who want stronger visibility, more listing capacity, and better support in getting seen.",
+    bestFor: "Hosts who want more than a basic listing and are serious about turning visibility into enquiries.",
+    cta: "Get More Visibility",
+    badge: "Recommended",
+    tone: "border-cyan-200 bg-cyan-50/50",
+    features: [
+      { text: "Everything in Standard" },
+      { text: "Multiple active listings" },
+      { text: "Up to 20 property photos per listing" },
+      { text: "Listing video support" },
+      { text: "Enhanced listing placement" },
+      { text: "Listing performance insights" },
+      { text: "0% booking commission" },
+    ],
+  },
+  {
+    id: "premium",
+    name: "Premium",
+    price: "R499 / month",
+    description: "For hosts who want maximum exposure, priority visibility, and faster support when competition is tighter.",
+    bestFor: "Guesthouses, lodges, high-value stays, and hosts who want to stand out in competitive areas.",
+    cta: "Stand Out with Premium",
+    badge: "Maximum Exposure",
+    tone: "border-slate-900 bg-slate-950 text-white",
+    features: [
+      { text: "Everything in Professional" },
+      { text: "Featured listing opportunities" },
+      { text: "Priority promotional placement" },
+      { text: "Stronger promotional rotation" },
+      { text: "Advanced performance insights" },
+      { text: "Highest priority support" },
+      { text: "0% booking commission" },
+    ],
+  },
 ];
 
-const planStats = [
-    { label: "No commission", value: "0%", icon: BadgeCheck },
-    { label: "Facebook group network", value: "Nearly 1M", icon: Megaphone },
-    { label: "Monthly community growth", value: "Thousands", icon: LineChart },
+const pressurePoints = [
+  {
+    icon: Wallet,
+    title: "Commission pain",
+    body: "Every booking should feel like income, not another deduction.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Ownership",
+    body: "You own the property. You host the guests. You should keep the booking income.",
+  },
+  {
+    icon: MessageSquareMore,
+    title: "Control",
+    body: "Stay in control of your guest communication, pricing, availability, and repeat bookings.",
+  },
+  {
+    icon: Eye,
+    title: "Visibility",
+    body: "A beautiful property does not help if travellers never see it.",
+  },
 ];
 
-const comparisonRows = [
-    { label: "Listings included", values: ["1", "Multiple", "Multiple"] },
-    { label: "Verified host badge", values: ["Included", "Included", "Priority support handling"] },
-    { label: "Video support", values: ["Not included", "Included", "Included"] },
-    { label: "Social promotion", values: ["Monthly visibility", "Extra monthly promos", "Priority featured promo"] },
-    { label: "Content engine", values: ["Listing-ready", "Multi-platform", "Campaign-ready"] },
-    { label: "Insights", values: ["Basic", "Advanced", "Advanced"] },
-    { label: "Support", values: ["Standard", "Priority", "WhatsApp direct"] },
+const valuePoints = [
+  "List your property clearly and professionally",
+  "Receive direct enquiries from travellers",
+  "Keep control of your guest communication",
+  "Keep more of your booking income",
+  "Choose a monthly plan that fits your visibility goals",
+];
+
+const faqs = [
+  {
+    question: "Do you take commission from bookings?",
+    answer: "No. Ideal Stay takes 0% booking commission. Hosts pay a monthly subscription and keep their booking income.",
+  },
+  {
+    question: "How do guests contact me?",
+    answer: "Guests send direct enquiries through Ideal Stay so you can manage the conversation and booking process yourself.",
+  },
+  {
+    question: "Can I change plans later?",
+    answer: "Yes. Start with one plan and upgrade when you want more visibility or stronger promotional support.",
+  },
+  {
+    question: "Am I locked into a contract?",
+    answer: "No. Ideal Stay uses simple monthly plans.",
+  },
+  {
+    question: "Do you manage my property or bookings?",
+    answer: "No. You remain in control of your property, pricing, availability, guest communication, and booking process.",
+  },
+  {
+    question: "How do referral rewards work?",
+    answer: "Referral rewards are tied to real host conversions. When a host you referred activates a paid subscription, the platform records that reward against your account.",
+  },
 ];
 
 export default function PricingPage({ onBack }: { onBack?: () => void }) {
-    const navigate = useNavigate();
-    const { user, profile, refreshProfile } = useAuth();
-    const [loadingPlan, setLoadingPlan] = useState<PlanTier | null>(null);
-    const [fetchingPlan, setFetchingPlan] = useState(true);
-    const [currentPlan, setCurrentPlan] = useState<PlanTier>('standard');
-    const [billingInterval, setBillingInterval] = useState<BillingInterval>('monthly');
-    const [voucherCode, setVoucherCode] = useState('');
-    const [redeemingVoucher, setRedeemingVoucher] = useState(false);
-    const [billingAccount, setBillingAccount] = useState<HostBillingAccount | null>(null);
-    const [searchParams] = useSearchParams();
-    const sourceLabel = searchParams.get('source_label') || searchParams.get('region');
-    const billingStatus = searchParams.get('billing_status');
-    const checkoutId = searchParams.get('checkout_id');
+  const navigate = useNavigate();
+  const { user, profile, refreshProfile } = useAuth();
+  const [loadingPlan, setLoadingPlan] = useState<PlanTier | null>(null);
+  const [fetchingPlan, setFetchingPlan] = useState(true);
+  const [currentPlan, setCurrentPlan] = useState<PlanTier>("standard");
+  const [billingAccount, setBillingAccount] = useState<HostBillingAccount | null>(null);
+  const [searchParams] = useSearchParams();
+  const sourceLabel = searchParams.get("source_label") || searchParams.get("region");
+  const billingStatus = searchParams.get("billing_status");
+  const checkoutId = searchParams.get("checkout_id");
 
-    const fetchPlan = useCallback(async () => {
-        if (!profile) {
-            setCurrentPlan('standard');
-            setBillingAccount(null);
-            setFetchingPlan(false);
-            return;
-        }
-        setCurrentPlan((profile.hostPlan as PlanTier) || 'standard');
-        if (profile.role === 'host') {
-            try {
-                const account = await getMyHostBillingAccount();
-                setBillingAccount(account);
-            } catch (error) {
-                console.error('Failed to load host billing account for pricing page:', error);
-                setBillingAccount(null);
-            }
-        } else {
-            setBillingAccount(null);
-        }
-        setFetchingPlan(false);
-    }, [profile]);
-
-    useEffect(() => {
-        fetchPlan();
-    }, [fetchPlan]);
-
-    useEffect(() => {
-        if (!user || !billingStatus || !checkoutId) {
-            return;
-        }
-
-        let cancelled = false;
-        const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-        async function resolveCheckout() {
-            try {
-                for (let attempt = 0; attempt < 8; attempt += 1) {
-                    const result = await getCheckoutStatus(checkoutId);
-                    if (cancelled) {
-                        return;
-                    }
-
-                    if (result.status === 'paid') {
-                        const nextProfile = await refreshProfile();
-                        if (cancelled) {
-                            return;
-                        }
-                        setCurrentPlan((nextProfile?.hostPlan as PlanTier) || currentPlan);
-                        toast.success('Subscription payment confirmed. Your plan access is now live.');
-                        navigate('/host', { replace: true });
-                        return;
-                    }
-
-                    if (billingStatus === 'cancelled' || result.status === 'cancelled') {
-                        toast.message('Checkout cancelled. No subscription changes were applied.');
-                        return;
-                    }
-
-                    if (billingStatus === 'failed' || result.status === 'failed') {
-                        toast.error('Payment failed. Nothing was upgraded.');
-                        return;
-                    }
-
-                    if (attempt < 7) {
-                        await wait(2000);
-                    }
-                }
-                toast.message('Payment is still being confirmed. Give the webhook a moment and refresh if needed.');
-            } catch (error) {
-                if (!cancelled) {
-                    console.error('Failed to resolve checkout status', error);
-                }
-            }
-        }
-
-        resolveCheckout();
-        return () => {
-            cancelled = true;
-        };
-    }, [billingStatus, checkoutId, currentPlan, navigate, refreshProfile, user]);
-
-
-    const handleUpgrade = useCallback(async (planId: PlanTier) => {
-        if (!user) {
-            toast.error("Please sign in before choosing a paid host plan.");
-            return;
-        }
-
-        const plan = plans.find(p => p.id === planId);
-        if (!plan) return;
-
-        setLoadingPlan(planId);
-
-        try {
-            const checkout = await createSubscriptionCheckout(planId, billingInterval);
-            window.location.assign(checkout.redirectUrl);
-
-        } catch (error: any) {
-            console.error("Plan upgrade error:", error);
-            toast.error("Upgrade failed: " + error.message);
-        } finally {
-            setLoadingPlan(null);
-        }
-    }, [billingInterval, user]);
-
-    const handleVoucherRedeem = useCallback(async () => {
-        if (!user) {
-            toast.error("Please sign in before redeeming a voucher PIN.");
-            return;
-        }
-
-        setRedeemingVoucher(true);
-        try {
-            const account = await redeemHostVoucher(voucherCode);
-            setBillingAccount(account);
-            const nextProfile = await refreshProfile();
-            setCurrentPlan((nextProfile?.hostPlan as PlanTier) || account.plan);
-            toast.success(`Voucher redeemed. Free Standard access now runs until ${account.currentPeriodEnd?.slice(0, 10)}.`);
-            setVoucherCode('');
-            navigate('/host', { replace: true });
-        } catch (error: any) {
-            console.error("Voucher redemption failed:", error);
-            toast.error("Voucher redemption failed: " + error.message);
-        } finally {
-            setRedeemingVoucher(false);
-        }
-    }, [navigate, refreshProfile, user, voucherCode]);
-
-    const hasActiveHostPlan = billingAccount?.billingSource === 'voucher' || billingAccount?.billingSource === 'paid';
-    const showCurrentPlanState = profile?.role === 'host' && hasActiveHostPlan;
-
-    const getPlanPrice = useCallback((plan: Plan) => {
-        if (billingInterval === 'monthly') {
-            return {
-                display: plan.price,
-                suffix: 'per month',
-                helper: null as string | null,
-            };
-        }
-
-        const monthlyAmount = parseInt(plan.price.replace('R', ''), 10);
-        const annualAmount = monthlyAmount * 10;
-        return {
-            display: `R${annualAmount.toLocaleString()}`,
-            suffix: 'per year',
-            helper: monthlyAmount > 0 ? 'Annual billing includes a 2-month discount' : null,
-        };
-    }, [billingInterval]);
-
-    if (fetchingPlan) {
-        return (
-            <div className="flex justify-center items-center p-20">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            </div>
-        );
+  const fetchPlan = useCallback(async () => {
+    if (!profile) {
+      setCurrentPlan("standard");
+      setBillingAccount(null);
+      setFetchingPlan(false);
+      return;
     }
 
+    setCurrentPlan((profile.hostPlan as PlanTier) || "standard");
+    if (profile.role === "host") {
+      try {
+        const account = await getMyHostBillingAccount();
+        setBillingAccount(account);
+      } catch (error) {
+        console.error("Failed to load host billing account for pricing page:", error);
+        setBillingAccount(null);
+      }
+    } else {
+      setBillingAccount(null);
+    }
+
+    setFetchingPlan(false);
+  }, [profile]);
+
+  useEffect(() => {
+    fetchPlan();
+  }, [fetchPlan]);
+
+  useEffect(() => {
+    if (!user || !billingStatus || !checkoutId) {
+      return;
+    }
+
+    let cancelled = false;
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    async function resolveCheckout() {
+      try {
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          const result = await getCheckoutStatus(checkoutId);
+          if (cancelled) {
+            return;
+          }
+
+          if (result.status === "paid") {
+            const nextProfile = await refreshProfile();
+            if (cancelled) {
+              return;
+            }
+            setCurrentPlan((nextProfile?.hostPlan as PlanTier) || currentPlan);
+            toast.success("Subscription payment confirmed. Your plan access is now live.");
+            navigate("/host", { replace: true });
+            return;
+          }
+
+          if (billingStatus === "cancelled" || result.status === "cancelled") {
+            toast.message("Checkout cancelled. No subscription changes were applied.");
+            return;
+          }
+
+          if (billingStatus === "failed" || result.status === "failed") {
+            toast.error("Payment failed. Nothing was upgraded.");
+            return;
+          }
+
+          if (attempt < 7) {
+            await wait(2000);
+          }
+        }
+
+        toast.message("Payment is still being confirmed. Give the webhook a moment and refresh if needed.");
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to resolve checkout status", error);
+        }
+      }
+    }
+
+    resolveCheckout();
+    return () => {
+      cancelled = true;
+    };
+  }, [billingStatus, checkoutId, currentPlan, navigate, refreshProfile, user]);
+
+  const handleUpgrade = useCallback(
+    async (planId: PlanTier) => {
+      if (!user) {
+        navigate("/signup?returnTo=%2Fpricing");
+        return;
+      }
+
+      setLoadingPlan(planId);
+
+      try {
+        const checkout = await createSubscriptionCheckout(planId, "monthly");
+        window.location.assign(checkout.redirectUrl);
+      } catch (error: any) {
+        console.error("Plan upgrade error:", error);
+        toast.error(`Upgrade failed: ${error.message}`);
+      } finally {
+        setLoadingPlan(null);
+      }
+    },
+    [navigate, user],
+  );
+
+  if (fetchingPlan) {
     return (
-        <div className="mx-auto max-w-7xl space-y-10 pb-16">
-            <section className="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(14,116,144,0.12),_transparent_32%),linear-gradient(135deg,#fffdf7_0%,#f8fbff_45%,#eef6ff_100%)] px-6 py-10 shadow-sm md:px-10 md:py-14">
-                <div className="absolute -right-16 top-0 h-56 w-56 rounded-full bg-cyan-200/30 blur-3xl" />
-                <div className="absolute bottom-0 left-0 h-48 w-48 rounded-full bg-amber-200/20 blur-3xl" />
-
-                <div className="relative grid gap-10 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
-                    <div className="space-y-6">
-                        <div className="flex flex-wrap items-center gap-3">
-                            <span className="bg-cyan-50 text-cyan-700 px-3 py-1 rounded-full text-xs font-bold border border-cyan-200">
-                                Hosting Plans
-                            </span>
-                            <span className="text-sm font-medium uppercase tracking-[0.25em] text-slate-500">
-                                Public Pricing
-                            </span>
-                        </div>
-
-                        <div className="max-w-3xl space-y-4">
-                            <h1 className="text-4xl font-black tracking-tight text-slate-950 md:text-6xl">
-                                Plans built to help hosts get seen, trusted, and booked across South Africa.
-                            </h1>
-                            <p className="max-w-2xl text-lg leading-8 text-slate-600 md:text-xl">
-                                Choose the level of visibility and marketing support that fits your property business.
-                                Every paid plan is designed to help your listing look stronger, reach more travellers, and convert more enquiries into bookings.
-                            </p>
-                            <p className="max-w-2xl text-base leading-7 text-slate-600">
-                                Ideal Stay is backed by a Facebook group network with nearly one million members across location-based communities such as
-                                <span className="font-semibold"> “Cape Town Holiday Accommodation”</span>,
-                                <span className="font-semibold"> “Durban Holiday Accommodation”</span>,
-                                <span className="font-semibold"> “Johannesburg Holiday Accommodation”</span>,
-                                <span className="font-semibold"> “Pretoria Holiday Accommodation”</span>, and many more covering major cities and holiday towns across South Africa.
-                                That network continues to grow by thousands of new members each month.
-                            </p>
-                        </div>
-
-                        {sourceLabel && (
-                            <div className="max-w-2xl rounded-2xl border border-cyan-200 bg-cyan-50/80 p-4 text-sm text-cyan-900">
-                                <div className="font-bold uppercase tracking-[0.2em] text-cyan-700">Campaign Source</div>
-                                <p className="mt-2 leading-6">
-                                    You came through the <span className="font-semibold">{sourceLabel}</span> acquisition path. We will keep that attribution intact while you evaluate plans and sign up.
-                                </p>
-                            </div>
-                        )}
-
-                        <div className="flex flex-wrap gap-3">
-                            {!user ? (
-                                <div className="rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800">
-                                    Sign in to upgrade, but you can review every plan first.
-                                </div>
-                            ) : profile?.role === 'host' && !hasActiveHostPlan ? (
-                                <div className="rounded-full border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-medium text-sky-800">
-                                    Base host tier: Standard. Hosting billing only becomes active after voucher redemption or paid checkout.
-                                </div>
-                            ) : (
-                                <div className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800">
-                                    Your current plan: {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)}
-                                </div>
-                            )}
-
-                            <Button
-                                variant="outline"
-                                onClick={() => {
-                                    if (onBack) {
-                                        onBack();
-                                        return;
-                                    }
-                                    navigate(profile?.role === 'host' ? '/host' : '/');
-                                }}
-                                className="rounded-full border-slate-300 bg-surface/80"
-                            >
-                                {profile?.role === 'host' ? 'Back to Host Workspace' : 'Back to Explore'}
-                            </Button>
-                        </div>
-
-                        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-slate-200 bg-surface/85 p-1 shadow-sm">
-                            <button
-                                type="button"
-                                onClick={() => setBillingInterval('monthly')}
-                                className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${billingInterval === 'monthly' ? 'bg-[#08a8c8] text-white' : 'text-slate-600 hover:text-slate-950'}`}
-                            >
-                                Monthly
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setBillingInterval('annual')}
-                                className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${billingInterval === 'annual' ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:text-slate-950'}`}
-                            >
-                                Annual
-                            </button>
-                            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
-                                Annual discount
-                            </span>
-                        </div>
-                    </div>
-
-                    <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
-                        {planStats.map((stat) => (
-                            <div key={stat.label} className="rounded-2xl border border-surface/70 bg-surface/80 p-5 backdrop-blur-sm shadow-sm">
-                                <stat.icon className="mb-3 h-5 w-5 text-cyan-700" />
-                                <div className="text-3xl font-black text-slate-950">{stat.value}</div>
-                                <div className="mt-1 text-sm font-medium text-slate-600">{stat.label}</div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </section>
-
-            <section className="grid gap-4 rounded-[2rem] border border-emerald-200 bg-[linear-gradient(135deg,#f0fdf4_0%,#ecfeff_55%,#f8fafc_100%)] p-6 shadow-sm lg:grid-cols-[1fr_auto] lg:items-center">
-                <div className="space-y-2">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white/80 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
-                        Founding Host Voucher
-                    </div>
-                    <h2 className="text-2xl font-black text-slate-950">First 100 hosts can redeem a 1-month Standard voucher PIN.</h2>
-                    <p className="text-sm leading-6 text-slate-600">
-                        Newly verified hosts in that first 100 are emailed a personal voucher PIN. Redeeming it starts a free 1-month Standard plan. No upfront card capture is required, and reminder notices only start 7 days before the free period ends.
-                    </p>
-                </div>
-                <div className="flex flex-col gap-3 sm:flex-row">
-                    <input
-                        type="text"
-                        value={voucherCode}
-                        onChange={(event) => setVoucherCode(event.target.value.toUpperCase())}
-                        placeholder="Enter voucher PIN"
-                        className="h-12 min-w-[220px] rounded-xl border border-emerald-200 bg-white px-4 text-sm font-semibold tracking-[0.2em] text-slate-900 outline-none focus:border-emerald-500"
-                    />
-                    <Button onClick={handleVoucherRedeem} disabled={redeemingVoucher || !voucherCode.trim()} className="h-12 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700">
-                        {redeemingVoucher ? 'Redeeming...' : 'Redeem Voucher'}
-                    </Button>
-                </div>
-            </section>
-
-            <section className="grid grid-cols-1 gap-6 md:grid-cols-3">
-                {plans.map((plan) => {
-                    const isCurrent = showCurrentPlanState && currentPlan === plan.id;
-                    const isLoading = loadingPlan === plan.id;
-                    const price = getPlanPrice(plan);
-
-                    return (
-                        <Card
-                            key={plan.id}
-                            className={`relative flex h-full flex-col overflow-hidden border transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl ${plan.color} ${isCurrent ? 'ring-2 ring-primary ring-offset-2 scale-[1.02]' : 'border-slate-200'}`}
-                        >
-                            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-600" />
-                            {plan.highlight && (
-                                <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                                    <span className="bg-[#08a8c8] text-white px-4 py-1.5 rounded-full text-xs uppercase tracking-widest font-bold">
-                                        {plan.highlight}
-                                    </span>
-                                </div>
-                            )}
-
-                            <CardHeader className="pb-4 text-left">
-                                <div className="mb-4 flex items-center justify-between">
-                                    <span />
-                                    {isCurrent && (
-                                        <span className="border border-emerald-200 bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full text-xs">
-                                            Current
-                                        </span>
-                                    )}
-                                </div>
-                                <CardTitle className="text-2xl font-black text-slate-950">{plan.name}</CardTitle>
-                                <div className="mt-4 flex items-end gap-2">
-                                    <span className="text-5xl font-black tracking-tight text-slate-950">{price.display}</span>
-                                    <span className="pb-1 text-sm font-semibold uppercase tracking-wider text-slate-500">{price.suffix}</span>
-                                </div>
-                                {price.helper && (
-                                    <div className="pt-2 text-sm font-semibold text-emerald-700">{price.helper}</div>
-                                )}
-                                <CardDescription className="pt-3 text-left leading-6 text-slate-600">
-                                    {plan.description}
-                                </CardDescription>
-                            </CardHeader>
-
-                            <CardContent className="flex-1">
-                                <ul className="mt-4 space-y-3">
-                                    {plan.features.map((feature, idx) => (
-                                        <li key={idx} className="flex items-start gap-3 text-sm">
-                                            {feature.included ? (
-                                                <Check className="h-5 w-5 shrink-0 text-emerald-600" />
-                                            ) : (
-                                                <div className="flex h-5 w-5 shrink-0 items-center justify-center">
-                                                    <div className="h-1.5 w-1.5 rounded-full bg-slate-300" />
-                                                </div>
-                                            )}
-                                            <span className={feature.included ? 'font-medium text-slate-700' : 'text-slate-400'}>
-                                                {feature.text}
-                                            </span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </CardContent>
-
-                            <CardFooter>
-                                <Button
-                                    onClick={() => handleUpgrade(plan.id)}
-                                    disabled={loadingPlan !== null || isCurrent}
-                                    variant={isCurrent ? "outline" : plan.id === 'premium' || plan.id === 'professional' ? "default" : "secondary"}
-                                    className={`h-12 w-full rounded-xl text-base font-semibold ${plan.id === 'premium' ? 'bg-[#08a8c8] hover:bg-[#08a8c8]/90 text-white' : plan.id === 'professional' ? 'bg-cyan-700 hover:bg-cyan-800 text-white' : ''
-                                        }`}
-                                >
-                                    {isLoading ? (
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    ) : isCurrent ? (
-                                        "Current Plan"
-                                    ) : (
-                                        <span className="inline-flex items-center gap-2">
-                                            {plan.cta}
-                                            <ArrowRight className="h-4 w-4" />
-                                        </span>
-                                    )}
-                                </Button>
-                            </CardFooter>
-                        </Card>
-                    );
-                })}
-            </section>
-
-            <section className="overflow-hidden rounded-[2rem] bg-[linear-gradient(135deg,#0f172a_0%,#164e63_45%,#0f766e_100%)] p-8 text-white shadow-xl md:p-12">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-surface/10 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none"></div>
-                <div className="relative z-10 space-y-6">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-surface/20 bg-surface/10 px-3 py-1 text-sm font-medium backdrop-blur-sm">
-                        <Users className="w-4 h-4" />
-                        <span>Nearly 1 Million Group Members</span>
-                    </div>
-                    <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
-                        <div className="space-y-5">
-                            <h3 className="text-3xl font-black leading-tight md:text-4xl">
-                                Put your listing in front of one of South Africa's strongest holiday accommodation audiences.
-                            </h3>
-                            <p className="text-lg leading-8 text-cyan-50/90">
-                                Our network spans city and town Facebook groups built around the familiar
-                                <span className="font-semibold"> “(Town Name) Holiday Accommodation”</span> format.
-                                It already reaches travellers across places like Cape Town, Durban, Johannesburg, Pretoria, Margate, Umhlanga, St Lucia, Port Edward and more, and continues to add thousands of new members every month.
-                            </p>
-                        </div>
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <div className="rounded-2xl border border-surface/15 bg-surface/10 p-5 backdrop-blur-md">
-                                <Share2 className="mb-3 h-8 w-8 text-cyan-100" />
-                                <div className="text-lg font-bold">Real Audience Reach</div>
-                                <p className="mt-1 text-sm text-cyan-50/80">Your listing can be positioned in front of a large, travel-focused Facebook audience.</p>
-                            </div>
-                            <div className="rounded-2xl border border-surface/15 bg-surface/10 p-5 backdrop-blur-md">
-                                <ShieldCheck className="mb-3 h-8 w-8 text-cyan-100" />
-                                <div className="text-lg font-bold">More Trust</div>
-                                <p className="mt-1 text-sm text-cyan-50/80">Badges, stronger presentation, and better placement help guests feel safer enquiring.</p>
-                            </div>
-                            <div className="rounded-2xl border border-surface/15 bg-surface/10 p-5 backdrop-blur-md">
-                                <Video className="mb-3 h-8 w-8 text-cyan-100" />
-                                <div className="text-lg font-bold">Content Support</div>
-                                <p className="mt-1 text-sm text-cyan-50/80">Turn any listing into styled posts for Facebook, Instagram, X, LinkedIn, and more.</p>
-                            </div>
-                            <div className="rounded-2xl border border-surface/15 bg-surface/10 p-5 backdrop-blur-md">
-                                <Smartphone className="mb-3 h-8 w-8 text-cyan-100" />
-                                <div className="text-lg font-bold">Faster Support</div>
-                                <p className="mt-1 text-sm text-cyan-50/80">Get quicker help when your listing, promotion, or account needs attention.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <section className="rounded-[2rem] border border-slate-200 bg-surface p-8 shadow-sm md:p-10">
-                <div className="mb-8 max-w-2xl">
-                    <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
-                        <BarChart4 className="h-4 w-4" />
-                        Compare What Changes
-                    </div>
-                    <h3 className="text-3xl font-black text-slate-950">A clear view of what each plan includes.</h3>
-                    <p className="mt-3 text-base leading-7 text-slate-600">
-                        Compare listing capacity, promotion support, visibility tools, and support levels side by side before you choose a plan.
-                    </p>
-                </div>
-
-                <div className="overflow-hidden rounded-2xl border border-slate-200">
-                    <div className="grid grid-cols-4 bg-[#08a8c8] text-white">
-                        <div className="px-4 py-4 text-sm font-bold uppercase tracking-[0.2em] text-slate-300">Feature</div>
-                        {plans.map((plan) => (
-                            <div key={plan.id} className="px-4 py-4 text-center text-sm font-bold uppercase tracking-[0.2em]">
-                                {plan.name}
-                            </div>
-                        ))}
-                    </div>
-
-                    {comparisonRows.map((row, rowIndex) => (
-                        <div key={row.label} className={`grid grid-cols-4 ${rowIndex % 2 === 0 ? 'bg-surface' : 'bg-slate-50'}`}>
-                            <div className="px-4 py-4 text-sm font-semibold text-slate-700">{row.label}</div>
-                            {row.values.map((value, valueIndex) => (
-                                <div key={`${row.label}-${valueIndex}`} className="px-4 py-4 text-center text-sm text-slate-600">
-                                    {value}
-                                </div>
-                            ))}
-                        </div>
-                    ))}
-                </div>
-            </section>
-
-            <section className="grid gap-6 rounded-[2rem] border border-amber-200 bg-[linear-gradient(135deg,#fffaf0_0%,#fff7ed_55%,#fff1f2_100%)] p-8 shadow-sm lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
-                <div className="space-y-4">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-surface/80 px-3 py-1 text-sm font-medium text-amber-800">
-                        <Sparkles className="h-4 w-4" />
-                        Included Growth Service
-                    </div>
-                    <h3 className="text-3xl font-black text-slate-950">Every paid host plan includes the content engine.</h3>
-                    <p className="text-base leading-7 text-slate-700">
-                        Turn any Ideal Stay listing into polished promotional content without having to start from a blank page every time you want to post.
-                    </p>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="rounded-2xl border border-surface/80 bg-surface/90 p-5 shadow-sm">
-                        <div className="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Input</div>
-                        <p className="mt-3 text-sm leading-6 text-slate-700">
-                            Choose one of your listings and let the engine pull the title, location, amenities, price, and positioning automatically.
-                        </p>
-                    </div>
-                    <div className="rounded-2xl border border-surface/80 bg-surface/90 p-5 shadow-sm">
-                        <div className="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Styling</div>
-                        <p className="mt-3 text-sm leading-6 text-slate-700">
-                            Generate styled copy with headlines, body text, call-to-action wording, and hashtag direction for each platform.
-                        </p>
-                    </div>
-                    <div className="rounded-2xl border border-surface/80 bg-surface/90 p-5 shadow-sm">
-                        <div className="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Output</div>
-                        <p className="mt-3 text-sm leading-6 text-slate-700">
-                            Reuse the content on Facebook, Instagram, X, LinkedIn, or wherever else you market your property.
-                        </p>
-                    </div>
-                    <div className="rounded-2xl border border-surface/80 bg-surface/90 p-5 shadow-sm">
-                        <div className="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Commercial Angle</div>
-                        <p className="mt-3 text-sm leading-6 text-slate-700">
-                            Save time, stay consistent, and keep your listing visible more often without hiring a full content team.
-                    </p>
-                    </div>
-                </div>
-            </section>
-        </div>
+      <div className="flex items-center justify-center p-20">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
     );
+  }
+
+  const hasActiveHostPlan = billingAccount?.billingSource === "voucher" || billingAccount?.billingSource === "paid";
+  const showCurrentPlanState = profile?.role === "host" && hasActiveHostPlan;
+
+  return (
+    <div className="mx-auto max-w-7xl space-y-10 pb-16">
+      <section className="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(8,168,200,0.18),_transparent_34%),linear-gradient(135deg,#ffffff_0%,#f8fcfd_45%,#eef9fb_100%)] px-6 py-10 shadow-sm md:px-10 md:py-14">
+        <div className="absolute -right-12 top-0 h-56 w-56 rounded-full bg-cyan-200/40 blur-3xl" />
+        <div className="absolute bottom-0 left-0 h-48 w-48 rounded-full bg-slate-200/50 blur-3xl" />
+
+        <div className="relative grid gap-10 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-xs font-bold text-cyan-700">
+                Host Pricing
+              </span>
+              <span className="text-sm font-medium uppercase tracking-[0.25em] text-slate-500">
+                0% Booking Commission
+              </span>
+            </div>
+
+            <div className="max-w-3xl space-y-4">
+              <h1 className="text-4xl font-black tracking-tight text-slate-950 md:text-6xl">
+                Your property. Your guests. Your booking income.
+              </h1>
+              <p className="max-w-2xl text-lg leading-8 text-slate-700 md:text-xl">
+                Get your accommodation seen by travellers without giving away commission on every booking.
+              </p>
+              <p className="max-w-3xl text-base leading-7 text-slate-600">
+                Ideal Stay helps hosts list their property, receive direct guest enquiries, and keep control of their
+                bookings through simple monthly plans.
+              </p>
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
+                0% booking commission. Direct enquiries. Simple monthly pricing.
+              </p>
+            </div>
+
+            {sourceLabel ? (
+              <div className="max-w-2xl rounded-2xl border border-cyan-200 bg-cyan-50/80 p-4 text-sm text-cyan-900">
+                <div className="font-bold uppercase tracking-[0.2em] text-cyan-700">Campaign Source</div>
+                <p className="mt-2 leading-6">
+                  You came through the <span className="font-semibold">{sourceLabel}</span> acquisition path. That
+                  attribution stays intact while you review plans.
+                </p>
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap gap-3">
+              <Button onClick={() => navigate("/signup?returnTo=%2Fpricing")} className="h-12 rounded-full bg-[#08a8c8] px-6 text-base font-semibold text-white hover:bg-[#08a8c8]/90">
+                List Your Property
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  document.getElementById("plans")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                className="h-12 rounded-full border-slate-300 bg-white/80 px-6 text-base font-semibold"
+              >
+                View Plans
+              </Button>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              {!user ? (
+                <div className="rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800">
+                  Review the plans first. Sign in only when you are ready to activate one.
+                </div>
+              ) : profile?.role === "host" && !hasActiveHostPlan ? (
+                <div className="rounded-full border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-medium text-sky-800">
+                  Your host profile exists, but no paid billing cycle is active yet.
+                </div>
+              ) : (
+                <div className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800">
+                  Your current plan: {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)}
+                </div>
+              )}
+
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (onBack) {
+                    onBack();
+                    return;
+                  }
+                  navigate(profile?.role === "host" ? "/host" : "/");
+                }}
+                className="rounded-full border-slate-300 bg-white/80"
+              >
+                {profile?.role === "host" ? "Back to Host Workspace" : "Back to Explore"}
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-4">
+            {pressurePoints.map((point) => (
+              <div key={point.title} className="rounded-2xl border border-white/70 bg-white/80 p-5 shadow-sm backdrop-blur-sm">
+                <point.icon className="mb-3 h-5 w-5 text-cyan-700" />
+                <div className="text-lg font-black text-slate-950">{point.title}</div>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{point.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-6 rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
+        <div className="space-y-4">
+          <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-600">
+            Commission Pressure
+          </div>
+          <h2 className="text-3xl font-black text-slate-950 md:text-4xl">Stop paying more because you got booked.</h2>
+          <p className="text-base leading-7 text-slate-600">
+            Most booking platforms take a percentage every time your property earns.
+          </p>
+          <p className="text-base leading-7 text-slate-600">
+            The more bookings you get, the more commission you lose.
+          </p>
+          <p className="text-base leading-7 text-slate-600">
+            Ideal Stay works differently. You pay a simple monthly subscription, get your property listed, and keep
+            your booking income without commission cuts from us.
+          </p>
+        </div>
+
+        <div className="rounded-[1.75rem] border border-cyan-200 bg-[linear-gradient(135deg,#ecfeff_0%,#f8fafc_100%)] p-6">
+          <div className="space-y-4">
+            <p className="text-lg font-black text-slate-950">No booking commission. No hidden percentage. No penalty for doing well.</p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-white bg-white p-4 shadow-sm">
+                <div className="text-3xl font-black text-slate-950">0%</div>
+                <div className="mt-1 text-sm font-medium text-slate-600">booking commission</div>
+              </div>
+              <div className="rounded-2xl border border-white bg-white p-4 shadow-sm">
+                <div className="text-3xl font-black text-slate-950">Direct</div>
+                <div className="mt-1 text-sm font-medium text-slate-600">guest enquiries</div>
+              </div>
+              <div className="rounded-2xl border border-white bg-white p-4 shadow-sm">
+                <div className="text-3xl font-black text-slate-950">Monthly</div>
+                <div className="mt-1 text-sm font-medium text-slate-600">predictable pricing</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm md:p-10">
+        <div className="max-w-3xl space-y-4">
+          <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-600">
+            Built for Hosts Who Want Control
+          </div>
+          <h2 className="text-3xl font-black text-slate-950">Ideal Stay is designed for hosts who want direct visibility and less dependence on high-commission platforms.</h2>
+          <p className="text-base leading-7 text-slate-600">
+            With Ideal Stay, you pay for visibility and keep your bookings.
+          </p>
+        </div>
+
+        <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          {valuePoints.map((point) => (
+            <div key={point} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5">
+              <BadgeCheck className="mb-3 h-5 w-5 text-cyan-700" />
+              <p className="text-sm font-semibold leading-6 text-slate-700">{point}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section id="plans" className="space-y-6">
+        <div className="max-w-3xl space-y-4">
+          <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-600">
+            Plans
+          </div>
+          <h2 className="text-3xl font-black text-slate-950 md:text-4xl">Choose how much visibility you want.</h2>
+          <p className="text-base leading-7 text-slate-600">
+            Every plan includes one important promise: Ideal Stay takes 0% commission from your bookings.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          {plans.map((plan) => {
+            const isCurrent = showCurrentPlanState && currentPlan === plan.id;
+            const isLoading = loadingPlan === plan.id;
+            const darkCard = plan.id === "premium";
+
+            return (
+              <Card
+                key={plan.id}
+                className={`relative flex h-full flex-col overflow-hidden border transition-all duration-200 hover:-translate-y-1 hover:shadow-xl ${plan.tone} ${isCurrent ? "ring-2 ring-primary ring-offset-2" : ""}`}
+              >
+                <div className={`absolute inset-x-0 top-0 h-1 ${darkCard ? "bg-cyan-400" : "bg-[#08a8c8]"}`} />
+                {plan.badge ? (
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                    <span className={`${darkCard ? "bg-white text-slate-950" : "bg-[#08a8c8] text-white"} rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-[0.2em]`}>
+                      {plan.badge}
+                    </span>
+                  </div>
+                ) : null}
+
+                <CardHeader className="pb-4 text-left">
+                  <div className="mb-4 flex items-center justify-between">
+                    <span className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] ${darkCard ? "bg-white/10 text-cyan-100" : "bg-slate-100 text-slate-600"}`}>
+                      {plan.name}
+                    </span>
+                    {isCurrent ? (
+                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">
+                        Current
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <CardTitle className={`text-2xl font-black ${darkCard ? "text-white" : "text-slate-950"}`}>{plan.name}</CardTitle>
+                  <div className={`mt-4 text-4xl font-black tracking-tight ${darkCard ? "text-white" : "text-slate-950"}`}>{plan.price}</div>
+                  <CardDescription className={`pt-3 text-left leading-6 ${darkCard ? "text-slate-200" : "text-slate-600"}`}>
+                    {plan.description}
+                  </CardDescription>
+                </CardHeader>
+
+                <CardContent className="flex-1">
+                  <ul className="space-y-3">
+                    {plan.features.map((feature) => (
+                      <li key={feature.text} className="flex items-start gap-3 text-sm">
+                        <BadgeCheck className={`mt-0.5 h-4 w-4 shrink-0 ${darkCard ? "text-cyan-300" : "text-emerald-600"}`} />
+                        <span className={darkCard ? "text-slate-100" : "font-medium text-slate-700"}>{feature.text}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <div className={`mt-6 rounded-2xl border p-4 ${darkCard ? "border-white/10 bg-white/5" : "border-slate-200 bg-slate-50/70"}`}>
+                    <div className={`text-xs font-bold uppercase tracking-[0.18em] ${darkCard ? "text-cyan-100" : "text-slate-500"}`}>Best for</div>
+                    <p className={`mt-2 text-sm leading-6 ${darkCard ? "text-slate-200" : "text-slate-600"}`}>{plan.bestFor}</p>
+                  </div>
+                </CardContent>
+
+                <CardFooter>
+                  <Button
+                    onClick={() => handleUpgrade(plan.id)}
+                    disabled={loadingPlan !== null || isCurrent}
+                    variant={darkCard ? "secondary" : plan.id === "professional" ? "default" : "outline"}
+                    className={`h-12 w-full rounded-xl text-base font-semibold ${darkCard ? "border-white/15 bg-white text-slate-950 hover:bg-slate-100" : plan.id === "professional" ? "bg-[#08a8c8] text-white hover:bg-[#08a8c8]/90" : "border-slate-300 bg-white text-slate-950 hover:bg-slate-50"}`}
+                  >
+                    {isLoading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : isCurrent ? (
+                      "Current Plan"
+                    ) : (
+                      <span className="inline-flex items-center gap-2">
+                        {plan.cta}
+                        <ArrowRight className="h-4 w-4" />
+                      </span>
+                    )}
+                  </Button>
+                </CardFooter>
+              </Card>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="grid gap-6 rounded-[2rem] border border-slate-200 bg-[linear-gradient(135deg,#fffdf7_0%,#ffffff_45%,#f8fafc_100%)] p-8 shadow-sm lg:grid-cols-[1fr_1fr] lg:items-center">
+        <div className="space-y-4">
+          <div className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-amber-700">
+            Why This Model Wins
+          </div>
+          <h2 className="text-3xl font-black text-slate-950">A booking should feel like a win, not a deduction.</h2>
+          <p className="text-base leading-7 text-slate-600">
+            When a traveller chooses your place, that should be your reward.
+          </p>
+          <p className="text-base leading-7 text-slate-600">
+            Not another percentage lost. Not another platform fee eating into your margin. Not another booking where
+            someone else takes a cut before you see the full value.
+          </p>
+        </div>
+
+        <div className="rounded-[1.75rem] border border-slate-900 bg-slate-950 p-6 text-white">
+          <p className="text-sm font-bold uppercase tracking-[0.2em] text-cyan-200">The simpler deal</p>
+          <p className="mt-4 text-3xl font-black">Pay for visibility. Keep your bookings.</p>
+          <p className="mt-4 text-base leading-7 text-slate-200">
+            Ideal Stay is built for hosts who want the upside of direct interest without watching each booking lose
+            margin to another commission cut.
+          </p>
+        </div>
+      </section>
+
+      <section className="grid gap-6 rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+        <div className="space-y-4">
+          <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-600">
+            Visibility
+          </div>
+          <h2 className="text-3xl font-black text-slate-950">Your property deserves to be seen.</h2>
+          <p className="text-base leading-7 text-slate-600">
+            A listing alone is not enough.
+          </p>
+          <p className="text-base leading-7 text-slate-600">
+            Ideal Stay is built to help connect South African accommodation owners with travellers looking for places to
+            stay, weekend breaks, holidays, and local getaways.
+          </p>
+          <p className="text-base leading-7 text-slate-600">
+            We are creating a direct discovery path between hosts and guests, without taking commission from every booking.
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5">
+            <div className="text-lg font-black text-slate-950">More visibility</div>
+            <p className="mt-2 text-sm leading-6 text-slate-600">Stronger property discovery matters more than another hidden listing in a crowded marketplace.</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5">
+            <div className="text-lg font-black text-slate-950">More direct interest</div>
+            <p className="mt-2 text-sm leading-6 text-slate-600">The goal is not passive presence. The goal is real traveller attention that turns into enquiries.</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5">
+            <div className="text-lg font-black text-slate-950">More control</div>
+            <p className="mt-2 text-sm leading-6 text-slate-600">Better visibility is only useful if the guest relationship still stays in your hands.</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-6 rounded-[2rem] border border-slate-200 bg-[linear-gradient(135deg,#f8fafc_0%,#ecfeff_100%)] p-8 shadow-sm lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
+        <div className="space-y-4">
+          <div className="inline-flex rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-cyan-700">
+            Direct Enquiries
+          </div>
+          <h2 className="text-3xl font-black text-slate-950">Keep the guest relationship in your hands.</h2>
+          <p className="text-base leading-7 text-slate-600">
+            Direct enquiries help you stay closer to your guests.
+          </p>
+          <p className="text-base leading-7 text-slate-600">
+            You can answer questions, manage expectations, build trust, and encourage repeat bookings without being
+            locked behind a platform wall.
+          </p>
+          <p className="text-base leading-7 text-slate-600">
+            Ideal Stay helps travellers discover your property. You stay in control of the booking conversation.
+          </p>
+        </div>
+
+        <div className="rounded-[1.75rem] border border-cyan-200 bg-white p-6 shadow-sm">
+          <div className="space-y-3">
+            <p className="text-sm font-bold uppercase tracking-[0.2em] text-cyan-700">Control stack</p>
+            <p className="text-lg font-black text-slate-950">Stay in control of your guest communication, pricing, availability, and repeat bookings.</p>
+            <p className="text-sm leading-6 text-slate-600">
+              That is the commercial point. More direct contact means fewer boxed-in booking conversations and more room
+              to protect your own margin.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm md:p-10">
+        <div className="max-w-3xl space-y-4">
+          <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-600">
+            Referral Rewards
+          </div>
+          <h2 className="text-3xl font-black text-slate-950">Refer other hosts and earn rewards.</h2>
+          <p className="text-base leading-7 text-slate-600">
+            Know another accommodation owner who wants more visibility without giving away booking margin?
+          </p>
+          <p className="text-base leading-7 text-slate-600">
+            Ideal Stay tracks referral rewards against real host subscription conversions. No complicated levels. No
+            recruitment chains. Just a clean reward path tied to actual paid activation.
+          </p>
+          <Button onClick={() => navigate("/signup?returnTo=%2Fpricing")} className="h-12 rounded-full bg-[#08a8c8] px-6 text-base font-semibold text-white hover:bg-[#08a8c8]/90">
+            List Your Property
+          </Button>
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm md:p-10">
+        <div className="max-w-3xl space-y-4">
+          <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-600">
+            FAQ
+          </div>
+          <h2 className="text-3xl font-black text-slate-950">Frequently Asked Questions</h2>
+        </div>
+
+        <div className="mt-8 grid gap-4 md:grid-cols-2">
+          {faqs.map((faq) => (
+            <div key={faq.question} className="rounded-2xl border border-slate-200 bg-slate-50/60 p-5">
+              <h3 className="text-lg font-black text-slate-950">{faq.question}</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">{faq.answer}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-slate-900 bg-slate-950 p-8 text-white shadow-xl md:p-12">
+        <div className="max-w-3xl space-y-5">
+          <div className="inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-cyan-200">
+            Final CTA
+          </div>
+          <h2 className="text-3xl font-black md:text-5xl">Keep more of what your property earns.</h2>
+          <p className="text-base leading-7 text-slate-200">
+            List your accommodation on Ideal Stay and start building direct visibility without giving away commission on
+            every booking.
+          </p>
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-200">
+            0% booking commission. Direct guest enquiries. Simple monthly plans.
+          </p>
+          <Button onClick={() => navigate("/signup?returnTo=%2Fpricing")} className="h-12 rounded-full bg-[#08a8c8] px-6 text-base font-semibold text-white hover:bg-[#08a8c8]/90">
+            List Your Property Today
+          </Button>
+        </div>
+      </section>
+    </div>
+  );
 }

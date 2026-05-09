@@ -35,6 +35,7 @@ export default function SignupPage() {
   const [voucherEmailState, setVoucherEmailState] = useState<'idle' | 'sent' | 'failed' | 'not_applicable'>('idle');
   const googleButtonRef = useRef<HTMLDivElement | null>(null);
   const googleClientId = getGoogleClientId();
+  const googleAuthConfigured = Boolean(googleClientId);
 
   const isSignupMode = mode === 'signup';
   const isResetPasswordMode = urlMode === 'reset-password' && !!actionToken;
@@ -454,14 +455,18 @@ export default function SignupPage() {
               </>
             )}
           </Button>
-          {!isResetPasswordMode && !isVerifyEmailMode && googleClientId && (
+          {!isResetPasswordMode && !isVerifyEmailMode && (
             <div className="w-full max-w-sm space-y-3">
               <div className="flex items-center gap-3 text-xs uppercase tracking-[0.22em] text-on-surface-variant">
                 <div className="h-px flex-1 bg-outline-variant" />
                 <span>or</span>
                 <div className="h-px flex-1 bg-outline-variant" />
               </div>
-              {isSignupMode && !selectedRole ? (
+              {!googleAuthConfigured ? (
+                <p className="text-center text-sm text-on-surface-variant" data-testid="google-auth-unavailable">
+                  Google sign-in is unavailable in this environment. Use email and password for now.
+                </p>
+              ) : isSignupMode && !selectedRole ? (
                 <p className="text-center text-sm text-on-surface-variant">
                   Choose Guest or Host first, then continue with Google.
                 </p>
@@ -490,14 +495,14 @@ export default function SignupPage() {
                   <>
                     Already have an account?{' '}
                     <button type="button" className="font-semibold text-[#08a8c8]" onClick={() => navigate(getAuthModePath('signin'))}>
-                      Switch to sign in.
+                      Open the login form.
                     </button>
                   </>
                 ) : (
                   <>
                     Need an account?{' '}
                     <button type="button" className="font-semibold text-[#08a8c8]" onClick={() => navigate(getAuthModePath('signup'))}>
-                      Switch to create account.
+                      Open the signup form.
                     </button>
                   </>
                 )}

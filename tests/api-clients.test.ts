@@ -10,7 +10,7 @@ import {
 import { getEncoreSessionProfile } from '../src/lib/identity-client.ts';
 import { uploadListingMedia } from '../src/lib/media-client.ts';
 import { deleteAdminUser, getAdminPlatformSettings, listAdminHostBillingAccounts, listAdminNotifications, setAdminHostGreylist, setAdminUserAccountStatus } from '../src/lib/admin-client.ts';
-import { getMyHostBillingAccount, redeemHostVoucher, saveHostBillingCard } from '../src/lib/billing-client.ts';
+import { createHostBillingSetupCheckout, getMyHostBillingAccount, redeemHostVoucher } from '../src/lib/billing-client.ts';
 import { dismissNotification } from '../src/lib/notification-client.ts';
 import { reviewKycSubmission } from '../src/lib/ops-client.ts';
 import { confirmPayment, deleteListing, getListing, mapReferralStatus, saveListing, submitPaymentProof, updateBookingStatus } from '../src/lib/platform-client.ts';
@@ -400,7 +400,8 @@ test('submitPaymentProof posts the guest payment proof to the booking payment en
         paymentState: 'INITIATED',
         paymentMethod: 'bank_transfer',
         paymentReference: 'IDEAL-4100',
-        paymentProofUrl: 'https://cdn.example.com/payment-proof.jpg',
+        paymentProofAccessible: true,
+        paymentProofAccessUrl: '/signed/payment-proof.jpg?sig=abc',
         paymentSubmittedAt: '2026-03-30T11:00:00.000Z',
         createdAt: '2026-03-30T10:30:00.000Z',
         updatedAt: '2026-03-30T11:00:00.000Z',
@@ -411,23 +412,27 @@ test('submitPaymentProof posts the guest payment proof to the booking payment en
   const booking = await submitPaymentProof({
     id: 'booking-9',
     paymentReference: 'IDEAL-4100',
-    paymentProofUrl: 'https://cdn.example.com/payment-proof.jpg',
+    paymentProof: {
+      filename: 'payment-proof.jpg',
+      contentType: 'image/jpeg',
+      dataBase64: 'ZmFrZS1wcm9vZg==',
+    },
   });
 
   assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/bookings/booking-9/payment-proof`);
   assert.equal(fetchCalls[0]?.init?.method, 'POST');
   assert.deepEqual(JSON.parse(String(fetchCalls[0]?.init?.body)), {
     paymentReference: 'IDEAL-4100',
-    paymentProofFilename: null,
-    paymentProofContentType: null,
-    paymentProofDataBase64: null,
-    paymentProofUrl: 'https://cdn.example.com/payment-proof.jpg',
+    paymentProofFilename: 'payment-proof.jpg',
+    paymentProofContentType: 'image/jpeg',
+    paymentProofDataBase64: 'ZmFrZS1wcm9vZg==',
   });
   assert.equal(booking.inquiryState, 'APPROVED');
   assert.equal(booking.paymentState, 'INITIATED');
   assert.equal(booking.paymentSubmittedAt, '2026-03-30T11:00:00.000Z');
   assert.equal(booking.paymentReference, 'IDEAL-4100');
-  assert.equal(booking.paymentProofUrl, 'https://cdn.example.com/payment-proof.jpg');
+  assert.equal(booking.paymentProofAccessible, true);
+  assert.equal(booking.paymentProofAccessUrl, '/signed/payment-proof.jpg?sig=abc');
 });
 
 test('confirmPayment posts the host confirmation to the booking payment confirmation endpoint', async () => {
@@ -447,7 +452,8 @@ test('confirmPayment posts the host confirmation to the booking payment confirma
         paymentState: 'COMPLETED',
         paymentMethod: 'bank_transfer',
         paymentReference: 'IDEAL-4100',
-        paymentProofUrl: 'https://cdn.example.com/payment-proof.jpg',
+        paymentProofAccessible: true,
+        paymentProofAccessUrl: '/signed/payment-proof.jpg?sig=confirmed',
         paymentSubmittedAt: '2026-03-30T11:00:00.000Z',
         paymentConfirmedAt: '2026-03-30T11:15:00.000Z',
         bookedAt: '2026-03-30T11:15:00.000Z',
@@ -593,7 +599,7 @@ test('admin notification and settings helpers hit the ops endpoints via the prox
   assert.equal(settings.platformName, 'Ideal Stay');
 });
 
-test('host billing helpers use the new voucher and card endpoints via the proxy', async () => {
+test('host billing helpers use the voucher-backed billing endpoints via the proxy', async () => {
   installFetch((url, init) => {
     if (url.endsWith('/billing/host/account')) {
       return createJsonResponse({
@@ -660,36 +666,11 @@ test('host billing helpers use the new voucher and card endpoints via the proxy'
       });
     }
 
-    if (url.endsWith('/billing/host/card')) {
+    if (url.endsWith('/billing/host/setup-checkout')) {
       assert.equal(init?.method, 'POST');
       return createJsonResponse({
-        account: {
-          userId: 'host-1',
-          plan: 'standard',
-          billingSource: 'voucher',
-          billingStatus: 'active',
-          voucherCode: 'HOST-ABC123XYZ9',
-          voucherRedeemedAt: '2026-04-20T08:00:00.000Z',
-          currentPeriodStart: '2026-04-20T08:00:00.000Z',
-          currentPeriodEnd: '2026-07-20T08:00:00.000Z',
-          reminderWindowStartsAt: '2026-07-13T08:00:00.000Z',
-          lastReminderSentAt: null,
-          reminderCount: 0,
-          cardOnFile: true,
-          cardholderName: 'Host Example',
-          cardBrand: 'Visa',
-          cardLast4: '4242',
-          cardExpiryMonth: 12,
-          cardExpiryYear: 2028,
-          cardLabel: 'Visa ending 4242',
-          greylistedAt: null,
-          greylistReason: null,
-          inReminderWindow: false,
-          greylistEligible: false,
-          nextAction: 'none',
-          createdAt: '2026-04-20T08:00:00.000Z',
-          updatedAt: '2026-04-20T08:00:00.000Z',
-        },
+        checkoutId: 'checkout-host-card-setup',
+        redirectUrl: 'https://payments.example.com/host-card-setup',
       });
     }
 
@@ -698,25 +679,13 @@ test('host billing helpers use the new voucher and card endpoints via the proxy'
 
   const account = await getMyHostBillingAccount();
   const redeemed = await redeemHostVoucher('HOST-ABC123XYZ9');
-  const withCard = await saveHostBillingCard({
-    cardholderName: 'Host Example',
-    brand: 'Visa',
-    last4: '4242',
-    expiryMonth: 12,
-    expiryYear: 2028,
-  });
+  const setupCheckout = await createHostBillingSetupCheckout();
 
   assert.equal(account.billingSource, 'voucher');
   assert.deepEqual(JSON.parse(String(fetchCalls[1]?.init?.body)), { code: 'HOST-ABC123XYZ9' });
-  assert.deepEqual(JSON.parse(String(fetchCalls[2]?.init?.body)), {
-    cardholderName: 'Host Example',
-    brand: 'Visa',
-    last4: '4242',
-    expiryMonth: 12,
-    expiryYear: 2028,
-  });
   assert.equal(redeemed.currentPeriodEnd, '2026-07-20T08:00:00.000Z');
-  assert.equal(withCard.cardLabel, 'Visa ending 4242');
+  assert.equal(fetchCalls[2]?.url, `${DEFAULT_ENCORE_API_URL}/billing/host/setup-checkout`);
+  assert.equal(setupCheckout.redirectUrl, 'https://payments.example.com/host-card-setup');
 });
 
 test('admin host billing helpers hit the billing moderation endpoints via the proxy', async () => {
@@ -883,7 +852,8 @@ test('reviewKycSubmission posts structured review decisions instead of prompt te
         id: 'kyc-1',
         userId: 'host-1',
         idType: 'passport',
-        idNumber: 'A1234567',
+        idNumber: '***4567',
+        idNumberMasked: '***4567',
         idImageKey: 'ops/kyc/id.jpg',
         selfieImageKey: 'ops/kyc/selfie.jpg',
         status: 'rejected',

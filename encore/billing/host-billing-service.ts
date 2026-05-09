@@ -86,14 +86,6 @@ export interface HostBillingAccount {
   updatedAt: string;
 }
 
-export interface SaveBillingCardInput {
-  cardholderName: string;
-  brand: string;
-  last4: string;
-  expiryMonth: number;
-  expiryYear: number;
-}
-
 export interface AdminHostBillingAccount extends HostBillingAccount {
   activeListingCount: number;
   visibleListingCount: number;
@@ -101,14 +93,6 @@ export interface AdminHostBillingAccount extends HostBillingAccount {
 
 function normalizeVoucherCode(code: string) {
   return code.trim().toUpperCase();
-}
-
-function normalizeCardholderName(input: string) {
-  return input.trim().replace(/\s+/g, " ").slice(0, 80);
-}
-
-function normalizeCardBrand(input: string) {
-  return input.trim().replace(/\s+/g, " ").slice(0, 40);
 }
 
 function mapBillingAccount(row: BillingAccountRow): HostBillingAccount {
@@ -145,6 +129,8 @@ function mapBillingAccount(row: BillingAccountRow): HostBillingAccount {
     cardLabel:
       row.card_brand && row.card_last4
         ? `${row.card_brand} ending ${row.card_last4}`
+        : row.card_brand
+          ? `${row.card_brand} billing setup verified`
         : row.card_last4
           ? `Card ending ${row.card_last4}`
           : null,
@@ -250,51 +236,6 @@ export async function assertHostBillingOperationalAccess(
   }
 }
 
-export async function saveHostBillingCard(userId: string, input: SaveBillingCardInput) {
-  const cardholderName = normalizeCardholderName(input.cardholderName);
-  const brand = normalizeCardBrand(input.brand);
-  const last4 = input.last4.trim();
-
-  if (!cardholderName) {
-    throw APIError.invalidArgument("Cardholder name is required.");
-  }
-  if (!brand) {
-    throw APIError.invalidArgument("Card brand is required.");
-  }
-  if (!/^\d{4}$/.test(last4)) {
-    throw APIError.invalidArgument("Last four digits must be exactly 4 numbers.");
-  }
-  if (!Number.isInteger(input.expiryMonth) || input.expiryMonth < 1 || input.expiryMonth > 12) {
-    throw APIError.invalidArgument("Expiry month must be between 1 and 12.");
-  }
-  if (!Number.isInteger(input.expiryYear) || input.expiryYear < 2026) {
-    throw APIError.invalidArgument("Expiry year is invalid.");
-  }
-
-  await getHostBillingAccount(userId);
-  const now = new Date().toISOString();
-  await billingDB.exec`
-    UPDATE host_billing_accounts
-    SET card_on_file = ${true},
-        cardholder_name = ${cardholderName},
-        card_brand = ${brand},
-        card_last4 = ${last4},
-        card_expiry_month = ${input.expiryMonth},
-        card_expiry_year = ${input.expiryYear},
-        updated_at = ${now}
-    WHERE user_id = ${userId}
-  `;
-
-  await appendBillingEvent({
-    userId,
-    eventType: "card_added",
-    actorId: userId,
-    metadata: { brand, last4 },
-  });
-
-  return getHostBillingAccount(userId);
-}
-
 async function pauseHostListings(userId: string) {
   await catalogDB.exec`
     UPDATE listings
@@ -341,6 +282,57 @@ export async function setHostGreylist(params: {
     eventType: params.greylisted ? "greylisted" : "greylist_removed",
     actorId: params.actorId ?? null,
     metadata: { reason: nextReason },
+  });
+
+  return getHostBillingAccount(params.userId);
+}
+
+export async function markHostBillingSetupComplete(params: {
+  userId: string;
+  provider: "yoco";
+  checkoutId: string;
+  providerPaymentId?: string | null;
+}) {
+  const account = await getHostBillingAccount(params.userId);
+  const now = new Date().toISOString();
+  const nextStatus: HostBillingStatus =
+    account.billingSource === "none" ? "inactive" : "active";
+
+  await billingDB.exec`
+    UPDATE host_billing_accounts
+    SET billing_status = ${nextStatus},
+        card_on_file = ${true},
+        cardholder_name = NULL,
+        card_brand = ${params.provider.toUpperCase()},
+        card_last4 = NULL,
+        card_expiry_month = NULL,
+        card_expiry_year = NULL,
+        greylisted_at = NULL,
+        greylist_reason = NULL,
+        updated_at = ${now}
+    WHERE user_id = ${params.userId}
+  `;
+
+  await appendBillingEvent({
+    userId: params.userId,
+    eventType: "provider_card_setup_completed",
+    actorId: params.userId,
+    metadata: {
+      provider: params.provider,
+      checkoutId: params.checkoutId,
+      providerPaymentId: params.providerPaymentId ?? null,
+    },
+  });
+
+  await createNotification({
+    title: "Billing card setup confirmed",
+    message:
+      account.billingStatus === "greylisted"
+        ? "Your billing setup completed successfully. Billing access is active again. Review any paused listings before going live."
+        : "Your billing setup completed successfully. Future voucher reminder escalations are now covered.",
+    type: "success",
+    target: params.userId,
+    actionPath: "/host",
   });
 
   return getHostBillingAccount(params.userId);

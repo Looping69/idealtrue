@@ -130,8 +130,8 @@ export interface BookingRecord {
   paymentMethod?: string | null;
   paymentInstructions?: string | null;
   paymentReference?: string | null;
-  paymentProofKey?: string | null;
-  paymentProofUrl?: string | null;
+  paymentProofAccessible?: boolean;
+  paymentProofAccessUrl?: string | null;
   declineReason?: InquiryDeclineReason | null;
   declineReasonNote?: string | null;
   viewedAt?: string | null;

@@ -45,6 +45,16 @@ export async function createSubscriptionCheckout(plan: HostPlan, billingInterval
   );
 }
 
+export async function createHostBillingSetupCheckout() {
+  return encoreRequest<{ checkoutId: string; redirectUrl: string }>(
+    '/billing/host/setup-checkout',
+    {
+      method: 'POST',
+    },
+    { auth: true },
+  );
+}
+
 export async function getContentEntitlements() {
   const response = await encoreRequest<{ entitlements: ContentEntitlements }>(
     '/billing/content/entitlements',
@@ -122,7 +132,7 @@ export async function updateContentDraft(params: {
 }
 
 export async function getCheckoutStatus(checkoutId: string) {
-  return encoreRequest<{ status: 'pending' | 'paid' | 'failed' | 'cancelled'; checkoutType: 'subscription' | 'content_credits' }>(
+  return encoreRequest<{ status: 'pending' | 'paid' | 'failed' | 'cancelled'; checkoutType: 'subscription' | 'content_credits' | 'host_billing_setup' }>(
     `/billing/checkouts/${encodeURIComponent(checkoutId)}`,
     {},
     { auth: true },
@@ -144,24 +154,6 @@ export async function redeemHostVoucher(code: string) {
     {
       method: 'POST',
       body: JSON.stringify({ code }),
-    },
-    { auth: true },
-  );
-  return response.account;
-}
-
-export async function saveHostBillingCard(params: {
-  cardholderName: string;
-  brand: string;
-  last4: string;
-  expiryMonth: number;
-  expiryYear: number;
-}) {
-  const response = await encoreRequest<{ account: HostBillingAccount }>(
-    '/billing/host/card',
-    {
-      method: 'POST',
-      body: JSON.stringify(params),
     },
     { auth: true },
   );

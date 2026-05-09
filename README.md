@@ -72,7 +72,7 @@ See [`docs/workflow-validation-matrix.md`](/C:/Git%20Repos/IdealTrue/docs/workfl
 ## What does not fully route through Encore yet
 
 - KYC document submission still needs a more complete ops workflow around review history and disputes
-- stay-payment coordination is implemented, but off-platform payment proof review can still be tightened
+- stay-payment coordination now uses private stored payment-proof assets, but off-platform payment operations still depend on host discipline and would benefit from a fuller dispute/escalation path
 - billing/subscriptions are scaffolded on the backend but not commercially complete
 - AI content engine still needs real social publishing integrations beyond draft scheduling and publish tracking
 - generated Encore frontend clients are still blocked, so the frontend uses a manual request client

@@ -297,7 +297,7 @@ test('host KYC submission can be reviewed and approved by an admin', async ({ pa
   await page.getByRole('button', { name: 'Review', exact: true }).click();
   const reviewDialog = page.getByRole('dialog', { name: 'Review Verification: KYC Pending Host' });
   await expect(reviewDialog).toBeVisible();
-  await expect(reviewDialog.getByText('9001015009087')).toBeVisible();
+  await expect(reviewDialog.getByText(workflowKyc.pending.idNumberMasked)).toBeVisible();
   await reviewDialog.getByRole('button', { name: 'Approve Verification' }).click();
   await expect(page.getByText('Verification Approved')).toBeVisible();
   await expect(page.getByText('verified').first()).toBeVisible();

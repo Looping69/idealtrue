@@ -33,7 +33,7 @@ Current booking lifecycle:
 1. Guest creates an enquiry.
 2. Host views, responds, approves, or declines.
 3. Approval unlocks off-platform payment.
-4. Guest submits payment proof.
+4. Guest submits payment proof into Ideal Stay's private evidence bucket.
 5. Host confirms payment.
 6. Inquiry becomes a booked stay.
 
@@ -72,7 +72,7 @@ Key host-screen expectations:
 - show booking age and last workflow movement
 - show the active response/payment deadline for expirable enquiries
 - show stay value, breakage deposit, and total guest exposure
-- show payment reference and proof-link state during payment review
+- show payment reference and private proof access state during payment review
 - never enable payment confirmation if proof is inaccessible
 - retain closed enquiries for audit context instead of dropping them from view
 
@@ -115,7 +115,7 @@ The workflow is stronger than before, but still incomplete in a few places:
 - no structured decline reason yet
 - no explicit dispute workflow yet
 - no backend-side SLA timestamps or last-actor metadata yet
-- off-platform payment confirmation still depends on host discipline
+- off-platform payment still depends on host discipline, but proof storage/access is now bucket-backed and confirmation must fail closed when the stored asset cannot be opened
 - host availability still lacks recurring rules and import/export style controls
 
 Those gaps are product and data-model gaps, not just UI polish gaps.

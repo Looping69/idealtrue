@@ -91,7 +91,7 @@ test('generateListingSocialCreative returns a browser-ready data URL', async () 
       templateName: 'Featured Stay',
       headline: 'Stay at Villa del Sol',
       caption: 'Book now',
-      bookingUrl: 'https://ideal-stay.vercel.app/?listingId=listing-1',
+      bookingUrl: 'https://idealstay.co.za/?listingId=listing-1',
       mimeType: 'image/png',
       dataBase64: 'YWJj',
       assets: [

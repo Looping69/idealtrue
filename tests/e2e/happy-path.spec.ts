@@ -1,6 +1,16 @@
 import { test, expect } from '@playwright/test';
 
 test('guest booking request, host approval, and guest notification smoke flow', async ({ page }) => {
+  const checkInDate = new Date();
+  checkInDate.setDate(checkInDate.getDate() + 1);
+  checkInDate.setHours(0, 0, 0, 0);
+
+  const checkOutDate = new Date(checkInDate);
+  checkOutDate.setDate(checkOutDate.getDate() + 3);
+
+  const calendarDataDay = (date: Date) => `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
+  const bookingIsoDate = (date: Date) => `${date.toISOString().slice(0, 10)}T00:00:00.000Z`;
+
   const guestUser = {
     id: 'guest-1',
     email: 'guest@example.com',
@@ -70,8 +80,8 @@ test('guest booking request, host approval, and guest notification smoke flow', 
     listingId: 'listing-1',
     guestId: 'guest-1',
     hostId: 'host-1',
-    checkIn: '2026-05-05T00:00:00.000Z',
-    checkOut: '2026-05-08T00:00:00.000Z',
+    checkIn: bookingIsoDate(checkInDate),
+    checkOut: bookingIsoDate(checkOutDate),
     adults: 1,
     children: 0,
     totalPrice: 5445,
@@ -212,9 +222,9 @@ test('guest booking request, host approval, and guest notification smoke flow', 
   await expect(page.getByText('My Stays')).toBeVisible();
   await page.getByText('Sea Point Stay').first().click();
   await page.getByRole('button', { name: /Check-in Add date Checkout Add date/ }).click();
-  await page.locator('button[data-day="5/5/2026"]').click();
+  await page.locator(`button[data-day="${calendarDataDay(checkInDate)}"]`).click();
   await expect(page.getByText('Now choose your check-out date.')).toBeVisible();
-  await page.locator('button[data-day="5/8/2026"]').click({ force: true });
+  await page.locator(`button[data-day="${calendarDataDay(checkOutDate)}"]`).click({ force: true });
   await page.getByRole('button', { name: 'Request to Book' }).click();
   await expect(page.getByText('Booking request sent! The host will contact you shortly.')).toBeVisible();
 
