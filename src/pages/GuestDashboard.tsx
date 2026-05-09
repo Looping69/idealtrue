@@ -37,7 +37,7 @@ export default function GuestDashboard({
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-start">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <header className="space-y-1">
           <h1 className="text-3xl font-bold tracking-tight">My Stays</h1>
           <p className="text-on-surface-variant">View and manage your upcoming and past trips.</p>
@@ -45,7 +45,7 @@ export default function GuestDashboard({
         {profile?.role === 'guest' && (
           <Button 
             variant="outline" 
-            className="border-primary text-primary hover:bg-primary/5"
+            className="w-full border-primary text-primary hover:bg-primary/5 sm:w-auto"
             onClick={() => navigate('/account')}
           >
             <Shield className="w-4 h-4 mr-2" />
@@ -111,8 +111,8 @@ export default function GuestDashboard({
                     )}
                   </div>
                 </div>
-                <div className="pt-1 border-t border-outline-variant flex justify-between items-center gap-2">
-                  <div className="flex gap-2">
+                <div className="pt-1 border-t border-outline-variant flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-wrap gap-2">
                     <Button size="sm" variant="outline" onClick={() => onChat(booking)}>Message</Button>
                     {canGuestPay(booking) && (
                       <Button size="sm" variant="secondary" onClick={() => onSubmitPaymentProof(booking)}>Submit Payment</Button>

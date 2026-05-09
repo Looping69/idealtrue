@@ -340,12 +340,12 @@ export default function HostDashboard({
         </Card>
       )}
 
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <header className="space-y-1">
           <h1 className="text-3xl font-bold tracking-tight">Hospitality Management</h1>
           <p className="text-on-surface-variant">Manage your properties and guest interactions. <span className="text-amber-600 font-medium">Ideal Stay coordinates the booking flow, but accommodation payments are collected directly by you.</span></p>
         </header>
-        <Button onClick={() => navigate('/host/create-listing')}>
+        <Button className="w-full sm:w-auto" onClick={() => navigate('/host/create-listing')}>
           <Plus className="w-4 h-4 mr-2" /> Add New Listing
         </Button>
       </div>
@@ -389,8 +389,8 @@ export default function HostDashboard({
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Social Media CTA */}
-        <Card className="lg:col-span-3 bg-surface-container-low border-none p-8 flex flex-col md:flex-row items-center justify-between gap-8">
-          <div className="flex items-center gap-6">
+        <Card className="lg:col-span-3 bg-surface-container-low border-none p-5 sm:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 sm:gap-8">
+          <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-6">
             <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center shrink-0">
               <Sparkles className="w-8 h-8 text-amber-600" />
             </div>
@@ -399,7 +399,7 @@ export default function HostDashboard({
               <p className="text-on-surface-variant max-w-xl">Build reusable social copy for your listings and keep promotion moving without staring at a blank caption box.</p>
             </div>
           </div>
-          <Button size="lg" className="rounded-full px-8 shrink-0" onClick={() => navigate('/host/social')}>
+          <Button size="lg" className="w-full rounded-full px-8 sm:w-auto shrink-0" onClick={() => navigate('/host/social')}>
             Open Content Studio <ArrowRight className="w-4 h-4 ml-2" />
           </Button>
         </Card>
@@ -540,14 +540,14 @@ export default function HostDashboard({
                   {deadlineCopy ? (
                     <p className="mt-2 text-[11px] text-on-surface-variant">{deadlineCopy}</p>
                   ) : null}
-                  <div className="mt-3 pt-3 border-t border-outline-variant flex justify-between items-center">
+                  <div className="mt-3 pt-3 border-t border-outline-variant flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex flex-col">
                       <span className="text-sm font-bold">{formatRand(booking.totalPrice)}</span>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => onChat(booking)}>Message</Button>
                       {isPendingHostDecision(booking) ? (
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                           <button 
                             onClick={async () => {
                               try {
@@ -622,12 +622,12 @@ export default function HostDashboard({
                   : 'Your plan details are syncing.'}
               </p>
             </div>
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={() => navigate('/pricing')}>
+            <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
+              <Button variant="outline" className="w-full sm:w-auto" onClick={() => navigate('/pricing')}>
                 View All Plans
               </Button>
               {profile?.hostPlan !== 'premium' && (
-                <Button onClick={() => navigate('/pricing')}>
+                <Button className="w-full sm:w-auto" onClick={() => navigate('/pricing')}>
                   Upgrade Plan
                 </Button>
               )}

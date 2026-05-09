@@ -7,7 +7,9 @@ import {
   Gift,
   Home,
   LayoutDashboard,
+  Menu,
   MessageSquare,
+  X,
   Settings,
   Share2,
   ShieldCheck,
@@ -87,6 +89,7 @@ export default function AdminDashboard() {
   const { toast } = useToast();
   const { profile } = useAuth();
   const [activeMenu, setActiveMenu] = useState('overview');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [editingListing, setEditingListing] = useState<Listing | null>(null);
   const [viewingKYCSubmission, setViewingKYCSubmission] = useState<KycReviewState | null>(null);
@@ -520,65 +523,109 @@ export default function AdminDashboard() {
     }
   };
 
+  const renderSidebarContent = () => (
+    <>
+      <div className="flex flex-col items-start gap-3 p-6">
+        <BrandLogo variant="inline" size="lg" priority className="h-16" />
+        <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.24em] text-slate-500">
+          <Settings className="h-3.5 w-3.5" />
+          Admin
+        </div>
+      </div>
+
+      <div className="flex-1 space-y-8 overflow-y-auto px-4 py-4">
+        {['MAIN MENU', 'MANAGEMENT'].map((section) => (
+          <div key={section} className="space-y-2">
+            <h3 className="px-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">{section}</h3>
+            <div className="space-y-1">
+              {menuItems.filter((item) => item.section === section).map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setActiveMenu(item.id);
+                    setMobileMenuOpen(false);
+                  }}
+                  className={cn(
+                    'w-full rounded-xl px-4 py-2.5 text-left text-sm font-medium transition-all flex items-center gap-3',
+                    activeMenu === item.id ? 'bg-[#1a1c23] text-white shadow-lg shadow-slate-200' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900',
+                  )}
+                >
+                  <item.icon className={cn('h-4 w-4', activeMenu === item.id ? 'text-white' : 'text-slate-400')} />
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="border-t border-slate-100 p-4">
+        <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0f172a] text-xs font-bold text-white">WI</div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-bold text-slate-900">Admin User</p>
+            <p className="truncate text-[10px] text-slate-500">{profile?.email}</p>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
   return (
     <div className="flex h-screen overflow-hidden bg-[#fcfcfc]">
-      <aside className="z-20 flex w-64 flex-col border-r border-slate-100 bg-white">
-        <div className="flex flex-col items-start gap-3 p-6">
-          <BrandLogo variant="inline" size="lg" priority className="h-16" />
-          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.24em] text-slate-500">
-            <Settings className="h-3.5 w-3.5" />
-            Admin
-          </div>
-        </div>
-
-        <div className="flex-1 space-y-8 overflow-y-auto px-4 py-4">
-          {['MAIN MENU', 'MANAGEMENT'].map((section) => (
-            <div key={section} className="space-y-2">
-              <h3 className="px-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">{section}</h3>
-              <div className="space-y-1">
-                {menuItems.filter((item) => item.section === section).map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => setActiveMenu(item.id)}
-                    className={cn(
-                      'w-full rounded-xl px-4 py-2.5 text-left text-sm font-medium transition-all flex items-center gap-3',
-                      activeMenu === item.id ? 'bg-[#1a1c23] text-white shadow-lg shadow-slate-200' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900',
-                    )}
-                  >
-                    <item.icon className={cn('h-4 w-4', activeMenu === item.id ? 'text-white' : 'text-slate-400')} />
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="border-t border-slate-100 p-4">
-          <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0f172a] text-xs font-bold text-white">WI</div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-bold text-slate-900">Admin User</p>
-              <p className="truncate text-[10px] text-slate-500">{profile?.email}</p>
-            </div>
-          </div>
-        </div>
+      <aside className="z-20 hidden w-64 flex-col border-r border-slate-100 bg-white lg:flex">
+        {renderSidebarContent()}
       </aside>
 
+      {mobileMenuOpen ? (
+        <div className="fixed inset-0 z-50 flex lg:hidden">
+          <button
+            aria-label="Close admin menu"
+            className="flex-1 bg-slate-950/40 backdrop-blur-[1px]"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <aside className="flex h-full w-[min(20rem,88vw)] flex-col border-l border-slate-100 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4">
+              <span className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Admin Menu</span>
+              <button
+                type="button"
+                className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                onClick={() => setMobileMenuOpen(false)}
+                aria-label="Close admin navigation"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            {renderSidebarContent()}
+          </aside>
+        </div>
+      ) : null}
+
       <main className="flex flex-1 flex-col overflow-hidden">
-        <header className="z-10 flex h-16 items-center justify-between border-b border-slate-100 bg-white px-8">
-          <span className="text-sm font-medium capitalize text-slate-500">{activeMenu}</span>
-          <div className="flex items-center gap-6">
+        <header className="z-10 flex h-16 items-center justify-between gap-3 border-b border-slate-100 bg-white px-4 sm:px-6 lg:px-8">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900 lg:hidden"
+              aria-label="Open admin navigation"
+              aria-expanded={mobileMenuOpen}
+              onClick={() => setMobileMenuOpen(true)}
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <span className="truncate text-sm font-medium capitalize text-slate-500">{activeMenu}</span>
+          </div>
+          <div className="flex items-center gap-2 sm:gap-4 lg:gap-6">
             <button className="p-2 text-slate-400 transition-colors hover:text-slate-900"><Bell className="h-5 w-5" /></button>
-            <button className="p-2 text-slate-400 transition-colors hover:text-slate-900"><Share2 className="h-5 w-5" /></button>
-            <div className="mx-2 h-4 w-px bg-slate-200" />
+            <button className="hidden p-2 text-slate-400 transition-colors hover:text-slate-900 sm:inline-flex"><Share2 className="h-5 w-5" /></button>
+            <div className="mx-1 hidden h-4 w-px bg-slate-200 sm:block" />
             <Button variant="ghost" size="sm" className="text-xs font-bold text-slate-500 hover:text-red-500" onClick={() => navigate('/')}>
               Exit Admin
             </Button>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <div className="mx-auto max-w-7xl">{renderActiveSection()}</div>
         </div>
       </main>
