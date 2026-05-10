@@ -1,87 +1,18 @@
 import { test, expect } from '@playwright/test';
+import {
+  buildGuestUser,
+  buildHostUser,
+  buildListing,
+  buildPendingBooking,
+} from '../fixtures/workflow-fixtures';
 
 test('guest booking request, host approval, and guest notification smoke flow', async ({ page }) => {
-  const guestUser = {
-    id: 'guest-1',
-    email: 'guest@example.com',
-    emailVerified: true,
-    displayName: 'Guest Example',
-    photoUrl: '',
-    role: 'guest',
-    hostPlan: 'standard',
-    kycStatus: 'verified',
-    balance: 0,
-    referralCount: 0,
-    tier: 'bronze',
-    referralCode: 'GUEST1',
-    referredByCode: null,
-    paymentMethod: null,
-    paymentInstructions: null,
-    paymentReferencePrefix: null,
-    createdAt: '2026-04-01T10:00:00.000Z',
-    updatedAt: '2026-04-01T10:00:00.000Z',
-  };
-
-  const hostUser = {
-    ...guestUser,
-    id: 'host-1',
-    email: 'host@example.com',
-    displayName: 'Host Example',
-    role: 'host',
-    hostPlan: 'professional',
-    referralCode: 'HOST1',
-  };
-
-  const listing = {
-    id: 'listing-1',
-    hostId: 'host-1',
-    title: 'Sea Point Stay',
-    description: 'Ocean-facing apartment',
-    location: 'Cape Town',
-    area: 'Sea Point',
-    province: 'Western Cape',
-    category: 'apartment',
-    type: 'apartment',
-    pricePerNight: 1800,
-    discountPercent: 10,
-    adults: 2,
-    children: 1,
-    bedrooms: 1,
-    bathrooms: 1,
-    amenities: ['wifi'],
-    facilities: ['parking'],
-    restaurantOffers: [],
-    images: [],
-    videoUrl: null,
-    isSelfCatering: true,
-    hasRestaurant: false,
-    isOccupied: false,
-    latitude: -33.9,
-    longitude: 18.4,
-    blockedDates: [],
-    status: 'active',
-    createdAt: '2026-04-01T10:00:00.000Z',
-    updatedAt: '2026-04-01T10:00:00.000Z',
-  };
+  const guestUser = buildGuestUser();
+  const hostUser = buildHostUser();
+  const listing = buildListing();
 
   let currentSession: typeof guestUser | typeof hostUser | null = null;
-  let booking = {
-    id: 'booking-1',
-    listingId: 'listing-1',
-    guestId: 'guest-1',
-    hostId: 'host-1',
-    checkIn: '2026-04-10T00:00:00.000Z',
-    checkOut: '2026-04-13T00:00:00.000Z',
-    adults: 1,
-    children: 0,
-    totalPrice: 5445,
-    inquiryState: 'PENDING',
-    paymentState: 'UNPAID',
-    paymentMethod: 'bank_transfer',
-    paymentInstructions: 'Pay within 24 hours.',
-    createdAt: '2026-04-01T10:05:00.000Z',
-    updatedAt: '2026-04-01T10:05:00.000Z',
-  };
+  let booking = buildPendingBooking();
 
   await page.route('**/api/auth/logout', async (route) => {
     currentSession = null;

@@ -65,6 +65,7 @@ This is now an Encore-first repo, not a Firebase bridge with new paint.
 - the host availability calendar now supports bulk range actions, notes on manual block intervals, selected-day inspection, and backend summary tracking instead of only single-day toggles
 
 See [`docs/booking-and-enquiry-workflow.md`](/C:/Git%20Repos/IdealTrue/docs/booking-and-enquiry-workflow.md) for the full workflow and operational expectations.
+See [`docs/workflow-validation-matrix.md`](docs/workflow-validation-matrix.md) for the full product-workflow inventory, coverage matrix, and expansion checklist.
 
 ## What does not fully route through Encore yet
 
@@ -166,6 +167,12 @@ npm run build
 cd encore
 npx tsc --noEmit
 ```
+
+Workflow coverage is now tracked by:
+
+- human-readable inventory/checklist: [`docs/workflow-validation-matrix.md`](docs/workflow-validation-matrix.md)
+- machine-readable CI contract: [`tests/workflow-matrix.ts`](/home/runner/work/idealtrue/idealtrue/tests/workflow-matrix.ts)
+- CI validation test: `tests/workflow-matrix.test.ts`
 
 ## Immediate next engineering work
 
