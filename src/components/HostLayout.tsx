@@ -19,7 +19,8 @@ import {
   CalendarDays,
   UserCircle2,
   LayoutTemplate,
-  Images
+  Images,
+  MessageSquareText,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
@@ -53,6 +54,7 @@ export default function HostLayout() {
       items: [
         { name: 'Dashboard', path: '/host', icon: LayoutDashboard },
         { name: 'Inbox', path: '/host/inbox', icon: MessageSquare },
+        { name: 'Quick Replies', path: '/host/quick-replies', icon: MessageSquareText },
         { name: 'Enquiries', path: '/host/enquiries', icon: ClipboardList },
         { name: 'Listings', path: '/host/listings', icon: Building2 },
         { name: 'Availability', path: '/host/availability', icon: CalendarDays },

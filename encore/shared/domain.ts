@@ -158,6 +158,15 @@ export interface InquiryLedgerEventRecord {
 
 export type MessageSuggestionType = "checkin" | "checkout" | "payment_info" | "directions" | "house_rules";
 
+export interface HostQuickReplySettingsRecord {
+  checkin?: string | null;
+  checkout?: string | null;
+  paymentInfo?: string | null;
+  directions?: string | null;
+  houseRules?: string | null;
+  updatedAt?: string | null;
+}
+
 export interface MessageRecord {
   id: string;
   bookingId: string;

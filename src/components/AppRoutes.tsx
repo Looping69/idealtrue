@@ -16,6 +16,7 @@ const HostDashboard = lazy(() => import('@/pages/HostDashboard'));
 const HostEnquiries = lazy(() => import('@/pages/HostEnquiries'));
 const HostInbox = lazy(() => import('@/pages/HostInbox'));
 const HostListings = lazy(() => import('@/pages/HostListings'));
+const HostQuickReplies = lazy(() => import('@/pages/HostQuickReplies'));
 const HostReports = lazy(() => import('@/pages/HostReports'));
 const CancellationPolicy = lazy(() => import('@/pages/legal/CancellationPolicy'));
 const GuestAgreement = lazy(() => import('@/pages/legal/GuestAgreement'));
@@ -111,6 +112,7 @@ export default function AppRoutes({
             }
           />
           <Route path="inbox" element={<HostInbox bookings={hostBookings} listings={myListings} onChat={onSelectedBookingForChat} />} />
+          <Route path="quick-replies" element={<HostQuickReplies />} />
           <Route path="enquiries" element={<HostEnquiries bookings={hostBookings} listings={myListings} onChat={onSelectedBookingForChat} onBookingUpdated={onSyncUpdatedBooking} />} />
           <Route path="listings" element={<HostListings listings={myListings} onListingUpdated={onListingUpdated} onListingRemoved={onListingRemoved} />} />
           <Route path="availability" element={<HostAvailability listings={myListings} bookings={hostBookings} onListingUpdated={onListingUpdated} />} />

@@ -3,12 +3,12 @@ import { randomUUID } from "node:crypto";
 import { messagingDB } from "./db";
 import { chatAttachmentBucket } from "./storage";
 import { APIError } from "encore.dev/api";
-import { requireAuth } from "../shared/auth";
+import { requireAuth, requireRole } from "../shared/auth";
 import { platformEvents } from "../analytics/events";
 import { getBookingById, recordHostInquiryResponseFromMessage } from "../booking/api";
 import { getListing } from "../catalog/api";
 import { notifyMessageReceived } from "../ops/notifications";
-import type { MessageRecord, MessageSuggestionType } from "../shared/domain";
+import type { HostQuickReplySettingsRecord, MessageRecord, MessageSuggestionType } from "../shared/domain";
 
 type MessageRow = {
   id: string;
@@ -22,6 +22,16 @@ type MessageRow = {
   created_at: string;
 };
 
+type HostQuickReplyRow = {
+  host_id: string;
+  checkin: string | null;
+  checkout: string | null;
+  payment_info: string | null;
+  directions: string | null;
+  house_rules: string | null;
+  updated_at: string;
+};
+
 interface SendMessageParams {
   bookingId: string;
   receiverId: string;
@@ -29,6 +39,14 @@ interface SendMessageParams {
   isSystem?: boolean;
   suggestionType?: MessageSuggestionType | null;
   attachmentUrl?: string | null;
+}
+
+interface SaveHostQuickRepliesParams {
+  checkin?: string | null;
+  checkout?: string | null;
+  paymentInfo?: string | null;
+  directions?: string | null;
+  houseRules?: string | null;
 }
 
 function mapMessage(row: MessageRow): MessageRecord {
@@ -42,6 +60,37 @@ function mapMessage(row: MessageRow): MessageRecord {
     suggestionType: row.suggestion_type,
     attachmentUrl: row.attachment_url,
     createdAt: row.created_at,
+  };
+}
+
+function normalizeQuickReply(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed.slice(0, 2000) : null;
+}
+
+function emptyHostQuickReplies(updatedAt: string | null = null): HostQuickReplySettingsRecord {
+  return {
+    checkin: null,
+    checkout: null,
+    paymentInfo: null,
+    directions: null,
+    houseRules: null,
+    updatedAt,
+  };
+}
+
+function mapHostQuickReplies(row: HostQuickReplyRow | null): HostQuickReplySettingsRecord {
+  if (!row) {
+    return emptyHostQuickReplies();
+  }
+
+  return {
+    checkin: row.checkin,
+    checkout: row.checkout,
+    paymentInfo: row.payment_info,
+    directions: row.directions,
+    houseRules: row.house_rules,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -126,6 +175,51 @@ export const sendMessage = api<SendMessageParams, { message: MessageRecord }>(
         createdAt: now,
       },
     };
+  },
+);
+
+export const getMyHostQuickReplies = api<void, { quickReplies: HostQuickReplySettingsRecord }>(
+  { expose: true, method: "GET", path: "/messages/quick-replies/me", auth: true },
+  async () => {
+    const auth = requireRole("host");
+    const row = await messagingDB.queryRow<HostQuickReplyRow>`
+      SELECT * FROM host_message_quick_replies
+      WHERE host_id = ${auth.userID}
+    `;
+
+    return { quickReplies: mapHostQuickReplies(row) };
+  },
+);
+
+export const saveMyHostQuickReplies = api<SaveHostQuickRepliesParams, { quickReplies: HostQuickReplySettingsRecord }>(
+  { expose: true, method: "PUT", path: "/messages/quick-replies/me", auth: true },
+  async (params) => {
+    const auth = requireRole("host");
+    const now = new Date().toISOString();
+    const checkin = normalizeQuickReply(params.checkin);
+    const checkout = normalizeQuickReply(params.checkout);
+    const paymentInfo = normalizeQuickReply(params.paymentInfo);
+    const directions = normalizeQuickReply(params.directions);
+    const houseRules = normalizeQuickReply(params.houseRules);
+
+    const row = await messagingDB.queryRow<HostQuickReplyRow>`
+      INSERT INTO host_message_quick_replies (
+        host_id, checkin, checkout, payment_info, directions, house_rules, updated_at
+      )
+      VALUES (
+        ${auth.userID}, ${checkin}, ${checkout}, ${paymentInfo}, ${directions}, ${houseRules}, ${now}
+      )
+      ON CONFLICT (host_id) DO UPDATE SET
+        checkin = EXCLUDED.checkin,
+        checkout = EXCLUDED.checkout,
+        payment_info = EXCLUDED.payment_info,
+        directions = EXCLUDED.directions,
+        house_rules = EXCLUDED.house_rules,
+        updated_at = EXCLUDED.updated_at
+      RETURNING *
+    `;
+
+    return { quickReplies: mapHostQuickReplies(row) };
   },
 );
 

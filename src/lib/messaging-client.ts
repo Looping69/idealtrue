@@ -1,5 +1,5 @@
 import { encoreRequest } from './encore-client';
-import type { Message } from '@/types';
+import type { HostQuickReplySettings, Message } from '@/types';
 
 interface EncoreMessage {
   id: string;
@@ -50,4 +50,38 @@ export async function sendMessage(params: {
   );
 
   return mapMessage(response.message);
+}
+
+function normalizeQuickReply(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+export async function getMyHostQuickReplies(): Promise<HostQuickReplySettings> {
+  const response = await encoreRequest<{ quickReplies: HostQuickReplySettings }>(
+    '/messages/quick-replies/me',
+    {},
+    { auth: true },
+  );
+
+  return response.quickReplies;
+}
+
+export async function saveMyHostQuickReplies(params: HostQuickReplySettings): Promise<HostQuickReplySettings> {
+  const response = await encoreRequest<{ quickReplies: HostQuickReplySettings }>(
+    '/messages/quick-replies/me',
+    {
+      method: 'PUT',
+      body: JSON.stringify({
+        checkin: normalizeQuickReply(params.checkin),
+        checkout: normalizeQuickReply(params.checkout),
+        paymentInfo: normalizeQuickReply(params.paymentInfo),
+        directions: normalizeQuickReply(params.directions),
+        houseRules: normalizeQuickReply(params.houseRules),
+      }),
+    },
+    { auth: true },
+  );
+
+  return response.quickReplies;
 }

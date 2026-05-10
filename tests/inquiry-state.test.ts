@@ -370,6 +370,35 @@ test('messaging process context gives host decision actions before approval', ()
   assert.equal(context.quickActions.some((action) => action.suggestionType === 'house_rules'), true);
 });
 
+test('messaging process context uses host configured quick replies for host actions', () => {
+  const context = getMessagingProcessContext(
+    {
+      ...baseBooking,
+      inquiryState: 'BOOKED',
+      paymentState: 'COMPLETED',
+      paymentSubmittedAt: '2026-04-20T15:00:00.000Z',
+      paymentConfirmedAt: '2026-04-20T16:00:00.000Z',
+      bookedAt: '2026-04-20T16:00:00.000Z',
+      paymentReference: null,
+      paymentInstructions: null,
+    },
+    'host',
+    {
+      directions: 'Use the side gate on Ocean Road and park in bay 4.',
+      houseRules: 'No parties, quiet hours from 22:00, and no smoking indoors.',
+    },
+  );
+
+  assert.equal(
+    context.quickActions.find((action) => action.suggestionType === 'directions')?.text,
+    'Use the side gate on Ocean Road and park in bay 4.',
+  );
+  assert.equal(
+    context.quickActions.find((action) => action.suggestionType === 'house_rules')?.text,
+    'No parties, quiet hours from 22:00, and no smoking indoors.',
+  );
+});
+
 test('messaging process context changes guest quick actions after approval', () => {
   const context = getMessagingProcessContext(
     {

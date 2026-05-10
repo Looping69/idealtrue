@@ -298,6 +298,7 @@ function AppContent() {
                 listing={listings.find((listing) => listing.id === selectedBookingForChat.listingId) || myListings.find((listing) => listing.id === selectedBookingForChat.listingId)!}
                 currentUserId={user.id}
                 onClose={() => setSelectedBookingForChat(null)}
+                onSubmitPaymentProof={(booking) => setBookingForPaymentProof(booking)}
               />
             </motion.div>
           </div>

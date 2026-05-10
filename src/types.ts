@@ -17,6 +17,15 @@ export type PaymentState = 'UNPAID' | 'INITIATED' | 'COMPLETED' | 'FAILED';
 export type AvailabilityBlockSource = 'MANUAL' | 'APPROVED_HOLD' | 'BOOKED';
 export type MessageSuggestionType = 'checkin' | 'checkout' | 'payment_info' | 'directions' | 'house_rules';
 
+export interface HostQuickReplySettings {
+  checkin?: string | null;
+  checkout?: string | null;
+  paymentInfo?: string | null;
+  directions?: string | null;
+  houseRules?: string | null;
+  updatedAt?: string | null;
+}
+
 export interface HostBillingAccount {
   userId: string;
   plan: HostPlan;

@@ -1,6 +1,6 @@
 import { formatDistanceStrict } from 'date-fns';
 
-import type { Booking, InquiryDeclineReason, InquiryState, MessageSuggestionType } from '@/types';
+import type { Booking, HostQuickReplySettings, InquiryDeclineReason, InquiryState, MessageSuggestionType } from '@/types';
 
 type BookingStateSlice = Pick<
   Booking,
@@ -202,15 +202,51 @@ export function getGuestPaymentStateText(booking: BookingStateSlice) {
 export function getMessagingProcessContext(
   booking: MessagingBookingSlice,
   role: MessagingParticipantRole,
+  hostQuickReplies?: HostQuickReplySettings,
 ): MessagingProcessContext {
   if (role === 'host') {
-    return getHostMessagingProcessContext(booking);
+    return getHostMessagingProcessContext(booking, hostQuickReplies);
   }
 
   return getGuestMessagingProcessContext(booking);
 }
 
-function getHostMessagingProcessContext(booking: MessagingBookingSlice): MessagingProcessContext {
+function getHostConfiguredQuickReply(
+  settings: HostQuickReplySettings | undefined,
+  suggestionType: MessageSuggestionType,
+) {
+  const configured = (() => {
+    switch (suggestionType) {
+      case 'checkin':
+        return settings?.checkin;
+      case 'checkout':
+        return settings?.checkout;
+      case 'payment_info':
+        return settings?.paymentInfo;
+      case 'directions':
+        return settings?.directions;
+      case 'house_rules':
+        return settings?.houseRules;
+      default:
+        return null;
+    }
+  })();
+
+  return configured?.trim() || null;
+}
+
+function hostReplyText(
+  settings: HostQuickReplySettings | undefined,
+  suggestionType: MessageSuggestionType,
+  fallback: string,
+) {
+  return getHostConfiguredQuickReply(settings, suggestionType) ?? fallback;
+}
+
+function getHostMessagingProcessContext(
+  booking: MessagingBookingSlice,
+  hostQuickReplies?: HostQuickReplySettings,
+): MessagingProcessContext {
   if (isPendingHostDecision(booking)) {
     return {
       stageLabel: 'Host decision needed',
@@ -225,7 +261,11 @@ function getHostMessagingProcessContext(booking: MessagingBookingSlice): Messagi
         },
         {
           label: 'Send House Rules',
-          text: 'Here are the house rules for your stay. Please review them and let me know if you have any questions.',
+          text: hostReplyText(
+            hostQuickReplies,
+            'house_rules',
+            'Here are the house rules for your stay. Please review them and let me know if you have any questions.',
+          ),
           suggestionType: 'house_rules',
           priority: 'secondary',
         },
@@ -257,7 +297,7 @@ function getHostMessagingProcessContext(booking: MessagingBookingSlice): Messagi
         },
         {
           label: 'Payment Info',
-          text: buildPaymentInstructionText(booking),
+          text: hostReplyText(hostQuickReplies, 'payment_info', buildPaymentInstructionText(booking)),
           suggestionType: 'payment_info',
           priority: 'secondary',
         },
@@ -274,7 +314,7 @@ function getHostMessagingProcessContext(booking: MessagingBookingSlice): Messagi
       quickActions: [
         {
           label: 'Payment Info',
-          text: buildPaymentInstructionText(booking),
+          text: hostReplyText(hostQuickReplies, 'payment_info', buildPaymentInstructionText(booking)),
           suggestionType: 'payment_info',
           priority: 'primary',
         },
@@ -302,13 +342,21 @@ function getHostMessagingProcessContext(booking: MessagingBookingSlice): Messagi
       quickActions: [
         {
           label: 'Send Directions',
-          text: 'Here are the directions to the property. Looking forward to your arrival.',
+          text: hostReplyText(
+            hostQuickReplies,
+            'directions',
+            'Here are the directions to the property. Looking forward to your arrival.',
+          ),
           suggestionType: 'directions',
           priority: 'primary',
         },
         {
           label: 'Send House Rules',
-          text: 'Here are the house rules for your stay. Please let me know if you have any questions before arrival.',
+          text: hostReplyText(
+            hostQuickReplies,
+            'house_rules',
+            'Here are the house rules for your stay. Please let me know if you have any questions before arrival.',
+          ),
           suggestionType: 'house_rules',
           priority: 'secondary',
         },

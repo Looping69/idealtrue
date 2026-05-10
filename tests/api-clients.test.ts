@@ -14,6 +14,7 @@ import { createHostBillingSetupCheckout, getMyHostBillingAccount, redeemHostVouc
 import { dismissNotification } from '../src/lib/notification-client.ts';
 import { reviewKycSubmission } from '../src/lib/ops-client.ts';
 import { confirmPayment, deleteListing, getListing, mapReferralStatus, saveListing, submitPaymentProof, updateBookingStatus } from '../src/lib/platform-client.ts';
+import { getMyHostQuickReplies, saveMyHostQuickReplies } from '../src/lib/messaging-client.ts';
 
 type FetchCall = {
   url: string;
@@ -473,6 +474,61 @@ test('confirmPayment posts the host confirmation to the booking payment confirma
   assert.equal(booking.inquiryState, 'BOOKED');
   assert.equal(booking.paymentState, 'COMPLETED');
   assert.equal(booking.paymentConfirmedAt, '2026-03-30T11:15:00.000Z');
+});
+
+test('host quick reply helpers use the messaging settings endpoints', async () => {
+  installFetch((url, init) => {
+    if (url.endsWith('/messages/quick-replies/me') && !init?.method) {
+      return createJsonResponse({
+        quickReplies: {
+          checkin: 'Check-in is from 14:00.',
+          checkout: 'Checkout is by 10:00.',
+          paymentInfo: 'Use EFT and upload proof in the chat.',
+          directions: 'Use the side gate.',
+          houseRules: 'No parties and no smoking indoors.',
+          updatedAt: '2026-05-10T08:00:00.000Z',
+        },
+      });
+    }
+
+    if (url.endsWith('/messages/quick-replies/me') && init?.method === 'PUT') {
+      return createJsonResponse({
+        quickReplies: {
+          checkin: 'Arrive after 14:00.',
+          checkout: null,
+          paymentInfo: null,
+          directions: 'Use the side gate.',
+          houseRules: 'No parties.',
+          updatedAt: '2026-05-10T09:00:00.000Z',
+        },
+      });
+    }
+
+    throw new Error(`Unexpected URL: ${url} ${init?.method || 'GET'}`);
+  });
+
+  const existing = await getMyHostQuickReplies();
+  const saved = await saveMyHostQuickReplies({
+    checkin: 'Arrive after 14:00.',
+    checkout: '',
+    paymentInfo: '',
+    directions: 'Use the side gate.',
+    houseRules: 'No parties.',
+  });
+
+  assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/messages/quick-replies/me`);
+  assert.equal(fetchCalls[1]?.url, `${DEFAULT_ENCORE_API_URL}/messages/quick-replies/me`);
+  assert.equal(fetchCalls[1]?.init?.method, 'PUT');
+  assert.deepEqual(JSON.parse(String(fetchCalls[1]?.init?.body)), {
+    checkin: 'Arrive after 14:00.',
+    checkout: null,
+    paymentInfo: null,
+    directions: 'Use the side gate.',
+    houseRules: 'No parties.',
+  });
+  assert.equal(existing.houseRules, 'No parties and no smoking indoors.');
+  assert.equal(saved.checkout, null);
+  assert.equal(saved.directions, 'Use the side gate.');
 });
 
 test('uploadListingMedia uses a signed upload URL instead of proxying the video through Encore', async () => {

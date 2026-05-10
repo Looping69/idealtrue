@@ -1,31 +1,43 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Booking, Listing, Message } from '@/types';
+import type { Booking, HostQuickReplySettings, Listing, Message } from '@/types';
 import { X, Send, Info, Home, MapPin, CreditCard, CheckCircle2, Loader2, HelpCircle, Clock3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { listMessages, sendMessage as sendPlatformMessage } from '@/lib/messaging-client';
-import { getGuestInquiryDeadlineText, getHostInquiryDeadlineText, getMessagingProcessContext } from '@/lib/inquiry-state';
+import { getMyHostQuickReplies, listMessages, sendMessage as sendPlatformMessage } from '@/lib/messaging-client';
+import { canGuestPay, getGuestInquiryDeadlineText, getHostInquiryDeadlineText, getMessagingProcessContext } from '@/lib/inquiry-state';
 
 interface ChatModalProps {
   booking: Booking;
   listing: Listing;
   currentUserId: string;
+  hostQuickReplies?: HostQuickReplySettings;
   onClose: () => void;
+  onSubmitPaymentProof?: (booking: Booking) => void;
 }
 
-export default function ChatModal({ booking, listing, currentUserId, onClose }: ChatModalProps) {
+export default function ChatModal({
+  booking,
+  listing,
+  currentUserId,
+  hostQuickReplies,
+  onClose,
+  onSubmitPaymentProof,
+}: ChatModalProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [loadedHostQuickReplies, setLoadedHostQuickReplies] = useState<HostQuickReplySettings | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const isHost = currentUserId === booking.hostId;
   const otherPartyId = isHost ? booking.guestId : booking.hostId;
-  const messagingContext = getMessagingProcessContext(booking, isHost ? 'host' : 'guest');
+  const effectiveHostQuickReplies = hostQuickReplies ?? loadedHostQuickReplies ?? undefined;
+  const messagingContext = getMessagingProcessContext(booking, isHost ? 'host' : 'guest', effectiveHostQuickReplies);
   const deadlineText = isHost ? getHostInquiryDeadlineText(booking) : getGuestInquiryDeadlineText(booking);
+  const showGuestPaymentProofAction = !isHost && canGuestPay(booking) && !!onSubmitPaymentProof;
 
   useEffect(() => {
     let cancelled = false;
@@ -50,6 +62,27 @@ export default function ChatModal({ booking, listing, currentUserId, onClose }: 
       cancelled = true;
     };
   }, [booking.id]);
+
+  useEffect(() => {
+    if (!isHost || hostQuickReplies) {
+      return;
+    }
+
+    let cancelled = false;
+    getMyHostQuickReplies()
+      .then((settings) => {
+        if (!cancelled) {
+          setLoadedHostQuickReplies(settings);
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to load host quick replies:', error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hostQuickReplies, isHost]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -128,6 +161,16 @@ export default function ChatModal({ booking, listing, currentUserId, onClose }: 
             <p className="text-xs font-bold uppercase tracking-wider">{messagingContext.stageLabel}</p>
             <p className="font-medium leading-snug">{messagingContext.nextStepLabel}</p>
             <p className="text-xs leading-relaxed opacity-80">{deadlineText ?? messagingContext.stageDescription}</p>
+            {showGuestPaymentProofAction ? (
+              <Button
+                type="button"
+                size="sm"
+                className="mt-2 rounded-full bg-amber-900 text-white hover:bg-amber-800"
+                onClick={() => onSubmitPaymentProof?.(booking)}
+              >
+                Submit proof of payment
+              </Button>
+            ) : null}
           </div>
         </div>
       </div>
