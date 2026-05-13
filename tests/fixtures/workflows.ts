@@ -689,8 +689,8 @@ export const workflowCoverageMatrix = [
     notificationEffects: ['booking status and payment notifications'],
     externalBoundaries: ['off-platform payment proof'],
     fixtureKeys: ['pending booking', 'approved booking', 'proof booking', 'confirmed booking', 'declined booking', 'expired booking'],
-    currentCoverage: ['tests/booking-workflow.test.ts', 'tests/inquiry-state.test.ts', 'tests/ui/guest-dashboard.test.tsx', 'tests/ui/host-dashboard.test.tsx', 'tests/api-clients.test.ts', 'tests/e2e/happy-path.spec.ts'],
-    requiredNextCoverage: ['tests/e2e/booking-payment-review.spec.ts', 'backend expiry mutation tests'],
+    currentCoverage: ['tests/booking-workflow.test.ts', 'tests/inquiry-state.test.ts', 'tests/ui/guest-dashboard.test.tsx', 'tests/ui/host-dashboard.test.tsx', 'tests/api-clients.test.ts', 'tests/e2e/happy-path.spec.ts', 'tests/e2e/booking-payment-review.spec.ts'],
+    requiredNextCoverage: ['backend expiry mutation tests'],
   },
   {
     workflow: 'Host availability management',
