@@ -1,5 +1,5 @@
 import { lazy, useEffect, useMemo } from 'react';
-import { Loader2 } from 'lucide-react';
+import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Toaster, toast } from 'sonner';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -15,6 +15,7 @@ import { useAuth } from './contexts/AuthContext';
 import { useAppShellState } from './hooks/use-app-shell-state';
 import { usePlatformData } from './hooks/use-platform-data';
 import { buildBookingAuthPath, clearBookingIntentParams, parseBookingIntent } from './lib/booking-auth-intent';
+import { getEncoreErrorMessage } from './lib/encore-client';
 import { createBooking, submitPaymentProof } from './lib/platform-client';
 import { cn } from './lib/utils';
 
@@ -30,10 +31,13 @@ function AppContent() {
     myBookings,
     hostBookings,
     referrals,
+    dataErrors,
+    hasDataErrors,
+    reloadPlatformData,
     syncUpdatedBooking,
     syncUpdatedListing,
     removeListing,
-  } = usePlatformData(user);
+  } = usePlatformData(user, profile);
   const {
     isMenuOpen,
     setIsMenuOpen,
@@ -52,6 +56,10 @@ function AppContent() {
   const isHostRoute = location.pathname === '/host' || location.pathname.startsWith('/host/');
   const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
   const shouldShowPublicFooter = !isHostRoute && !isAdminRoute;
+  const visibleDataErrors = useMemo(
+    () => Object.entries(dataErrors).filter(([, message]) => Boolean(message)),
+    [dataErrors],
+  );
   const selectedListingIdFromUrl = useMemo(() => {
     if (location.pathname !== '/') return null;
     return new URLSearchParams(location.search).get('listingId');
@@ -173,6 +181,37 @@ function AppContent() {
       />
 
       <main className={cn('flex-1', !isHostRoute && !isAdminRoute ? 'max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8' : 'w-full')}>
+        {hasDataErrors && (
+          <section
+            aria-live="polite"
+            className="mb-6 rounded-3xl border border-error/30 bg-error-container/80 p-4 text-on-error-container shadow-[0_10px_30px_rgba(18,28,42,0.08)]"
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+                <div>
+                  <h2 className="font-semibold">Some platform data could not load.</h2>
+                  <p className="mt-1 text-sm opacity-85">
+                    You can keep using the available parts of Ideal Stay while the failed sections are retried.
+                  </p>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+                    {visibleDataErrors.map(([key, message]) => (
+                      <li key={key}>{message}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={reloadPlatformData}
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-on-error-container px-4 py-2 text-sm font-semibold text-error-container transition hover:opacity-90"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Retry
+              </button>
+            </div>
+          </section>
+        )}
         <AppRoutes
           hostBookings={hostBookings}
           isAdmin={isAdmin}
@@ -184,7 +223,7 @@ function AppContent() {
           onListingRemoved={handleListingRemoved}
           onListingSelected={handleListingSelected}
           onListingUpdated={handleListingUpdated}
-        onSelectedBookingForChat={setSelectedBookingForChat}
+          onSelectedBookingForChat={setSelectedBookingForChat}
           onSyncUpdatedBooking={handleBookingUpdated}
           profile={profile}
           referrals={referrals}
@@ -211,7 +250,7 @@ function AppContent() {
             toast.success('Payment proof submitted. The host can now confirm receipt.');
           } catch (error) {
             console.error('Failed to submit payment proof:', error);
-            toast.error('Failed to submit payment proof.');
+            toast.error(getEncoreErrorMessage(error, 'Failed to submit payment proof.'));
             throw error;
           }
         }}
@@ -260,7 +299,7 @@ function AppContent() {
                     handleListingDetailClose();
                   } catch (error) {
                     console.error('Failed to create booking:', error);
-                    toast.error('Booking request failed. Please try again.');
+                    toast.error(getEncoreErrorMessage(error, 'Booking request failed. Please try again.'));
                   }
                 }}
               />
