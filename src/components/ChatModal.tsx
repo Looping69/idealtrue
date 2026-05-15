@@ -6,7 +6,13 @@ import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { getMyHostQuickReplies, listMessages, sendMessage as sendPlatformMessage } from '@/lib/messaging-client';
-import { canGuestPay, getGuestInquiryDeadlineText, getHostInquiryDeadlineText, getMessagingProcessContext } from '@/lib/inquiry-state';
+import {
+  canGuestPay,
+  getGuestInquiryDeadlineText,
+  getHostInquiryDeadlineText,
+  getMessagingProcessContext,
+  isAwaitingGuestPayment,
+} from '@/lib/inquiry-state';
 
 interface ChatModalProps {
   booking: Booking;
@@ -38,6 +44,7 @@ export default function ChatModal({
   const messagingContext = getMessagingProcessContext(booking, isHost ? 'host' : 'guest', effectiveHostQuickReplies);
   const deadlineText = isHost ? getHostInquiryDeadlineText(booking) : getGuestInquiryDeadlineText(booking);
   const showGuestPaymentProofAction = !isHost && canGuestPay(booking) && !!onSubmitPaymentProof;
+  const showHostPaymentPromptAction = isHost && isAwaitingGuestPayment(booking);
 
   useEffect(() => {
     let cancelled = false;
@@ -169,6 +176,24 @@ export default function ChatModal({
                 onClick={() => onSubmitPaymentProof?.(booking)}
               >
                 Submit proof of payment
+              </Button>
+            ) : showHostPaymentPromptAction ? (
+              <Button
+                type="button"
+                size="sm"
+                className="mt-2 rounded-full bg-amber-900 text-white hover:bg-amber-800"
+                disabled={isSending}
+                onClick={() => {
+                  const paymentPrompt = messagingContext.quickActions.find(
+                    (action) => action.priority === 'primary',
+                  );
+                  if (!paymentPrompt) {
+                    return;
+                  }
+                  void sendMessage(paymentPrompt.text, false, paymentPrompt.suggestionType);
+                }}
+              >
+                Send payment details
               </Button>
             ) : null}
           </div>

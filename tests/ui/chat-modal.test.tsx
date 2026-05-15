@@ -108,6 +108,29 @@ describe('ChatModal', () => {
     expect(onSubmitPaymentProof).toHaveBeenCalledWith(booking);
   });
 
+  it('lets a host push payment details into chat once payment is unlocked', async () => {
+    const { sendMessage } = await import('@/lib/messaging-client');
+
+    render(
+      <ChatModal
+        booking={booking}
+        listing={listing}
+        currentUserId="host-1"
+        onClose={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /send payment details/i }));
+
+    expect(sendMessage).toHaveBeenCalledWith({
+      bookingId: 'booking-1',
+      receiverId: 'guest-1',
+      text: 'Please use these payment details: Use your booking id as reference Use reference IDEAL-123, then submit proof so I can confirm the booking.',
+      isSystem: false,
+      suggestionType: 'payment_info',
+    });
+  });
+
   it('uses host quick reply settings when sending configured actions', async () => {
     const { sendMessage } = await import('@/lib/messaging-client');
 

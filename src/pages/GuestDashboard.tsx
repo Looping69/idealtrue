@@ -115,7 +115,7 @@ export default function GuestDashboard({
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" variant="outline" onClick={() => onChat(booking)}>Message</Button>
                     {canGuestPay(booking) && (
-                      <Button size="sm" variant="secondary" onClick={() => onSubmitPaymentProof(booking)}>Submit Payment</Button>
+                      <Button size="sm" variant="secondary" onClick={() => onSubmitPaymentProof(booking)}>Send Proof of Payment</Button>
                     )}
                     {bookingReady && (
                       <Button size="sm" variant="secondary" onClick={() => onReview(booking)}>Review</Button>

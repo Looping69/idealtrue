@@ -5,7 +5,14 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { User, MessageSquare, CalendarDays } from 'lucide-react';
 import { format } from 'date-fns';
-import { getInquiryBadgeLabel, getMessagingProcessContext, isOpenHostInquiry, isBookedStay } from '@/lib/inquiry-state';
+import {
+  getInquiryBadgeLabel,
+  getMessagingProcessContext,
+  isAwaitingGuestPayment,
+  isAwaitingHostPaymentConfirmation,
+  isOpenHostInquiry,
+  isBookedStay,
+} from '@/lib/inquiry-state';
 
 export default function HostInbox({ 
   bookings, 
@@ -30,6 +37,11 @@ export default function HostInbox({
           const listing = listings.find(l => l.id === booking.listingId);
           const statusLabel = getInquiryBadgeLabel(booking);
           const processContext = getMessagingProcessContext(booking, 'host');
+          const openChatLabel = isAwaitingHostPaymentConfirmation(booking)
+            ? 'Review Proof'
+            : isAwaitingGuestPayment(booking)
+              ? 'Request Payment'
+              : 'Open Chat';
           return (
             <Card key={booking.id} className="p-6">
               <div className="flex flex-col md:flex-row gap-6 justify-between items-start md:items-center">
@@ -68,7 +80,7 @@ export default function HostInbox({
                     className="flex-1 md:flex-none bg-primary text-on-primary hover:bg-primary/90"
                     onClick={() => onChat(booking)}
                   >
-                    <MessageSquare className="w-4 h-4 mr-2" /> Open Chat
+                    <MessageSquare className="w-4 h-4 mr-2" /> {openChatLabel}
                   </Button>
                 </div>
               </div>

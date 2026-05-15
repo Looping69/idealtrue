@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -143,6 +144,28 @@ describe('GuestDashboard', () => {
     expect(screen.getByText('R4,100')).toBeInTheDocument();
     expect(screen.getByText('Payment state')).toBeInTheDocument();
     expect(screen.getByText('Payment unlocked. Submit payment proof before the approval window closes.')).toBeInTheDocument();
+  });
+
+  it('offers a direct proof-of-payment action once payment is unlocked', async () => {
+    const onSubmitPaymentProof = vi.fn();
+
+    render(
+      <MemoryRouter>
+        <GuestDashboard
+          profile={profile}
+          bookings={[makeBooking('booking-1')]}
+          listings={[listing]}
+          onReview={vi.fn()}
+          onExplore={vi.fn()}
+          onChat={vi.fn()}
+          onSubmitPaymentProof={onSubmitPaymentProof}
+        />
+      </MemoryRouter>,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Send Proof of Payment' }));
+
+    expect(onSubmitPaymentProof).toHaveBeenCalledWith(expect.objectContaining({ id: 'booking-1' }));
   });
 
   it('shows under-review payment copy with the payment reference on the card itself', () => {
