@@ -1,8 +1,15 @@
-import { useEffect, useState } from 'react';
-import type { Booking, Listing, Referral } from '@/types';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { Booking, Listing, Referral, UserProfile } from '@/types';
 import type { AuthSessionUser } from '@/contexts/AuthContext';
+import { getEncoreErrorMessage } from '@/lib/encore-client';
 import { isBookedStay } from '@/lib/inquiry-state';
 import { getListing, listHostListings, listMyBookings, listPublicListings, listReferralRewards } from '@/lib/platform-client';
+
+type PlatformDataErrorKey = 'listings' | 'bookings' | 'hostListings' | 'referrals';
+
+type PlatformDataErrors = Partial<Record<PlatformDataErrorKey, string>>;
+
+type PlatformDataLoading = Record<PlatformDataErrorKey, boolean>;
 
 interface PlatformDataState {
   listings: Listing[];
@@ -10,63 +17,175 @@ interface PlatformDataState {
   myBookings: Booking[];
   hostBookings: Booking[];
   referrals: Referral[];
+  dataErrors: PlatformDataErrors;
+  dataLoading: PlatformDataLoading;
+  hasDataErrors: boolean;
+  reloadPlatformData: () => void;
   syncUpdatedBooking: (updatedBooking: Booking) => void;
   syncUpdatedListing: (updatedListing: Listing) => void;
   removeListing: (listingId: string) => void;
 }
 
-export function usePlatformData(user: AuthSessionUser | null): PlatformDataState {
+const EMPTY_LOADING_STATE: PlatformDataLoading = {
+  listings: false,
+  bookings: false,
+  hostListings: false,
+  referrals: false,
+};
+
+function toDataError(error: unknown, fallback: string) {
+  return getEncoreErrorMessage(error, fallback);
+}
+
+export function usePlatformData(user: AuthSessionUser | null, profile: UserProfile | null): PlatformDataState {
   const [listings, setListings] = useState<Listing[]>([]);
   const [myListings, setMyListings] = useState<Listing[]>([]);
   const [myBookings, setMyBookings] = useState<Booking[]>([]);
   const [hostBookings, setHostBookings] = useState<Booking[]>([]);
   const [referrals, setReferrals] = useState<Referral[]>([]);
+  const [dataErrors, setDataErrors] = useState<PlatformDataErrors>({});
+  const [dataLoading, setDataLoading] = useState<PlatformDataLoading>(EMPTY_LOADING_STATE);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const canLoadHostData = Boolean(
+    user &&
+    profile &&
+    (profile.role === 'host' || profile.role === 'admin' || profile.isAdmin),
+  );
+
+  const setLoadingFlag = useCallback((key: PlatformDataErrorKey, loading: boolean) => {
+    setDataLoading((current) => ({ ...current, [key]: loading }));
+  }, []);
+
+  const setDataError = useCallback((key: PlatformDataErrorKey, message?: string) => {
+    setDataErrors((current) => {
+      const next = { ...current };
+      if (message) {
+        next[key] = message;
+      } else {
+        delete next[key];
+      }
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadData() {
-      const [publicListings, sessionBookings, rewardHistory] = await Promise.all([
-        listPublicListings(),
-        user ? listMyBookings() : Promise.resolve([]),
-        user ? listReferralRewards() : Promise.resolve([]),
-      ]);
-
-      if (cancelled) {
-        return;
+    const safelySetLoadingFlag = (key: PlatformDataErrorKey, loadingState: boolean) => {
+      if (!cancelled) {
+        setLoadingFlag(key, loadingState);
       }
+    };
 
-      setListings(publicListings);
-      setReferrals(rewardHistory);
-
-      if (!user) {
-        setMyListings([]);
-        setMyBookings([]);
-        setHostBookings([]);
-        return;
+    const safelySetDataError = (key: PlatformDataErrorKey, message?: string) => {
+      if (!cancelled) {
+        setDataError(key, message);
       }
+    };
 
-      const hostListings = await listHostListings(user.id);
-      if (cancelled) {
-        return;
+    async function loadPublicListings() {
+      safelySetLoadingFlag('listings', true);
+      try {
+        const publicListings = await listPublicListings();
+        if (!cancelled) {
+          setListings(publicListings);
+          safelySetDataError('listings');
+        }
+      } catch (error) {
+        console.error('Failed to load public listings:', error);
+        safelySetDataError('listings', toDataError(error, 'Could not load public listings.'));
+      } finally {
+        safelySetLoadingFlag('listings', false);
       }
-
-      setMyListings(hostListings);
-      setMyBookings(sessionBookings.filter((booking) => {
-        const isGuest = booking.guestId === user?.id;
-        return isGuest;
-      }));
-      setHostBookings(sessionBookings.filter((booking) => {
-        return booking.hostId === user?.id;
-      }));
     }
 
-    void loadData();
+    async function loadBookings() {
+      if (!user) {
+        setMyBookings([]);
+        setHostBookings([]);
+        safelySetDataError('bookings');
+        safelySetLoadingFlag('bookings', false);
+        return;
+      }
+
+      safelySetLoadingFlag('bookings', true);
+      try {
+        const sessionBookings = await listMyBookings();
+        if (!cancelled) {
+          setMyBookings(sessionBookings.filter((booking) => booking.guestId === user.id));
+          setHostBookings(sessionBookings.filter((booking) => booking.hostId === user.id));
+          safelySetDataError('bookings');
+        }
+      } catch (error) {
+        console.error('Failed to load bookings:', error);
+        safelySetDataError('bookings', toDataError(error, 'Could not load bookings.'));
+      } finally {
+        safelySetLoadingFlag('bookings', false);
+      }
+    }
+
+    async function loadReferrals() {
+      if (!user) {
+        setReferrals([]);
+        safelySetDataError('referrals');
+        safelySetLoadingFlag('referrals', false);
+        return;
+      }
+
+      safelySetLoadingFlag('referrals', true);
+      try {
+        const rewardHistory = await listReferralRewards();
+        if (!cancelled) {
+          setReferrals(rewardHistory);
+          safelySetDataError('referrals');
+        }
+      } catch (error) {
+        console.error('Failed to load referral rewards:', error);
+        safelySetDataError('referrals', toDataError(error, 'Could not load referral rewards.'));
+      } finally {
+        safelySetLoadingFlag('referrals', false);
+      }
+    }
+
+    async function loadHostListings() {
+      if (!user || !canLoadHostData) {
+        setMyListings([]);
+        safelySetDataError('hostListings');
+        safelySetLoadingFlag('hostListings', false);
+        return;
+      }
+
+      safelySetLoadingFlag('hostListings', true);
+      try {
+        const hostListings = await listHostListings(user.id);
+        if (!cancelled) {
+          setMyListings(hostListings);
+          safelySetDataError('hostListings');
+        }
+      } catch (error) {
+        console.error('Failed to load host listings:', error);
+        safelySetDataError('hostListings', toDataError(error, 'Could not load host listings.'));
+      } finally {
+        safelySetLoadingFlag('hostListings', false);
+      }
+    }
+
+    void loadPublicListings();
+    void loadBookings();
+    void loadReferrals();
+    void loadHostListings();
 
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [canLoadHostData, profile?.isAdmin, profile?.role, reloadKey, setDataError, setLoadingFlag, user]);
+
+  const reloadPlatformData = useCallback(() => {
+    setReloadKey((current) => current + 1);
+  }, []);
+
+  const hasDataErrors = useMemo(() => Object.keys(dataErrors).length > 0, [dataErrors]);
 
   return {
     listings,
@@ -74,6 +193,10 @@ export function usePlatformData(user: AuthSessionUser | null): PlatformDataState
     myBookings,
     hostBookings,
     referrals,
+    dataErrors,
+    dataLoading,
+    hasDataErrors,
+    reloadPlatformData,
     syncUpdatedBooking(updatedBooking) {
       setMyBookings((current) => {
         const existingIndex = current.findIndex((item) => item.id === updatedBooking.id);
@@ -97,7 +220,7 @@ export function usePlatformData(user: AuthSessionUser | null): PlatformDataState
             setMyListings((current) => current.map((item) => item.id === updatedListing.id ? updatedListing : item));
           })
           .catch((error) => {
-            console.warn("Failed to refresh listing availability after booking update:", error);
+            console.warn('Failed to refresh listing availability after booking update:', error);
           });
       }
     },
