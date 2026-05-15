@@ -652,8 +652,13 @@ function buildAvailabilitySummaryRecord(
 }
 
 async function getListingWithAvailability(row: ListingRow): Promise<ListingRecord> {
-  const availabilityBlocks = await ensureListingAvailabilityHydrated(row);
-  return mapListing(row, availabilityBlocks.map((block) => toAvailabilityBlockRecord(block)));
+  try {
+    const availabilityBlocks = await ensureListingAvailabilityHydrated(row);
+    return mapListing(row, availabilityBlocks.map((block) => toAvailabilityBlockRecord(block)));
+  } catch (error) {
+    console.error(`Failed to hydrate availability for listing ${row.id}. Returning listing without availability blocks.`, error);
+    return mapListing(row, []);
+  }
 }
 
 function mapListing(row: ListingRow, availabilityBlocks?: ListingAvailabilityBlockRecord[]): ListingRecord {
@@ -980,15 +985,25 @@ export async function syncBookingAvailabilityWithCompatibility(
   try {
     await replaceBookingAvailabilityBlocks(listingId, entries);
   } catch (error) {
-    if (!isAvailabilityLedgerSchemaError(error)) {
+    if (error instanceof APIError) {
       throw error;
     }
-
+    const fallbackReason = isAvailabilityLedgerSchemaError(error)
+      ? "Availability ledger schema is unavailable"
+      : "Availability ledger sync failed unexpectedly";
     console.warn(
-      `Availability ledger schema is unavailable for listing ${listingId}. Falling back to legacy blocked_dates sync.`,
+      `${fallbackReason} for listing ${listingId}. Falling back to legacy blocked_dates sync.`,
       error,
     );
     await syncLegacyBlockedDatesForBookings(listingId, entries);
+  }
+}
+
+async function safePublishPlatformEvent(params: Parameters<typeof platformEvents.publish>[0], context: string) {
+  try {
+    await platformEvents.publish(params);
+  } catch (error) {
+    console.error(`Failed to publish platform event for ${context}.`, error);
   }
 }
 
@@ -1176,13 +1191,13 @@ export const saveListing = api<SaveListingParams, { listing: ListingRecord }>(
         WHERE id = ${params.id}
       `;
 
-      await platformEvents.publish({
+      await safePublishPlatformEvent({
         type: "listing.updated",
         aggregateId: params.id,
         actorId: auth.userID,
         occurredAt: now,
         payload: JSON.stringify({ hostId: auth.userID, status: nextStatus }),
-      });
+      }, `listing.updated:${params.id}`);
 
       if (
         isStaffOperator &&
@@ -1241,13 +1256,13 @@ export const saveListing = api<SaveListingParams, { listing: ListingRecord }>(
       )
     `;
 
-    await platformEvents.publish({
+    await safePublishPlatformEvent({
       type: "listing.created",
       aggregateId: id,
       actorId: auth.userID,
       occurredAt: now,
       payload: JSON.stringify({ hostId: auth.userID, status: createdStatus }),
-    });
+    }, `listing.created:${id}`);
 
     const createdRow = await catalogDB.queryRow<ListingRow>`
       SELECT * FROM listings WHERE id = ${id}
@@ -1302,13 +1317,13 @@ export const deleteListing = api<{ id: string }, { deleted: true }>(
 
     await removeListingMediaAssets(existing);
 
-    await platformEvents.publish({
+    await safePublishPlatformEvent({
       type: "listing.deleted",
       aggregateId: id,
       actorId: auth.userID,
       occurredAt: new Date().toISOString(),
       payload: JSON.stringify({ hostId: existing.host_id }),
-    });
+    }, `listing.deleted:${id}`);
 
     return { deleted: true };
   },

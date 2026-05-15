@@ -288,17 +288,30 @@ async function syncListingAvailabilityForBookings(listingId: string) {
 }
 
 async function getHostPaymentDetails(hostId: string): Promise<HostPaymentDetailsRow> {
-  const host = await identityDB.queryRow<HostPaymentDetailsRow>`
-    SELECT payment_method, payment_instructions, payment_reference_prefix
-    FROM users
-    WHERE id = ${hostId}
-  `;
+  let host: HostPaymentDetailsRow | null = null;
+  try {
+    host = await identityDB.queryRow<HostPaymentDetailsRow>`
+      SELECT payment_method, payment_instructions, payment_reference_prefix
+      FROM users
+      WHERE id = ${hostId}
+    `;
+  } catch (error) {
+    console.error(`Failed to load host payment settings for ${hostId}. Falling back to blank payment details.`, error);
+  }
 
   return host ?? {
     payment_method: null,
     payment_instructions: null,
     payment_reference_prefix: null,
   };
+}
+
+async function safePublishInquiryEvent(params: Parameters<typeof publishInquiryEvent>[0]) {
+  try {
+    await publishInquiryEvent(params);
+  } catch (error) {
+    console.error(`Failed to publish inquiry event ${params.type} for ${params.inquiry.id}.`, error);
+  }
 }
 
 async function appendLedgerEvent(params: {
@@ -421,7 +434,7 @@ async function persistInquiryStateChange(params: {
     timestamp: params.now,
   });
 
-  await publishInquiryEvent({
+  await safePublishInquiryEvent({
     type: "inquiry.status_changed",
     inquiry: nextRow,
     listingTitle: await resolveListingTitle(nextRow.listing_id),
@@ -481,7 +494,7 @@ async function persistPaymentStateChange(params: {
     timestamp: params.now,
   });
 
-  await publishInquiryEvent({
+  await safePublishInquiryEvent({
     type: "inquiry.payment_changed",
     inquiry: nextRow,
     listingTitle: await resolveListingTitle(nextRow.listing_id),
@@ -527,7 +540,7 @@ async function persistPaymentProofSubmission(params: {
     timestamp: params.now,
   });
 
-  await publishInquiryEvent({
+  await safePublishInquiryEvent({
     type: "inquiry.payment_submitted",
     inquiry: nextRow,
     listingTitle: await resolveListingTitle(nextRow.listing_id),
