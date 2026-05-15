@@ -112,6 +112,18 @@ export function buildBlockedDatesFromAvailability(blocks: Pick<AvailabilityBlock
   return Array.from(new Set(blocks.flatMap((block) => block.nights.map(normalizeAvailabilityDateKey)))).sort();
 }
 
+export function mergeLegacyBlockedDatesWithBookingNights(
+  blockedDates: string[] | undefined,
+  bookingStays: Array<{ checkIn: string; checkOut: string }>,
+) {
+  const normalizedBlockedDates = (blockedDates ?? []).map(normalizeAvailabilityDateKey);
+  const bookingNights = bookingStays.flatMap((stay) =>
+    enumerateAvailabilityNights(stay.checkIn.slice(0, 10), stay.checkOut.slice(0, 10)),
+  );
+
+  return Array.from(new Set([...normalizedBlockedDates, ...bookingNights])).sort();
+}
+
 export function buildManualBlockedDates(blocks: Pick<AvailabilityBlockInput, "sourceType" | "nights">[]) {
   return buildBlockedDatesFromAvailability(blocks.filter((block) => block.sourceType === "MANUAL"));
 }

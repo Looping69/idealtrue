@@ -6,6 +6,7 @@ import {
   buildSingleNightInterval,
   enumerateAvailabilityNights,
   findAvailabilityConflict,
+  mergeLegacyBlockedDatesWithBookingNights,
 } from '../encore/catalog/availability.ts';
 
 test('enumerateAvailabilityNights returns stay nights and excludes checkout day', () => {
@@ -89,4 +90,19 @@ test('findAvailabilityConflict detects overlaps and can exclude the current hold
     excludeSourceId: 'booking-1',
   });
   assert.equal(excluded, null);
+});
+
+test('mergeLegacyBlockedDatesWithBookingNights preserves legacy blocks while adding active booking nights', () => {
+  assert.deepEqual(
+    mergeLegacyBlockedDatesWithBookingNights(
+      ['2026-07-10', '2026-07-12'],
+      [
+        {
+          checkIn: '2026-07-14T14:00:00.000Z',
+          checkOut: '2026-07-16T10:00:00.000Z',
+        },
+      ],
+    ),
+    ['2026-07-10', '2026-07-12', '2026-07-14', '2026-07-15'],
+  );
 });

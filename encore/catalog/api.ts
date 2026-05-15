@@ -10,6 +10,7 @@ import {
   buildSingleNightInterval,
   enumerateAvailabilityNights,
   findAvailabilityConflict,
+  mergeLegacyBlockedDatesWithBookingNights,
   normalizeAvailabilityDateKey,
   toAvailabilityBlockRecord,
   type AvailabilityBlockInput,
@@ -609,6 +610,24 @@ async function refreshListingBlockedDatesFromAvailability(listingId: string) {
   };
 }
 
+function isAvailabilityLedgerSchemaError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("listing_availability_blocks")
+    && (
+      message.includes("does not exist")
+      || message.includes("doesn't exist")
+      || message.includes("unknown column")
+      || message.includes("column")
+      || message.includes("relation")
+    )
+  );
+}
+
 function buildAvailabilitySummaryRecord(
   listingId: string,
   availabilityBlocks: ListingAvailabilityBlockRecord[],
@@ -925,6 +944,52 @@ export async function replaceBookingAvailabilityBlocks(listingId: string, entrie
   }
 
   return refreshListingBlockedDatesFromAvailability(listingId);
+}
+
+export async function syncLegacyBlockedDatesForBookings(listingId: string, entries: BookingAvailabilitySnapshotItem[]) {
+  const existing = await catalogDB.queryRow<Pick<ListingRow, "id" | "blocked_dates">>`
+    SELECT id, blocked_dates
+    FROM listings
+    WHERE id = ${listingId}
+  `;
+
+  if (!existing) {
+    throw APIError.notFound("Listing not found.");
+  }
+
+  const blockedDates = mergeLegacyBlockedDatesWithBookingNights(
+    existing.blocked_dates ?? [],
+    entries.map((entry) => ({
+      checkIn: entry.checkIn,
+      checkOut: entry.checkOut,
+    })),
+  );
+
+  await catalogDB.exec`
+    UPDATE listings
+    SET blocked_dates = ${blockedDates},
+        updated_at = ${new Date().toISOString()}
+    WHERE id = ${listingId}
+  `;
+}
+
+export async function syncBookingAvailabilityWithCompatibility(
+  listingId: string,
+  entries: BookingAvailabilitySnapshotItem[],
+) {
+  try {
+    await replaceBookingAvailabilityBlocks(listingId, entries);
+  } catch (error) {
+    if (!isAvailabilityLedgerSchemaError(error)) {
+      throw error;
+    }
+
+    console.warn(
+      `Availability ledger schema is unavailable for listing ${listingId}. Falling back to legacy blocked_dates sync.`,
+      error,
+    );
+    await syncLegacyBlockedDatesForBookings(listingId, entries);
+  }
 }
 
 async function assertHostCanCreateListing(hostId: string) {

@@ -9,7 +9,7 @@ import { assertHostBillingOperationalAccess } from "../billing/host-billing-serv
 import {
   assertListingDateRangeAvailable,
   getListing,
-  replaceBookingAvailabilityBlocks,
+  syncBookingAvailabilityWithCompatibility,
 } from "../catalog/api";
 import { identityDB } from "../identity/db";
 import type {
@@ -270,12 +270,12 @@ async function syncListingAvailabilityForBookings(listingId: string) {
         AND (
           (inquiry_state = 'BOOKED' AND payment_state = 'COMPLETED')
           OR (inquiry_state = 'APPROVED' AND payment_state = 'INITIATED')
-        )
+      )
     `,
     listingId,
   );
 
-  await replaceBookingAvailabilityBlocks(
+  await syncBookingAvailabilityWithCompatibility(
     listingId,
     rows.map((row) => ({
       bookingId: row.id,

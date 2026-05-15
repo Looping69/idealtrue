@@ -54,7 +54,7 @@ export default function GuestDashboard({
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {bookings.map(booking => {
           const listing = listings.find(l => l.id === booking.listingId);
           const statusLabel = getInquiryBadgeLabel(booking);
@@ -64,41 +64,41 @@ export default function GuestDashboard({
           const fullGuestExposure = booking.totalPrice + breakageDeposit;
           const deadlineCopy = getGuestInquiryDeadlineText(booking);
           return (
-            <Card key={booking.id} className="p-0 overflow-hidden flex flex-col">
-              <div className="aspect-video bg-surface-container relative">
+            <Card key={booking.id} size="sm" className="flex flex-col overflow-hidden p-0">
+              <div className="relative h-36 bg-surface-container sm:h-32">
                 <img src={listing?.images[0] || `https://picsum.photos/seed/${booking.id}/800/600`} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
-                <div className="absolute top-3 left-3">
+                <div className="absolute left-2 top-2">
                   <Badge variant={bookingReady ? 'success' : booking.inquiryState === 'DECLINED' || booking.inquiryState === 'EXPIRED' ? 'danger' : 'warning'}>{statusLabel}</Badge>
                 </div>
               </div>
-              <div className="p-5 flex-1 space-y-3">
-                <h3 className="font-bold text-lg">{listing?.title || 'Unknown Listing'}</h3>
-                <div className="flex items-center gap-2 text-sm text-on-surface-variant">
-                  <Calendar className="w-4 h-4" />
+              <div className="flex-1 space-y-2.5 p-3.5">
+                <h3 className="line-clamp-2 text-base font-bold leading-tight">{listing?.title || 'Unknown Listing'}</h3>
+                <div className="flex items-center gap-1.5 text-xs text-on-surface-variant">
+                  <Calendar className="h-3.5 w-3.5" />
                   <span>{format(new Date(booking.checkIn), 'MMM d')} - {format(new Date(booking.checkOut), 'MMM d, yyyy')}</span>
                 </div>
-                <div className="flex items-center gap-2 text-sm text-on-surface-variant">
-                  <MapPin className="w-4 h-4" />
+                <div className="flex items-center gap-1.5 text-xs text-on-surface-variant">
+                  <MapPin className="h-3.5 w-3.5" />
                   <span>{booking.guests?.adults || 0} Adults, {booking.guests?.children || 0} Children</span>
                 </div>
-                <div className="grid gap-3 rounded-xl border border-outline-variant bg-surface-container-lowest p-4">
-                  <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest p-3">
+                  <div className="grid gap-2 sm:grid-cols-3">
                     <div>
                       <p className="text-[11px] font-medium uppercase tracking-wide text-on-surface-variant">Stay value</p>
-                      <p className="text-base font-semibold text-on-surface">{formatRand(booking.totalPrice)}</p>
+                      <p className="text-sm font-semibold text-on-surface">{formatRand(booking.totalPrice)}</p>
                     </div>
                     <div>
                       <p className="text-[11px] font-medium uppercase tracking-wide text-on-surface-variant">Breakage deposit</p>
-                      <p className="text-base font-semibold text-on-surface">{formatRand(breakageDeposit)}</p>
+                      <p className="text-sm font-semibold text-on-surface">{formatRand(breakageDeposit)}</p>
                     </div>
                     <div>
                       <p className="text-[11px] font-medium uppercase tracking-wide text-on-surface-variant">Full guest exposure</p>
-                      <p className="text-base font-semibold text-on-surface">{formatRand(fullGuestExposure)}</p>
+                      <p className="text-sm font-semibold text-on-surface">{formatRand(fullGuestExposure)}</p>
                     </div>
                   </div>
-                  <div className="space-y-1 border-t border-outline-variant pt-3">
+                  <div className="space-y-1 border-t border-outline-variant pt-2">
                     <p className="text-[11px] font-medium uppercase tracking-wide text-on-surface-variant">Payment state</p>
-                    <p className="text-sm text-on-surface">{getGuestPaymentStateText(booking)}</p>
+                    <p className="text-xs text-on-surface">{getGuestPaymentStateText(booking)}</p>
                     {paymentAwaitingReview && booking.paymentReference && (
                       <p className="text-xs text-on-surface-variant">
                         Payment reference: <span className="font-medium text-on-surface">{booking.paymentReference}</span>
@@ -111,14 +111,14 @@ export default function GuestDashboard({
                     )}
                   </div>
                 </div>
-                <div className="pt-1 border-t border-outline-variant flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-2 border-t border-outline-variant pt-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex flex-wrap gap-2">
-                    <Button size="sm" variant="outline" onClick={() => onChat(booking)}>Message</Button>
+                    <Button size="xs" variant="outline" onClick={() => onChat(booking)}>Message</Button>
                     {canGuestPay(booking) && (
-                      <Button size="sm" variant="secondary" onClick={() => onSubmitPaymentProof(booking)}>Send Proof of Payment</Button>
+                      <Button size="xs" variant="secondary" onClick={() => onSubmitPaymentProof(booking)}>Send Proof of Payment</Button>
                     )}
                     {bookingReady && (
-                      <Button size="sm" variant="secondary" onClick={() => onReview(booking)}>Review</Button>
+                      <Button size="xs" variant="secondary" onClick={() => onReview(booking)}>Review</Button>
                     )}
                   </div>
                 </div>
