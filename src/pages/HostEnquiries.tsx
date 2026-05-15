@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import {
   Ban,
@@ -27,7 +27,7 @@ import {
   groupHostInquiries,
   isAwaitingGuestPayment,
 } from '@/lib/inquiry-state';
-import { confirmPayment, markInquiryViewed, updateBookingStatus } from '@/lib/platform-client';
+import { useHostBookingActions } from '@/hooks/use-host-booking-actions';
 
 type SummaryCard = {
   title: string;
@@ -48,10 +48,19 @@ export default function HostEnquiries({
   onChat: (b: Booking) => void;
   onBookingUpdated: (booking: Booking) => void;
 }) {
-  const [isProcessing, setIsProcessing] = useState<string | null>(null);
-  const [decliningBooking, setDecliningBooking] = useState<Booking | null>(null);
-
   const groupedBookings = useMemo(() => groupHostInquiries(bookings), [bookings]);
+  const {
+    approveBooking,
+    confirmBookingPayment,
+    declineBooking,
+    decliningBooking,
+    isProcessingBookingId,
+    openInquiryChat,
+    setDecliningBooking,
+  } = useHostBookingActions({
+    onBookingUpdated,
+    onChat,
+  });
 
   const summaryCards: SummaryCard[] = [
     {
@@ -83,64 +92,6 @@ export default function HostEnquiries({
       icon: CircleCheckBig,
     },
   ];
-
-  const handleBookingAction = async (booking: Booking, action: 'APPROVED' | 'DECLINED') => {
-    setIsProcessing(booking.id);
-    try {
-      const updatedBooking = await updateBookingStatus(booking.id, action);
-      onBookingUpdated(updatedBooking);
-      toast[action === 'APPROVED' ? 'success' : 'info'](
-        action === 'APPROVED'
-          ? 'Inquiry approved. Payment is now unlocked for the guest.'
-          : 'Inquiry declined.',
-      );
-    } catch (error) {
-      console.error('Error updating booking:', error);
-      toast.error(action === 'APPROVED' ? 'Failed to approve inquiry.' : 'Failed to decline inquiry.');
-    } finally {
-      setIsProcessing(null);
-    }
-  };
-
-  const handleDeclineBooking = async (payload: {
-    declineReason: Booking['declineReason'];
-    declineReasonNote?: string | null;
-  }) => {
-    if (!decliningBooking || !payload.declineReason) {
-      return;
-    }
-
-    setIsProcessing(decliningBooking.id);
-    try {
-      const updatedBooking = await updateBookingStatus(decliningBooking.id, 'DECLINED', payload);
-      onBookingUpdated(updatedBooking);
-      toast.info(
-        getInquiryDeclineReasonDetail(updatedBooking)
-          ? `Inquiry declined: ${getInquiryDeclineReasonDetail(updatedBooking)}.`
-          : 'Inquiry declined.',
-      );
-      setDecliningBooking(null);
-    } catch (error) {
-      console.error('Error declining booking:', error);
-      toast.error('Failed to decline inquiry.');
-    } finally {
-      setIsProcessing(null);
-    }
-  };
-
-  const handlePaymentConfirmation = async (booking: Booking) => {
-    setIsProcessing(booking.id);
-    try {
-      const updatedBooking = await confirmPayment(booking.id);
-      onBookingUpdated(updatedBooking);
-      toast.success('Payment confirmed. The stay is now booked.');
-    } catch (error) {
-      console.error('Error confirming payment:', error);
-      toast.error('Failed to confirm payment.');
-    } finally {
-      setIsProcessing(null);
-    }
-  };
 
   const renderEmptyState = (icon: React.ComponentType<{ className?: string }>, title: string, description: string) => {
     const Icon = icon;
@@ -276,19 +227,8 @@ export default function HostEnquiries({
             <Button
               variant="outline"
               className="w-full lg:w-auto"
-              onClick={async () => {
-                try {
-                  if (booking.inquiryState === 'PENDING') {
-                    const viewedBooking = await markInquiryViewed(booking.id);
-                    onBookingUpdated(viewedBooking);
-                  }
-                  onChat(booking);
-                } catch (error) {
-                  console.error('Error opening inquiry chat:', error);
-                  toast.error('Failed to open the guest conversation.');
-                }
-              }}
-              disabled={isProcessing === booking.id}
+              onClick={() => void openInquiryChat(booking)}
+              disabled={isProcessingBookingId === booking.id}
             >
               <MessageSquare className="w-4 h-4 mr-2" /> Message
             </Button>
@@ -299,14 +239,14 @@ export default function HostEnquiries({
                   variant="outline"
                   className="w-full lg:w-auto text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
                   onClick={() => setDecliningBooking(booking)}
-                  disabled={isProcessing === booking.id}
+                  disabled={isProcessingBookingId === booking.id}
                 >
                   <XCircle className="w-4 h-4 mr-2" /> Decline
                 </Button>
                 <Button
                   className="w-full lg:w-auto bg-green-600 hover:bg-green-700 text-white"
-                  onClick={() => handleBookingAction(booking, 'APPROVED')}
-                  disabled={isProcessing === booking.id}
+                  onClick={() => void approveBooking(booking)}
+                  disabled={isProcessingBookingId === booking.id}
                 >
                   <CheckCircle2 className="w-4 h-4 mr-2" /> Approve
                 </Button>
@@ -316,8 +256,8 @@ export default function HostEnquiries({
             {options?.showPaymentConfirm && (
               <Button
                 className="w-full lg:w-auto bg-green-600 hover:bg-green-700 text-white"
-                onClick={() => handlePaymentConfirmation(booking)}
-                disabled={isProcessing === booking.id || !booking.paymentProofAccessible || !booking.paymentProofAccessUrl}
+                onClick={() => void confirmBookingPayment(booking)}
+                disabled={isProcessingBookingId === booking.id || !booking.paymentProofAccessible || !booking.paymentProofAccessUrl}
               >
                 <CheckCircle2 className="w-4 h-4 mr-2" /> Confirm Payment
               </Button>
@@ -414,9 +354,9 @@ export default function HostEnquiries({
       <InquiryDeclineDialog
         open={!!decliningBooking}
         bookingLabel={decliningBooking ? `the enquiry for ${listings.find((listing) => listing.id === decliningBooking.listingId)?.title || 'this stay'}` : 'this enquiry'}
-        isSubmitting={!!decliningBooking && isProcessing === decliningBooking.id}
+        isSubmitting={!!decliningBooking && isProcessingBookingId === decliningBooking.id}
         onClose={() => setDecliningBooking(null)}
-        onConfirm={handleDeclineBooking}
+        onConfirm={declineBooking}
       />
     </div>
   );

@@ -18,7 +18,6 @@ export default function SignupPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { signIn, signInWithGoogle, signUp } = useAuth();
-  const [mode, setMode] = useState<'signup' | 'signin'>('signup');
   const urlMode = searchParams.get('mode');
   const actionToken = searchParams.get('token') || '';
   const safeReturnPath = getSafeAuthReturnPath(searchParams.get('returnTo'));
@@ -37,15 +36,10 @@ export default function SignupPage() {
   const googleClientId = getGoogleClientId();
   const googleAuthConfigured = Boolean(googleClientId);
 
-  const isSignupMode = mode === 'signup';
+  const authMode: 'signup' | 'signin' = urlMode === 'signin' ? 'signin' : 'signup';
+  const isSignupMode = authMode === 'signup';
   const isResetPasswordMode = urlMode === 'reset-password' && !!actionToken;
   const isVerifyEmailMode = urlMode === 'verify-email' && !!actionToken;
-  const isForgotPasswordMode = mode === 'signin' && !isResetPasswordMode && !isVerifyEmailMode;
-
-  useEffect(() => {
-    if (isResetPasswordMode || isVerifyEmailMode) return;
-    setMode(urlMode === 'signin' ? 'signin' : 'signup');
-  }, [isResetPasswordMode, isVerifyEmailMode, urlMode]);
 
   const passwordActionTitle = useMemo(() => {
     if (isVerifyEmailMode) return 'Verify your email';
@@ -479,7 +473,7 @@ export default function SignupPage() {
           )}
           {!isResetPasswordMode && (
             <>
-              {mode === 'signin' ? (
+              {authMode === 'signin' ? (
                 <button
                   type="button"
                   className="text-sm text-[#08a8c8] font-medium inline-flex items-center gap-2"

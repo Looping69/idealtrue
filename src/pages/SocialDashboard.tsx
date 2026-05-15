@@ -140,11 +140,10 @@ function getDraftStatusLabel(draft: ContentDraft) {
 
 export default function SocialDashboard({ listings }: { listings: Listing[] }) {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { profile } = useAuth();
   const listingIdFromUrl = searchParams.get('listingId');
 
-  const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<SocialTemplateId>('featured_stay');
   const [platform, setPlatform] = useState<SocialPlatform>('instagram');
   const [tone, setTone] = useState<SocialTone>('professional');
@@ -153,7 +152,6 @@ export default function SocialDashboard({ listings }: { listings: Listing[] }) {
   const [customHeadline, setCustomHeadline] = useState('');
   const [selectedIdeaMode, setSelectedIdeaMode] = useState<IdeaModeId>('brand_new');
   const [selectedGeneratorMode, setSelectedGeneratorMode] = useState<GeneratorModeId>('evergreen_ideas');
-  const [activeTool, setActiveTool] = useState<ContentToolId>('ideas');
   const [creativeSourceUrl, setCreativeSourceUrl] = useState<string | null>(null);
   const [generatedCreative, setGeneratedCreative] = useState<GeneratedSocialCreative | null>(null);
   const [drafts, setDrafts] = useState<ContentDraft[]>([]);
@@ -167,28 +165,26 @@ export default function SocialDashboard({ listings }: { listings: Listing[] }) {
   const [copiedDraft, setCopiedDraft] = useState(false);
   const [copiedCaption, setCopiedCaption] = useState(false);
 
+  const activeTool = useMemo(() => {
+    const tool = searchParams.get('tool') as ContentToolId | null;
+    return tool && CONTENT_TOOLS.some((item) => item.id === tool) ? tool : 'ideas';
+  }, [searchParams]);
+  const selectedListing = useMemo(() => {
+    if (listings.length === 0) {
+      return null;
+    }
+
+    if (listingIdFromUrl) {
+      return listings.find((listing) => listing.id === listingIdFromUrl) ?? listings[0];
+    }
+
+    return listings[0];
+  }, [listingIdFromUrl, listings]);
   const selectedTemplate = useMemo(() => getSocialTemplate(selectedTemplateId), [selectedTemplateId]);
   const selectedDraft = useMemo(() => drafts.find((draft) => draft.id === selectedDraftId) ?? null, [drafts, selectedDraftId]);
   const selectedIdea = useMemo(() => IDEA_MODES.find((item) => item.id === selectedIdeaMode) ?? IDEA_MODES[0], [selectedIdeaMode]);
   const selectedGenerator = useMemo(() => GENERATOR_MODES.find((item) => item.id === selectedGeneratorMode) ?? GENERATOR_MODES[0], [selectedGeneratorMode]);
   const canScheduleDraft = Boolean(entitlements?.canSchedule && scheduleAt && !Number.isNaN(new Date(scheduleAt).getTime()));
-
-  useEffect(() => {
-    const tool = searchParams.get('tool') as ContentToolId | null;
-    if (tool && CONTENT_TOOLS.some((item) => item.id === tool)) {
-      setActiveTool(tool);
-    }
-  }, [searchParams]);
-
-  useEffect(() => {
-    if (listingIdFromUrl && listings.length > 0) {
-      setSelectedListing(listings.find((listing) => listing.id === listingIdFromUrl) ?? listings[0]);
-      return;
-    }
-    if (!selectedListing && listings.length > 0) {
-      setSelectedListing(listings[0]);
-    }
-  }, [listingIdFromUrl, listings, selectedListing]);
 
   useEffect(() => {
     if (!selectedTemplate.supportedPlatforms.includes(platform)) {
@@ -246,6 +242,12 @@ export default function SocialDashboard({ listings }: { listings: Listing[] }) {
   }, [profile, searchParams]);
 
   const contentEnabled = entitlements?.contentStudioEnabled ?? false;
+
+  function patchStudioSearchParams(mutator: (next: URLSearchParams) => void) {
+    const next = new URLSearchParams(searchParams);
+    mutator(next);
+    setSearchParams(next, { replace: true });
+  }
 
   function applyIdeaMode(modeId: IdeaModeId) {
     const mode = IDEA_MODES.find((item) => item.id === modeId) ?? IDEA_MODES[0];
@@ -384,7 +386,9 @@ export default function SocialDashboard({ listings }: { listings: Listing[] }) {
                         <button
                           key={item.label}
                           className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium ${activeTool === item.id ? 'bg-primary/10 text-primary' : 'text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface'}`}
-                          onClick={() => setActiveTool(item.id)}
+                          onClick={() => patchStudioSearchParams((next) => {
+                            next.set('tool', item.id);
+                          })}
                           type="button"
                         >
                           <span>{item.label}</span>
@@ -574,7 +578,9 @@ export default function SocialDashboard({ listings }: { listings: Listing[] }) {
                   <select
                     className="h-11 w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 text-sm font-medium"
                     value={selectedListing?.id ?? ''}
-                    onChange={(event) => setSelectedListing(listings.find((listing) => listing.id === event.target.value) ?? null)}
+                    onChange={(event) => patchStudioSearchParams((next) => {
+                      next.set('listingId', event.target.value);
+                    })}
                   >
                     {listings.map((listing) => (
                       <option key={listing.id} value={listing.id}>{listing.title}</option>

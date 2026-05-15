@@ -22,7 +22,6 @@ import { Badge } from '../components/ui/badge';
 import InquiryDeclineDialog from '@/components/InquiryDeclineDialog';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { toast } from 'sonner';
-import { updateBookingStatus } from '@/lib/platform-client';
 import {
   createHostBillingSetupCheckout,
   getCheckoutStatus,
@@ -39,6 +38,7 @@ import {
   isBookedStay,
   isPendingHostDecision,
 } from '@/lib/inquiry-state';
+import { useHostBookingActions } from '@/hooks/use-host-booking-actions';
 import { cn } from '@/lib/utils';
 
 function getMetricPercentage(value: number, total: number) {
@@ -117,14 +117,21 @@ export default function HostDashboard({
 }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [localBookings, setLocalBookings] = useState(bookings);
   const [billingAccount, setBillingAccount] = useState<HostBillingAccount | null>(null);
-  const [decliningBooking, setDecliningBooking] = useState<Booking | null>(null);
   const [startingBillingSetup, setStartingBillingSetup] = useState(false);
 
-  useEffect(() => {
-    setLocalBookings(bookings);
-  }, [bookings]);
+  const {
+    approveBooking,
+    declineBooking,
+    decliningBooking,
+    isProcessingBookingId,
+    setDecliningBooking,
+  } = useHostBookingActions({
+    onBookingUpdated,
+    onChat,
+    onAfterApprove: () => navigate('/host/enquiries'),
+    onAfterDecline: () => navigate('/host/enquiries'),
+  });
 
   const loadBillingAccount = useCallback(async () => {
     if (profile?.role !== 'host') {
@@ -238,11 +245,11 @@ export default function HostDashboard({
   }, [loadBillingAccount, navigate, profile?.role, searchParams]);
 
   const activeListings = listings.filter(l => l.status === 'active');
-  const groupedBookings = useMemo(() => groupHostInquiries(localBookings), [localBookings]);
+  const groupedBookings = useMemo(() => groupHostInquiries(bookings), [bookings]);
   const needsResponseBookings = groupedBookings.needsResponse;
   const awaitingGuestPaymentBookings = groupedBookings.awaitingGuestPayment;
-  const bookedStayCount = localBookings.filter(isBookedStay).length;
-  const totalRevenue = localBookings
+  const bookedStayCount = bookings.filter(isBookedStay).length;
+  const totalRevenue = bookings
     .filter(isBookedStay)
     .reduce((sum, b) => sum + b.totalPrice, 0);
   const isGreylisted = billingAccount?.billingStatus === 'greylisted';
@@ -289,32 +296,6 @@ export default function HostDashboard({
     }
   }
 
-  async function handleDeclineBooking(payload: {
-    declineReason: Booking['declineReason'];
-    declineReasonNote?: string | null;
-  }) {
-    if (!decliningBooking || !payload.declineReason) {
-      return;
-    }
-
-    try {
-      const updatedBooking = await updateBookingStatus(decliningBooking.id, 'DECLINED', payload);
-      setLocalBookings((current) => current.map((item) => item.id === decliningBooking.id ? updatedBooking : item));
-      onBookingUpdated(updatedBooking);
-      navigate('/host/enquiries');
-
-      toast.info(
-        getInquiryDeclineReasonDetail(updatedBooking)
-          ? `Inquiry declined: ${getInquiryDeclineReasonDetail(updatedBooking)}.`
-          : 'Inquiry declined.',
-      );
-      setDecliningBooking(null);
-    } catch (error) {
-      console.error('Failed to decline inquiry:', error);
-      toast.error('Failed to decline inquiry.');
-    }
-  }
-
   return (
     <div className="space-y-8">
       {/* Subscription Banner */}
@@ -354,11 +335,11 @@ export default function HostDashboard({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <HostMetricCard
           title="Total Bookings"
-          value={localBookings.length}
+          value={bookings.length}
           icon={Calendar}
           accentClassName="border-l-blue-500"
           iconClassName="text-blue-500"
-          percentage={getMetricPercentage(bookedStayCount, localBookings.length)}
+          percentage={getMetricPercentage(bookedStayCount, bookings.length)}
         />
         <HostMetricCard
           title="Needs Response"
@@ -501,7 +482,7 @@ export default function HostDashboard({
             <Button variant="ghost" size="sm" onClick={() => navigate('/host/enquiries')}>View All</Button>
           </div>
           <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-            {localBookings.slice(0, 5).map(booking => {
+            {bookings.slice(0, 5).map(booking => {
               const listing = listings.find(l => l.id === booking.listingId);
               const bookingLabel = getInquiryBadgeLabel(booking);
               const deadlineState = getInquiryDeadlineState(booking);
@@ -548,26 +529,16 @@ export default function HostDashboard({
                       <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => onChat(booking)}>Message</Button>
                       {isPendingHostDecision(booking) ? (
                         <div className="flex flex-wrap gap-2">
-                          <button 
-                            onClick={async () => {
-                              try {
-                                const updatedBooking = await updateBookingStatus(booking.id, 'APPROVED');
-                                setLocalBookings((current) => current.map((item) => item.id === booking.id ? updatedBooking : item));
-                                onBookingUpdated(updatedBooking);
-                                navigate('/host/enquiries');
-
-                                toast.success('Inquiry approved. Payment is now unlocked for the guest.');
-                              } catch (error) {
-                                console.error('Failed to approve inquiry:', error);
-                                toast.error('Failed to approve inquiry.');
-                              }
-                            }}
+                          <button
+                            onClick={() => void approveBooking(booking)}
+                            disabled={isProcessingBookingId === booking.id}
                             className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
                           >
                             Approve
                           </button>
-                          <button 
+                          <button
                             onClick={() => setDecliningBooking(booking)}
+                            disabled={isProcessingBookingId === booking.id}
                             className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
                           >
                             Decline
@@ -587,7 +558,7 @@ export default function HostDashboard({
                 </Card>
               );
             })}
-            {localBookings.length === 0 && <p className="text-center text-outline-variant py-10">No recent activity.</p>}
+            {bookings.length === 0 && <p className="text-center text-outline-variant py-10">No recent activity.</p>}
           </div>
         </div>
       </div>
@@ -737,7 +708,7 @@ export default function HostDashboard({
         open={!!decliningBooking}
         bookingLabel={decliningBooking ? `the enquiry for ${listings.find((item) => item.id === decliningBooking.listingId)?.title || 'this stay'}` : 'this enquiry'}
         onClose={() => setDecliningBooking(null)}
-        onConfirm={handleDeclineBooking}
+        onConfirm={declineBooking}
       />
 
     </div>
