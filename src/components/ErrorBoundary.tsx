@@ -59,23 +59,23 @@ export default class ErrorBoundary extends Component<Props, State> {
               </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-3 pt-4">
-              <Button 
-                variant="outline" 
-                className="flex-1" 
+              <Button
+                variant="outline"
+                className="flex-1"
                 onClick={() => window.location.reload()}
               >
                 <RefreshCcw className="w-4 h-4 mr-2" />
                 Refresh Page
               </Button>
-              <Button 
-                className="flex-1" 
+              <Button
+                className="flex-1"
                 onClick={this.handleReset}
               >
                 <Home className="w-4 h-4 mr-2" />
                 Back to Home
               </Button>
             </div>
-            {process.env.NODE_ENV === 'development' && this.state.error && (
+            {import.meta.env.DEV && this.state.error && (
               <div className="mt-8 p-4 bg-surface-container-low rounded-xl text-left overflow-auto max-h-40">
                 <p className="text-[10px] font-mono text-destructive break-all">
                   {this.state.error.toString()}
