@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { clearEncoreSession } from '@/lib/encore-client';
+import { clearEncoreSession, isEncoreRequestError } from '@/lib/encore-client';
 import { getEncoreSessionProfile, signInWithGoogle, signInWithPassword, signUpWithPassword, type VerificationEmailStatus } from '@/lib/identity-client';
 import { UserProfile, UserRole } from '@/types';
 
@@ -34,6 +34,7 @@ interface AuthContextType {
   user: AuthSessionUser | null;
   profile: UserProfile | null;
   loading: boolean;
+  authError: string | null;
   refreshProfile: () => Promise<UserProfile | null>;
   signIn: (params: LoginParams) => Promise<UserProfile>;
   signUp: (params: SignupParams) => Promise<{ profile: UserProfile; verificationEmailStatus: VerificationEmailStatus }>;
@@ -45,6 +46,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   profile: null,
   loading: true,
+  authError: null,
   refreshProfile: async () => null,
   signIn: async () => {
     throw new Error('Auth context not ready.');
@@ -67,15 +69,41 @@ function toSessionUser(profile: UserProfile): AuthSessionUser {
   };
 }
 
+function isUnauthenticatedSessionError(error: unknown) {
+  if (isEncoreRequestError(error)) {
+    return error.status === 401 || error.code === 'unauthenticated';
+  }
+
+  return error instanceof Error && error.message.toLowerCase().includes('unauthenticated');
+}
+
+function isSessionInfrastructureError(error: unknown) {
+  if (isEncoreRequestError(error)) {
+    return error.status >= 500 || error.status === 0;
+  }
+
+  return error instanceof TypeError;
+}
+
+function getSessionRestoreErrorMessage(error: unknown) {
+  if (isSessionInfrastructureError(error)) {
+    return 'Could not reach the Ideal Stay backend. Some account features may be unavailable until the connection recovers.';
+  }
+
+  return 'Could not restore your session. Please sign in again if account features are unavailable.';
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthSessionUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const logout = async () => {
     await clearEncoreSession();
     setUser(null);
     setProfile(null);
+    setAuthError(null);
   };
 
   const refreshProfile = async () => {
@@ -83,10 +111,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const nextProfile = await getEncoreSessionProfile();
       setProfile(nextProfile);
       setUser(toSessionUser(nextProfile));
+      setAuthError(null);
       return nextProfile;
     } catch (error) {
       console.error('Error refreshing Encore profile:', error);
-      await logout();
+      if (isUnauthenticatedSessionError(error)) {
+        await logout();
+      } else {
+        setAuthError(getSessionRestoreErrorMessage(error));
+      }
       return null;
     }
   };
@@ -102,6 +135,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     setProfile(signupResult.profile);
     setUser(toSessionUser(signupResult.profile));
+    setAuthError(null);
     return signupResult;
   };
 
@@ -109,6 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const nextProfile = await signInWithPassword({ email, password });
     setProfile(nextProfile);
     setUser(toSessionUser(nextProfile));
+    setAuthError(null);
     return nextProfile;
   };
 
@@ -116,6 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const nextProfile = await signInWithGoogle({ credential, role, referredByCode });
     setProfile(nextProfile);
     setUser(toSessionUser(nextProfile));
+    setAuthError(null);
     return nextProfile;
   };
 
@@ -128,13 +164,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
         setProfile(nextProfile);
         setUser(toSessionUser(nextProfile));
+        setAuthError(null);
       } catch (error) {
-        const isUnauthenticated = error instanceof Error && error.message.includes('unauthenticated');
-        if (!isUnauthenticated) {
-          console.error('Error restoring Encore session:', error);
+        if (isUnauthenticatedSessionError(error)) {
+          if (!cancelled) {
+            setUser(null);
+            setProfile(null);
+            setAuthError(null);
+          }
+          return;
         }
+
+        console.error('Error restoring Encore session:', error);
         if (!cancelled) {
-          await logout();
+          setAuthError(getSessionRestoreErrorMessage(error));
         }
       } finally {
         if (!cancelled) {
@@ -151,7 +194,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, refreshProfile, signIn, signUp, signInWithGoogle: signInGoogle, logout }}>
+    <AuthContext.Provider value={{ user, profile, loading, authError, refreshProfile, signIn, signUp, signInWithGoogle: signInGoogle, logout }}>
       {!loading && children}
     </AuthContext.Provider>
   );
