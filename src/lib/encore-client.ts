@@ -1,5 +1,43 @@
 export const DEFAULT_ENCORE_API_URL = "/api/encore";
 
+export class EncoreRequestError extends Error {
+  status: number;
+  path: string;
+  body: string;
+  code?: string;
+
+  constructor(params: {
+    status: number;
+    path: string;
+    message: string;
+    body: string;
+    code?: string;
+  }) {
+    super(params.message);
+    this.name = "EncoreRequestError";
+    this.status = params.status;
+    this.path = params.path;
+    this.body = params.body;
+    this.code = params.code;
+  }
+}
+
+export function isEncoreRequestError(error: unknown): error is EncoreRequestError {
+  return error instanceof EncoreRequestError;
+}
+
+export function getEncoreErrorMessage(error: unknown, fallback = "Request failed. Please try again.") {
+  if (error instanceof EncoreRequestError) {
+    return error.message || fallback;
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return fallback;
+}
+
 export function getEncoreApiUrl() {
   return DEFAULT_ENCORE_API_URL;
 }
@@ -15,6 +53,27 @@ export function clearEncoreSession() {
   }).catch(() => undefined);
 }
 
+function parseEncoreErrorBody(body: string): { message: string; code?: string } {
+  if (!body.trim()) {
+    return { message: "Encore request failed." };
+  }
+
+  try {
+    const parsed = JSON.parse(body) as {
+      error?: string;
+      message?: string;
+      code?: string;
+    };
+
+    return {
+      message: parsed.error || parsed.message || body,
+      code: parsed.code,
+    };
+  } catch {
+    return { message: body };
+  }
+}
+
 export async function encoreRequest<T>(
   path: string,
   init: RequestInit = {},
@@ -24,10 +83,26 @@ export async function encoreRequest<T>(
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(body || `Encore request failed with status ${response.status}`);
+    const parsed = parseEncoreErrorBody(body);
+    throw new EncoreRequestError({
+      status: response.status,
+      path,
+      message: parsed.message || `Encore request failed with status ${response.status}`,
+      body,
+      code: parsed.code,
+    });
   }
 
-  return response.json() as Promise<T>;
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  const body = await response.text();
+  if (!body.trim()) {
+    return undefined as T;
+  }
+
+  return JSON.parse(body) as T;
 }
 
 export async function encoreFetch(
