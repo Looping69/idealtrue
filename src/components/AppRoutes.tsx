@@ -2,6 +2,7 @@ import { lazy, Suspense, type ReactElement } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import HostLayout from '@/components/HostLayout';
+import HostListingAccessGate from '@/components/HostListingAccessGate';
 import type { Booking, Listing, Referral, UserProfile } from '@/types';
 import { buildAuthPathWithReturn } from '@/lib/booking-auth-intent';
 
@@ -119,7 +120,14 @@ export default function AppRoutes({
           <Route path="reports" element={<HostReports bookings={hostBookings} listings={myListings} />} />
           <Route path="social" element={<SocialDashboard listings={myListings} />} />
           <Route path="referrals" element={<ReferralView profile={profile} referrals={referrals} />} />
-          <Route path="create-listing" element={<CreateListing />} />
+          <Route
+            path="create-listing"
+            element={
+              <HostListingAccessGate listings={myListings} profile={profile}>
+                <CreateListing />
+              </HostListingAccessGate>
+            }
+          />
           <Route path="edit-listing/:id" element={<CreateListing />} />
           <Route path="*" element={<Navigate to="/host" />} />
         </Route>
