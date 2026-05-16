@@ -47,10 +47,13 @@ export function usePlatformData(user: AuthSessionUser | null, profile: UserProfi
   const [dataLoading, setDataLoading] = useState<PlatformDataLoading>(EMPTY_LOADING_STATE);
   const [reloadKey, setReloadKey] = useState(0);
 
+  const userId = user?.id ?? null;
+  const profileRole = profile?.role ?? null;
+  const isAdminProfile = Boolean(profile?.isAdmin);
   const canLoadHostData = Boolean(
-    user &&
+    userId &&
     profile &&
-    (profile.role === 'host' || profile.role === 'admin' || profile.isAdmin),
+    (profileRole === 'host' || profileRole === 'admin' || isAdminProfile),
   );
 
   const setLoadingFlag = useCallback((key: PlatformDataErrorKey, loading: boolean) => {
@@ -101,7 +104,7 @@ export function usePlatformData(user: AuthSessionUser | null, profile: UserProfi
     }
 
     async function loadBookings() {
-      if (!user) {
+      if (!userId) {
         setMyBookings([]);
         setHostBookings([]);
         safelySetDataError('bookings');
@@ -113,8 +116,8 @@ export function usePlatformData(user: AuthSessionUser | null, profile: UserProfi
       try {
         const sessionBookings = await listMyBookings();
         if (!cancelled) {
-          setMyBookings(sessionBookings.filter((booking) => booking.guestId === user.id));
-          setHostBookings(sessionBookings.filter((booking) => booking.hostId === user.id));
+          setMyBookings(sessionBookings.filter((booking) => booking.guestId === userId));
+          setHostBookings(sessionBookings.filter((booking) => booking.hostId === userId));
           safelySetDataError('bookings');
         }
       } catch (error) {
@@ -126,7 +129,7 @@ export function usePlatformData(user: AuthSessionUser | null, profile: UserProfi
     }
 
     async function loadReferrals() {
-      if (!user) {
+      if (!userId) {
         setReferrals([]);
         safelySetDataError('referrals');
         safelySetLoadingFlag('referrals', false);
@@ -149,7 +152,7 @@ export function usePlatformData(user: AuthSessionUser | null, profile: UserProfi
     }
 
     async function loadHostListings() {
-      if (!user || !canLoadHostData) {
+      if (!userId || !canLoadHostData) {
         setMyListings([]);
         safelySetDataError('hostListings');
         safelySetLoadingFlag('hostListings', false);
@@ -158,7 +161,7 @@ export function usePlatformData(user: AuthSessionUser | null, profile: UserProfi
 
       safelySetLoadingFlag('hostListings', true);
       try {
-        const hostListings = await listHostListings(user.id);
+        const hostListings = await listHostListings(userId);
         if (!cancelled) {
           setMyListings(hostListings);
           safelySetDataError('hostListings');
@@ -179,7 +182,7 @@ export function usePlatformData(user: AuthSessionUser | null, profile: UserProfi
     return () => {
       cancelled = true;
     };
-  }, [canLoadHostData, profile?.isAdmin, profile?.role, reloadKey, setDataError, setLoadingFlag, user]);
+  }, [canLoadHostData, isAdminProfile, profileRole, reloadKey, setDataError, setLoadingFlag, userId]);
 
   const reloadPlatformData = useCallback(() => {
     setReloadKey((current) => current + 1);
@@ -200,14 +203,14 @@ export function usePlatformData(user: AuthSessionUser | null, profile: UserProfi
     syncUpdatedBooking(updatedBooking) {
       setMyBookings((current) => {
         const existingIndex = current.findIndex((item) => item.id === updatedBooking.id);
-        if (existingIndex === -1 && updatedBooking.guestId === user?.id) {
+        if (existingIndex === -1 && updatedBooking.guestId === userId) {
           return [updatedBooking, ...current];
         }
         return current.map((item) => item.id === updatedBooking.id ? updatedBooking : item);
       });
       setHostBookings((current) => {
         const existingIndex = current.findIndex((item) => item.id === updatedBooking.id);
-        if (existingIndex === -1 && updatedBooking.hostId === user?.id) {
+        if (existingIndex === -1 && updatedBooking.hostId === userId) {
           return [updatedBooking, ...current];
         }
         return current.map((item) => item.id === updatedBooking.id ? updatedBooking : item);
@@ -234,7 +237,7 @@ export function usePlatformData(user: AuthSessionUser | null, profile: UserProfi
       });
       setMyListings((current) => {
         const existingIndex = current.findIndex((item) => item.id === updatedListing.id);
-        if (existingIndex === -1 && updatedListing.hostId === user?.id) {
+        if (existingIndex === -1 && updatedListing.hostId === userId) {
           return [updatedListing, ...current];
         }
         return current.map((item) => item.id === updatedListing.id ? updatedListing : item);
