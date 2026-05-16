@@ -24,7 +24,7 @@ const ChatModal = lazy(() => import('./components/ChatModal'));
 function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, profile, loading, logout } = useAuth();
+  const { user, profile, loading, authError, refreshProfile, logout } = useAuth();
   const {
     listings,
     myListings,
@@ -155,6 +155,10 @@ function AppContent() {
     void logout();
   };
 
+  const handleRetryAuth = () => {
+    void refreshProfile();
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-surface">
@@ -181,6 +185,30 @@ function AppContent() {
       />
 
       <main className={cn('flex-1', !isHostRoute && !isAdminRoute ? 'max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8' : 'w-full')}>
+        {authError && (
+          <section
+            aria-live="polite"
+            className="mb-6 rounded-3xl border border-warning/30 bg-surface-container-low p-4 text-on-surface shadow-[0_10px_30px_rgba(18,28,42,0.08)]"
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
+                <div>
+                  <h2 className="font-semibold">Account session could not be fully restored.</h2>
+                  <p className="mt-1 text-sm text-on-surface-variant">{authError}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleRetryAuth}
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-on-primary transition hover:opacity-90"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Retry session
+              </button>
+            </div>
+          </section>
+        )}
         {hasDataErrors && (
           <section
             aria-live="polite"
