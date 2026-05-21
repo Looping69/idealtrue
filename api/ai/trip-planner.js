@@ -1,7 +1,15 @@
 import { AiRequestError, enforceAiRateLimit, resolveAiActor } from "../../lib/server/ai-rails.js";
 import { generateTripPlannerReply } from "../../lib/server/trip-planner.js";
 
-export default async function handler(req, res) {
+export async function handleTripPlannerRequest(
+  req,
+  res,
+  deps = {
+    resolveAiActor,
+    enforceAiRateLimit,
+    generateTripPlannerReply,
+  },
+) {
   if (req.method !== "POST") {
     res.statusCode = 405;
     res.setHeader("Allow", "POST");
@@ -10,13 +18,16 @@ export default async function handler(req, res) {
   }
 
   try {
-    const actor = await resolveAiActor({
+    const actor = await deps.resolveAiActor({
       headers: req.headers,
       cookieHeader: req.headers.cookie,
       env: process.env,
     });
-    enforceAiRateLimit("tripPlanner", actor);
-    const reply = await generateTripPlannerReply(req.body?.messages, process.env);
+    deps.enforceAiRateLimit("tripPlanner", actor);
+    const reply = await deps.generateTripPlannerReply(req.body?.messages, {
+      user: actor.user,
+      env: process.env,
+    });
     res.statusCode = 200;
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify({ reply }));
@@ -28,4 +39,8 @@ export default async function handler(req, res) {
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify({ error: error instanceof Error ? error.message : "Trip planner request failed." }));
   }
+}
+
+export default async function handler(req, res) {
+  return handleTripPlannerRequest(req, res);
 }

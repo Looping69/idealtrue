@@ -326,7 +326,7 @@ test('guest request -> host approve -> guest proof -> host confirm -> guest revi
   await page.getByRole('link', { name: 'My Stays' }).click();
   await expect(page.getByText('Ready for Payment')).toBeVisible();
   await expect(page.getByText('Payment unlocked. Submit payment proof before the approval window closes.')).toBeVisible();
-  await page.getByRole('button', { name: 'Submit Payment' }).click();
+  await page.getByRole('button', { name: 'Send Proof of Payment' }).click();
   await expect(page.getByRole('heading', { name: 'Submit Payment Proof' })).toBeVisible();
   await page.getByLabel('Payment reference').fill('HOST-booking-1');
   await page.locator('input[type="file"]').setInputFiles({

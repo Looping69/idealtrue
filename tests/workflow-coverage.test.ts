@@ -91,9 +91,12 @@ test('deterministic workflow fixtures cover required cross-role and state combin
 
   assert.equal(workflowBookings.pending.inquiryState, 'PENDING');
   assert.equal(workflowBookings.approvedAwaitingPayment.paymentState, 'INITIATED');
-  assert.equal(workflowBookings.proofSubmitted.paymentState, 'PROOF_SUBMITTED');
-  assert.equal(workflowBookings.confirmed.inquiryState, 'CONFIRMED');
-  assert.equal(workflowBookings.declined.declineReason, 'Dates no longer available.');
+  assert.equal(workflowBookings.proofSubmitted.paymentState, 'INITIATED');
+  assert.ok(workflowBookings.proofSubmitted.paymentSubmittedAt);
+  assert.equal(workflowBookings.confirmed.inquiryState, 'BOOKED');
+  assert.equal(workflowBookings.confirmed.paymentState, 'COMPLETED');
+  assert.equal(workflowBookings.declined.declineReason, 'DATES_UNAVAILABLE');
+  assert.equal(workflowBookings.declined.declineReasonNote, 'Dates no longer available.');
   assert.equal(workflowBookings.expired.inquiryState, 'EXPIRED');
 
   assert.equal(workflowBilling.voucherActive.status, 'active');

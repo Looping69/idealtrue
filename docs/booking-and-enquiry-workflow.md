@@ -112,7 +112,7 @@ Implementation note:
 
 The workflow is stronger than before, but still incomplete in a few places:
 
-- no structured decline reason yet
+- structured decline reasons now exist and are required when a host declines an enquiry
 - no explicit dispute workflow yet
 - no backend-side SLA timestamps or last-actor metadata yet
 - off-platform payment still depends on host discipline, but proof storage/access is now bucket-backed and confirmation must fail closed when the stored asset cannot be opened
