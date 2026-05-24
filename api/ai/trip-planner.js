@@ -1,5 +1,6 @@
 import { AiRequestError, enforceAiRateLimit, resolveAiActor } from "../../lib/server/ai-rails.js";
 import { generateTripPlannerReply } from "../../lib/server/trip-planner.js";
+import { AiProviderError, isProviderAuthError } from "../../lib/server/ai-provider-error.js";
 
 export async function handleTripPlannerRequest(
   req,
@@ -32,12 +33,24 @@ export async function handleTripPlannerRequest(
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify({ reply }));
   } catch (error) {
-    res.statusCode = error instanceof AiRequestError ? error.statusCode : 400;
+    if (error instanceof AiRequestError) {
+      res.statusCode = error.statusCode;
+    } else if (error instanceof AiProviderError) {
+      res.statusCode = 502;
+    } else {
+      res.statusCode = 400;
+    }
     if (error instanceof AiRequestError && error.retryAfterSec) {
       res.setHeader("Retry-After", String(error.retryAfterSec));
     }
     res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ error: error instanceof Error ? error.message : "Trip planner request failed." }));
+    const message =
+      isProviderAuthError(error)
+        ? "AI provider authentication is misconfigured on the server. Verify GEMINI_API_KEY or SEARCH_AI_GEMINI_API_KEY and allowed API-key restrictions in Google AI Studio."
+        : error instanceof Error
+          ? error.message
+          : "Trip planner request failed.";
+    res.end(JSON.stringify({ error: message }));
   }
 }
 

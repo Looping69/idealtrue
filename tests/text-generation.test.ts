@@ -101,3 +101,57 @@ test("generateTextWithFallback falls back to DeepSeek when Gemini is unavailable
     });
   }
 });
+
+test("generateTextWithFallback falls back to DeepSeek when Gemini auth is invalid", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+
+  Object.defineProperty(globalThis, "fetch", {
+    value: async (url, init) => {
+      calls.push({ url: String(url), init });
+
+      if (String(url).includes("generativelanguage.googleapis.com")) {
+        return new Response(
+          JSON.stringify({
+            error: {
+              message:
+                "Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential.",
+            },
+          }),
+          { status: 401, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      if (String(url).includes("api.deepseek.com/chat/completions")) {
+        return createJsonResponse({
+          choices: [{ message: { content: "DeepSeek auth-fallback answer" } }],
+        });
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+    configurable: true,
+    writable: true,
+  });
+
+  try {
+    const result = await generateTextWithFallback({
+      prompt: "Plan a trip",
+      env: {
+        GEMINI_API_KEY: "gemini-key",
+        DEEPSEEK_API_KEY: "deepseek-key",
+      },
+    });
+
+    assert.equal(result, "DeepSeek auth-fallback answer");
+    assert.equal(calls.length, 2);
+    assert.match(calls[0].url, /generativelanguage\.googleapis\.com/);
+    assert.match(calls[1].url, /api\.deepseek\.com\/chat\/completions/);
+  } finally {
+    Object.defineProperty(globalThis, "fetch", {
+      value: originalFetch,
+      configurable: true,
+      writable: true,
+    });
+  }
+});

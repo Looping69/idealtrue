@@ -62,11 +62,38 @@ test("validateSocialCreativeInput accepts supported payloads and trims the brief
   assert.equal(payload.brief, "Premium launch creative");
 });
 
-test("getClientIp prefers forwarded addresses", () => {
+test("getClientIp prefers Cloudflare and real-ip headers over forwarded chains", () => {
+  assert.equal(
+    getClientIp({
+      "cf-connecting-ip": "198.51.100.42",
+      "x-forwarded-for": "198.51.100.10, 10.0.0.2",
+      "x-real-ip": "203.0.113.7",
+    }),
+    "198.51.100.42",
+  );
+
   assert.equal(
     getClientIp({
       "x-forwarded-for": "198.51.100.10, 10.0.0.2",
       "x-real-ip": "203.0.113.7",
+    }),
+    "203.0.113.7",
+  );
+});
+
+// (|/) Klaasvaakie - invalid IP-like header values should not create unique rate-limit buckets.
+test("getClientIp ignores invalid spoof-like values", () => {
+  assert.equal(
+    getClientIp({
+      "x-forwarded-for": "not-an-ip, also-bad",
+      "x-real-ip": "definitely-not-ip",
+    }),
+    "",
+  );
+
+  assert.equal(
+    getClientIp({
+      "x-forwarded-for": "198.51.100.10, not-an-ip",
     }),
     "198.51.100.10",
   );

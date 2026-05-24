@@ -4,7 +4,7 @@ import path from "node:path";
 const repoRoot = process.cwd();
 const forbiddenHost = "staging-ideal-stay-online-gh5i.encr.app";
 const encoreApiUrl = `${process.env.ENCORE_API_URL || ""}`.trim();
-const geminiApiKey = `${process.env.GEMINI_API_KEY || ""}`.trim();
+const geminiApiKey = `${process.env.SEARCH_AI_GEMINI_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || process.env.GOOGLE_API_KEY || ""}`.trim();
 const googleClientId = `${process.env.VITE_GOOGLE_CLIENT_ID || ""}`.trim();
 const allowStagingEncoreBackend =
   ["1", "true", "yes"].includes(`${process.env.ALLOW_STAGING_ENCORE_BACKEND || ""}`.trim().toLowerCase());
@@ -66,7 +66,7 @@ if (isProductionLikeEnvironment && !encoreApiUrl) {
 }
 
 if (isProductionLikeEnvironment && !geminiApiKey) {
-  console.error("Production config check failed. GEMINI_API_KEY must be set for preview and production builds.");
+  console.error("Production config check failed. Set SEARCH_AI_GEMINI_API_KEY or GEMINI_API_KEY (GOOGLE_AI_API_KEY / GOOGLE_API_KEY aliases also supported).");
   process.exit(1);
 }
 

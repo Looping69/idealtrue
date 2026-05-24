@@ -5,6 +5,7 @@ import { createServer } from "http";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { AiRequestError, enforceAiRateLimit, resolveAiActor } from "./lib/server/ai-rails.js";
+import { AiProviderError, isProviderAuthError } from "./lib/server/ai-provider-error.js";
 import { generateTripPlannerReply } from "./lib/server/trip-planner.js";
 import { generateReviewSummary } from "./lib/server/review-summary.js";
 import { generateListingSocialCreative } from "./lib/server/social-image.js";
@@ -144,7 +145,6 @@ async function startServer() {
         headers: req.headers,
         cookieHeader: req.headers.cookie,
         env: process.env,
-        requireAuth: true,
       });
       enforceAiRateLimit("tripPlanner", actor);
       const reply = await generateTripPlannerReply(req.body?.messages, {
@@ -156,9 +156,13 @@ async function startServer() {
       if (error instanceof AiRequestError && error.retryAfterSec) {
         res.setHeader("Retry-After", String(error.retryAfterSec));
       }
-      res.status(error instanceof AiRequestError ? error.statusCode : 400).json({
-        error: error instanceof Error ? error.message : "Trip planner request failed.",
-      });
+      const message =
+        isProviderAuthError(error)
+          ? "AI provider authentication is misconfigured on the server. Verify GEMINI_API_KEY or SEARCH_AI_GEMINI_API_KEY and allowed API-key restrictions in Google AI Studio."
+          : error instanceof Error
+            ? error.message
+            : "Trip planner request failed.";
+      res.status(error instanceof AiRequestError ? error.statusCode : error instanceof AiProviderError ? 502 : 400).json({ error: message });
     }
   });
 
@@ -176,9 +180,13 @@ async function startServer() {
       if (error instanceof AiRequestError && error.retryAfterSec) {
         res.setHeader("Retry-After", String(error.retryAfterSec));
       }
-      res.status(error instanceof AiRequestError ? error.statusCode : 400).json({
-        error: error instanceof Error ? error.message : "Review summary request failed.",
-      });
+      const message =
+        isProviderAuthError(error)
+          ? "AI provider authentication is misconfigured on the server. Verify GEMINI_API_KEY or SEARCH_AI_GEMINI_API_KEY and allowed API-key restrictions in Google AI Studio."
+          : error instanceof Error
+            ? error.message
+            : "Review summary request failed.";
+      res.status(error instanceof AiRequestError ? error.statusCode : error instanceof AiProviderError ? 502 : 400).json({ error: message });
     }
   });
 
@@ -206,11 +214,16 @@ async function startServer() {
       });
       res.json(creative);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Social image request failed.";
+      const message =
+        isProviderAuthError(error)
+          ? "AI provider authentication is misconfigured on the server. Verify GEMINI_API_KEY or SEARCH_AI_GEMINI_API_KEY and allowed API-key restrictions in Google AI Studio."
+          : error instanceof Error
+            ? error.message
+            : "Social image request failed.";
       if (error instanceof AiRequestError && error.retryAfterSec) {
         res.setHeader("Retry-After", String(error.retryAfterSec));
       }
-      res.status(error instanceof AiRequestError ? error.statusCode : /signed in|own listings|belong to this listing/i.test(message) ? 403 : 400).json({
+      res.status(error instanceof AiRequestError ? error.statusCode : error instanceof AiProviderError ? 502 : /signed in|own listings|belong to this listing/i.test(message) ? 403 : 400).json({
         error: message,
       });
     }
