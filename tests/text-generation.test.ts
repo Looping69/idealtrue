@@ -147,6 +147,8 @@ test("generateTextWithFallback falls back to DeepSeek when Gemini auth is invali
     assert.equal(calls.length, 2);
     assert.match(calls[0].url, /generativelanguage\.googleapis\.com/);
     assert.match(calls[1].url, /api\.deepseek\.com\/chat\/completions/);
+    const deepSeekPayload = JSON.parse(`${calls[1].init?.body || "{}"}`);
+    assert.equal(deepSeekPayload.model, "deepseek-v4-flash");
   } finally {
     Object.defineProperty(globalThis, "fetch", {
       value: originalFetch,
