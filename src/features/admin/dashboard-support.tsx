@@ -12,6 +12,7 @@ export function toListingPayload(
 ): SaveListingInput {
   return {
     id: listing.id,
+    hostId: listing.hostId,
     title: listing.title,
     description: listing.description,
     location: listing.location,
@@ -37,6 +38,13 @@ export function toListingPayload(
     isOccupied: listing.isOccupied,
     coordinates: listing.coordinates || null,
     blockedDates: listing.blockedDates || [],
+    settlementProfile: listing.settlementProfile
+      ? {
+          paymentMethod: listing.settlementProfile.paymentMethod ?? null,
+          paymentInstructions: listing.settlementProfile.paymentInstructions ?? null,
+          paymentReferencePrefix: listing.settlementProfile.paymentReferencePrefix ?? null,
+        }
+      : null,
     status,
     rejectionReason,
   };

@@ -20,7 +20,7 @@ import { notifyAccountStatusChanged, type StoredNotification } from "../ops/noti
 import { kycDocumentsBucket } from "../ops/storage";
 import { referralsDB } from "../referrals/db";
 import { reviewsDB } from "../reviews/db";
-import type { AccountStatus, HostPlan, KycStatus, ReferralTier, UserProfile, UserRole } from "../shared/domain";
+import type { AccountStatus, HostManagementMode, HostPlan, KycStatus, ReferralTier, UserProfile, UserRole } from "../shared/domain";
 import {
   buildAccountStatusBlockMessage,
   normalizeAccountStatusReason,
@@ -85,6 +85,7 @@ interface UpsertProfileParams {
   photoUrl?: string | null;
   role?: UserRole;
   hostPlan?: HostPlan;
+  managementMode?: HostManagementMode;
   kycStatus?: KycStatus;
   referredByCode?: string | null;
   paymentMethod?: string | null;
@@ -115,6 +116,7 @@ interface AdminUpdateUserParams {
   displayName?: string;
   role?: UserRole;
   hostPlan?: HostPlan;
+  managementMode?: HostManagementMode;
   kycStatus?: KycStatus;
   balance?: number;
   tier?: ReferralTier;
@@ -141,6 +143,7 @@ type UserRow = {
   role: UserRole;
   is_admin: boolean;
   host_plan: HostPlan;
+  management_mode: HostManagementMode;
   kyc_status: KycStatus;
   account_status: AccountStatus;
   account_status_reason: string | null;
@@ -200,6 +203,7 @@ const USER_SELECT = `
     role,
     is_admin,
     host_plan,
+    management_mode,
     kyc_status,
     account_status,
     account_status_reason,
@@ -308,6 +312,7 @@ function mapUser(row: UserRow): UserProfile {
     role: row.role,
     isAdmin: row.is_admin,
     hostPlan: row.host_plan,
+    managementMode: row.management_mode,
     kycStatus: row.kyc_status,
     accountStatus: row.account_status,
     accountStatusReason: row.account_status_reason,
@@ -1017,8 +1022,8 @@ export const upsertProfile = api<UpsertProfileParams, SessionResponse>(
     );
     if (!existing) throw APIError.notFound("User not found.");
 
-    if (params.hostPlan !== undefined || params.kycStatus !== undefined) {
-      throw APIError.permissionDenied("Host plan and KYC status can only be changed by administrators.");
+    if (params.hostPlan !== undefined || params.managementMode !== undefined || params.kycStatus !== undefined) {
+      throw APIError.permissionDenied("Host plan, management mode, and KYC status can only be changed by administrators.");
     }
 
     const nextRole = resolveSelfServiceRole(existing.role, existing.is_admin, params.role);
@@ -1154,6 +1159,7 @@ export const adminUpdateUser = api<AdminUpdateUserParams, { user: UserProfile }>
     const nextRole = params.role ?? existing.role;
     const nextIsAdmin = nextRole === "admin" ? true : existing.is_admin;
     const nextHostPlan = params.hostPlan ?? existing.host_plan;
+    const nextManagementMode = params.managementMode ?? existing.management_mode;
     const nextKycStatus = params.kycStatus ?? existing.kyc_status;
     const nextBalance = params.balance ?? existing.balance;
     const nextTier = params.tier ?? existing.tier;
@@ -1165,6 +1171,7 @@ export const adminUpdateUser = api<AdminUpdateUserParams, { user: UserProfile }>
           role = ${nextRole},
           is_admin = ${nextIsAdmin},
           host_plan = ${nextHostPlan},
+          management_mode = ${nextManagementMode},
           kyc_status = ${nextKycStatus},
           balance = ${nextBalance},
           tier = ${nextTier},
@@ -1179,6 +1186,7 @@ export const adminUpdateUser = api<AdminUpdateUserParams, { user: UserProfile }>
         role: nextRole,
         is_admin: nextIsAdmin,
         host_plan: nextHostPlan,
+        management_mode: nextManagementMode,
         kyc_status: nextKycStatus,
         balance: nextBalance,
         tier: nextTier,

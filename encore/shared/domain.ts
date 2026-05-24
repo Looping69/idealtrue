@@ -1,5 +1,6 @@
 export type UserRole = "guest" | "host" | "admin" | "support";
 export type HostPlan = "standard" | "professional" | "premium";
+export type HostManagementMode = "self_service" | "managed";
 export type KycStatus = "none" | "pending" | "verified" | "rejected";
 export type ReferralTier = "bronze" | "silver" | "gold";
 export type AccountStatus = "active" | "suspended" | "deactivated";
@@ -43,10 +44,19 @@ export interface UserProfile {
   tier: ReferralTier;
   referralCode?: string | null;
   referredByCode?: string | null;
+  managementMode: HostManagementMode;
   paymentMethod?: string | null;
   paymentInstructions?: string | null;
   paymentReferencePrefix?: string | null;
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface ListingSettlementProfileRecord {
+  listingId: string;
+  paymentMethod?: string | null;
+  paymentInstructions?: string | null;
+  paymentReferencePrefix?: string | null;
   updatedAt: string;
 }
 
@@ -80,6 +90,7 @@ export interface ListingRecord {
   blockedDates?: string[];
   manualBlockedDates?: string[];
   availabilityBlocks?: ListingAvailabilityBlockRecord[];
+  settlementProfile?: ListingSettlementProfileRecord | null;
   status: ListingStatus;
   rejectionReason?: string | null;
   createdAt: string;

@@ -162,7 +162,7 @@ export function useAdminDashboardData({ notify, profileId, profileRole }: UseAdm
   }, []);
 
   const refreshKycSubmissions = useCallback(async () => {
-    if (profileRole !== 'admin') {
+    if (profileRole !== 'admin' && profileRole !== 'support') {
       return;
     }
 

@@ -321,6 +321,211 @@ export function PendingListingsSection({
   );
 }
 
+export function ManagedHostingSection({
+  allBookings,
+  allListings,
+  allUsers,
+}: {
+  allBookings: Booking[];
+  allListings: Listing[];
+  allUsers: UserProfile[];
+}) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const managedHosts = allUsers.filter((user) => user.role === 'host' && user.managementMode === 'managed');
+  const managedHostIds = new Set(managedHosts.map((host) => host.id));
+  const managedListings = allListings.filter((listing) => managedHostIds.has(listing.hostId));
+  const filteredHosts = managedHosts.filter((host) => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    if (!normalizedQuery) return true;
+
+    const hostListings = managedListings.filter((listing) => listing.hostId === host.id);
+    return (
+      host.displayName.toLowerCase().includes(normalizedQuery) ||
+      host.email.toLowerCase().includes(normalizedQuery) ||
+      hostListings.some((listing) => listing.title.toLowerCase().includes(normalizedQuery))
+    );
+  });
+  const activeManagedListings = managedListings.filter((listing) => listing.status === 'active').length;
+  const settlementCoverageCount = managedListings.filter(
+    (listing) => Boolean(listing.settlementProfile?.paymentMethod?.trim()) && Boolean(listing.settlementProfile?.paymentInstructions?.trim()),
+  ).length;
+  const settlementGapCount = managedListings.length - settlementCoverageCount;
+  const openManagedEnquiries = allBookings.filter(
+    (booking) => managedHostIds.has(booking.hostId) && ['PENDING', 'VIEWED', 'RESPONDED', 'APPROVED'].includes(booking.inquiryState),
+  ).length;
+
+  return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight text-[#1a1c1e]">Managed Hosting</h1>
+          <p className="max-w-3xl text-[#5e6064]">
+            Hosts on the managed package sit in a different operating lane. Listing payment instructions are listing-scoped here, not buried in one host profile.
+          </p>
+        </div>
+        <div className="relative w-full max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Input
+            placeholder="Search managed hosts or listings..."
+            className="h-10 rounded-xl pl-10"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Card className="space-y-3 p-5">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Managed Hosts</p>
+            <Users className="h-4 w-4 text-slate-400" />
+          </div>
+          <p className="text-3xl font-bold text-slate-900">{managedHosts.length}</p>
+          <p className="text-sm text-slate-500">Hosts delegated to the Ideal Stay team.</p>
+        </Card>
+        <Card className="space-y-3 p-5">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Managed Listings</p>
+            <Home className="h-4 w-4 text-slate-400" />
+          </div>
+          <p className="text-3xl font-bold text-slate-900">{managedListings.length}</p>
+          <p className="text-sm text-slate-500">{activeManagedListings} currently active and live.</p>
+        </Card>
+        <Card className="space-y-3 p-5">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Settlement Gaps</p>
+            <AlertCircle className="h-4 w-4 text-amber-500" />
+          </div>
+          <p className="text-3xl font-bold text-slate-900">{settlementGapCount}</p>
+          <p className="text-sm text-slate-500">Managed listings missing payment method or instructions.</p>
+        </Card>
+        <Card className="space-y-3 p-5">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Open Enquiries</p>
+            <MessageSquare className="h-4 w-4 text-slate-400" />
+          </div>
+          <p className="text-3xl font-bold text-slate-900">{openManagedEnquiries}</p>
+          <p className="text-sm text-slate-500">Managed-booking conversations still waiting on action.</p>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr,0.8fr]">
+        <Card className="overflow-hidden">
+          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Managed Host Coverage</h2>
+              <p className="text-sm text-slate-500">Who is being managed, how many listings they have, and whether each listing has its own settlement profile.</p>
+            </div>
+            <Badge variant="neutral" className="text-[10px] uppercase">
+              {filteredHosts.length} visible
+            </Badge>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {filteredHosts.length === 0 ? (
+              <div className="px-5 py-16 text-center text-sm text-slate-500">No managed hosts match the current filter.</div>
+            ) : filteredHosts.map((host) => {
+              const hostListings = managedListings.filter((listing) => listing.hostId === host.id);
+              const coveredListings = hostListings.filter(
+                (listing) => Boolean(listing.settlementProfile?.paymentMethod?.trim()) && Boolean(listing.settlementProfile?.paymentInstructions?.trim()),
+              ).length;
+              const pendingListings = hostListings.filter((listing) => listing.status === 'pending').length;
+              return (
+                <div key={host.id} className="space-y-4 px-5 py-4">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-base font-semibold text-slate-900">{host.displayName}</h3>
+                        <Badge variant="warning" className="text-[10px] uppercase">managed</Badge>
+                        <Badge variant="neutral" className="text-[10px] uppercase">{host.hostPlan ?? 'standard'}</Badge>
+                      </div>
+                      <p className="mt-1 truncate text-sm text-slate-500">{host.email}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-sm text-slate-500 sm:grid-cols-3">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Listings</p>
+                        <p className="mt-1 text-base font-semibold text-slate-900">{hostListings.length}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Pending</p>
+                        <p className="mt-1 text-base font-semibold text-slate-900">{pendingListings}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Settlement</p>
+                        <p className="mt-1 text-base font-semibold text-slate-900">{coveredListings}/{hostListings.length}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                    {hostListings.map((listing) => {
+                      const hasSettlementProfile = Boolean(listing.settlementProfile?.paymentMethod?.trim()) && Boolean(listing.settlementProfile?.paymentInstructions?.trim());
+                      return (
+                        <div key={listing.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-slate-900">{listing.title}</p>
+                              <p className="mt-1 text-xs text-slate-500">{listing.location}</p>
+                            </div>
+                            <Badge
+                              variant={listing.status === 'active' ? 'success' : listing.status === 'pending' ? 'warning' : 'neutral'}
+                              className="text-[10px] uppercase"
+                            >
+                              {listing.status}
+                            </Badge>
+                          </div>
+                          <div className="mt-4 flex flex-wrap items-center gap-2">
+                            <Badge variant={hasSettlementProfile ? 'success' : 'warning'} className="text-[10px] uppercase">
+                              {hasSettlementProfile ? 'settlement ready' : 'needs settlement'}
+                            </Badge>
+                            <Badge variant="neutral" className="text-[10px]">
+                              {listing.settlementProfile?.paymentMethod?.trim() || 'No method'}
+                            </Badge>
+                            {listing.settlementProfile?.paymentReferencePrefix?.trim() ? (
+                              <Badge variant="neutral" className="text-[10px]">
+                                Ref {listing.settlementProfile.paymentReferencePrefix}
+                              </Badge>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {hostListings.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                        This managed host does not have listings yet.
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+
+        <Card className="space-y-5 p-5">
+          <div className="space-y-1">
+            <h2 className="text-lg font-bold text-slate-900">Payment Scope Rules</h2>
+            <p className="text-sm text-slate-500">These are the operational guardrails this package needs.</p>
+          </div>
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Listing-level account</p>
+              <p className="mt-2 text-sm text-slate-700">Every managed listing needs its own settlement instructions because hosts can route guests differently per property.</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Coverage today</p>
+              <p className="mt-2 text-sm text-slate-700">{settlementCoverageCount} of {managedListings.length} managed listings currently have a complete settlement profile.</p>
+            </div>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Security posture</p>
+              <p className="mt-2 text-sm text-amber-900">Staff should only edit listing-scoped payment instructions inside controlled admin flows. Do not fall back to a loose host-profile field for managed inventory.</p>
+            </div>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 export function UsersSection({
   allHostBillingAccounts,
   allUsers,
@@ -400,11 +605,19 @@ export function UsersSection({
                     </div>
                   </td>
                   <td className="px-4 py-2.5">
-                    <select className="h-8 rounded-md border-none bg-slate-100 px-2 text-[11px] font-bold focus:ring-2 focus:ring-primary" value={user.role} onChange={(event) => handleUpdateUserRole(user.id, event.target.value as UserProfile['role'])}>
-                      <option value="guest">Guest</option>
-                      <option value="host">Host</option>
-                      <option value="admin">Admin</option>
-                    </select>
+                    <div className="space-y-1">
+                      <select className="h-8 rounded-md border-none bg-slate-100 px-2 text-[11px] font-bold focus:ring-2 focus:ring-primary" value={user.role} onChange={(event) => handleUpdateUserRole(user.id, event.target.value as UserProfile['role'])}>
+                        <option value="guest">Guest</option>
+                        <option value="host">Host</option>
+                        <option value="support">Support</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                      {user.role === 'host' ? (
+                        <Badge variant={user.managementMode === 'managed' ? 'warning' : 'neutral'} className="text-[9px] uppercase">
+                          {user.managementMode === 'managed' ? 'managed' : 'self-service'}
+                        </Badge>
+                      ) : null}
+                    </div>
                   </td>
                   <td className="px-4 py-2.5">
                     <div className="space-y-1">

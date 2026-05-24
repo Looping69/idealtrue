@@ -12,6 +12,7 @@ function AuthProbe() {
       <div data-testid="user-id">{user?.id}</div>
       <div data-testid="display-name">{profile?.displayName}</div>
       <div data-testid="host-plan">{profile?.hostPlan}</div>
+      <div data-testid="management-mode">{profile?.managementMode}</div>
     </div>
   );
 }
@@ -29,6 +30,7 @@ describe('AuthProvider', () => {
             photoUrl: 'https://cdn.example.com/avatar.jpg',
             role: 'host',
             hostPlan: 'professional',
+            managementMode: 'managed',
             kycStatus: 'verified',
             balance: 1250,
             referralCount: 4,
@@ -54,5 +56,6 @@ describe('AuthProvider', () => {
     expect(await screen.findByTestId('user-id')).toHaveTextContent('user-1');
     expect(screen.getByTestId('display-name')).toHaveTextContent('Guest Example');
     expect(screen.getByTestId('host-plan')).toHaveTextContent('professional');
+    expect(screen.getByTestId('management-mode')).toHaveTextContent('managed');
   });
 });

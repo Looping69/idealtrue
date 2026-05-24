@@ -32,6 +32,7 @@ import type {
   ListingAvailabilityBlockRecord,
   ListingAvailabilitySummaryRecord,
   ListingRecord,
+  ListingSettlementProfileRecord,
   ListingStatus,
 } from "../shared/domain";
 
@@ -88,8 +89,24 @@ type HostAccessRow = {
   kyc_status: "none" | "pending" | "verified" | "rejected";
 };
 
+type SettlementProfileRow = {
+  listing_id: string;
+  payment_method: string | null;
+  payment_instructions: string | null;
+  payment_reference_prefix: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type SettlementProfileInput = {
+  paymentMethod?: string | null;
+  paymentInstructions?: string | null;
+  paymentReferencePrefix?: string | null;
+};
+
 interface SaveListingParams {
   id?: string;
+  hostId?: string;
   title: string;
   description: string;
   location: string;
@@ -115,6 +132,7 @@ interface SaveListingParams {
   latitude?: number | null;
   longitude?: number | null;
   blockedDates?: string[];
+  settlementProfile?: SettlementProfileInput | null;
   status: ListingStatus;
   rejectionReason?: string | null;
 }
@@ -270,7 +288,7 @@ async function assertCanUploadMedia(auth: AuthData, listingId?: string) {
     SELECT * FROM listings WHERE id = ${normalizedListingId}
   `;
   if (!listing) throw APIError.notFound("Listing not found.");
-  if (listing.host_id !== auth.userID && auth.role !== "admin") {
+  if (listing.host_id !== auth.userID && auth.role !== "admin" && auth.role !== "support") {
     throw APIError.permissionDenied("You cannot upload media for another host's listing.");
   }
 }
@@ -292,6 +310,117 @@ function canReadUnpublishedListing(auth: AuthData | null, listingHostId: string)
   if (auth.role === "admin" || auth.role === "support") return true;
   if (auth.role === "host" && auth.userID === listingHostId) return true;
   return false;
+}
+
+function canReadListingSettlementProfile(auth: AuthData | null, listingHostId: string) {
+  return canReadUnpublishedListing(auth, listingHostId);
+}
+
+function normalizeOptionalText(value: string | null | undefined) {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const trimmed = value?.trim() ?? "";
+  return trimmed ? trimmed : null;
+}
+
+function normalizeSettlementProfileInput(input: SettlementProfileInput | null | undefined) {
+  if (input === undefined) {
+    return undefined;
+  }
+
+  const paymentMethod = normalizeOptionalText(input?.paymentMethod);
+  const paymentInstructions = normalizeOptionalText(input?.paymentInstructions);
+  const paymentReferencePrefix = normalizeOptionalText(input?.paymentReferencePrefix);
+
+  return {
+    paymentMethod: paymentMethod ?? null,
+    paymentInstructions: paymentInstructions ?? null,
+    paymentReferencePrefix: paymentReferencePrefix ?? null,
+  };
+}
+
+function mapSettlementProfile(row: SettlementProfileRow): ListingSettlementProfileRecord {
+  return {
+    listingId: row.listing_id,
+    paymentMethod: row.payment_method,
+    paymentInstructions: row.payment_instructions,
+    paymentReferencePrefix: row.payment_reference_prefix,
+    updatedAt: row.updated_at,
+  };
+}
+
+function isSettlementProfileSchemaError(error: unknown) {
+  return error instanceof Error && error.message.toLowerCase().includes("listing_settlement_profiles");
+}
+
+async function getListingSettlementProfile(listingId: string): Promise<ListingSettlementProfileRecord | null> {
+  try {
+    const row = await catalogDB.queryRow<SettlementProfileRow>`
+      SELECT listing_id, payment_method, payment_instructions, payment_reference_prefix, created_at, updated_at
+      FROM listing_settlement_profiles
+      WHERE listing_id = ${listingId}
+    `;
+
+    return row ? mapSettlementProfile(row) : null;
+  } catch (error) {
+    if (isSettlementProfileSchemaError(error)) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function upsertListingSettlementProfile(
+  listingId: string,
+  settlementProfile: SettlementProfileInput | null | undefined,
+  now: string,
+) {
+  const normalized = normalizeSettlementProfileInput(settlementProfile);
+  if (normalized === undefined) {
+    return;
+  }
+
+  const hasAnyValue =
+    normalized.paymentMethod !== null
+    || normalized.paymentInstructions !== null
+    || normalized.paymentReferencePrefix !== null;
+
+  try {
+    if (!hasAnyValue) {
+      await catalogDB.exec`
+        DELETE FROM listing_settlement_profiles
+        WHERE listing_id = ${listingId}
+      `;
+      return;
+    }
+
+    await catalogDB.exec`
+      INSERT INTO listing_settlement_profiles (
+        listing_id, payment_method, payment_instructions, payment_reference_prefix, created_at, updated_at
+      )
+      VALUES (
+        ${listingId},
+        ${normalized.paymentMethod},
+        ${normalized.paymentInstructions},
+        ${normalized.paymentReferencePrefix},
+        ${now},
+        ${now}
+      )
+      ON CONFLICT (listing_id) DO UPDATE
+      SET payment_method = EXCLUDED.payment_method,
+          payment_instructions = EXCLUDED.payment_instructions,
+          payment_reference_prefix = EXCLUDED.payment_reference_prefix,
+          updated_at = EXCLUDED.updated_at
+    `;
+  } catch (error) {
+    if (isSettlementProfileSchemaError(error)) {
+      console.warn(`Listing settlement profile schema missing for ${listingId}; skipping settlement save.`, error);
+      return;
+    }
+    throw error;
+  }
 }
 
 async function isHostGreylisted(hostId: string) {
@@ -651,17 +780,30 @@ function buildAvailabilitySummaryRecord(
   };
 }
 
-async function getListingWithAvailability(row: ListingRow): Promise<ListingRecord> {
+async function getListingWithAvailability(
+  row: ListingRow,
+  options?: { includeSettlementProfile?: boolean },
+): Promise<ListingRecord> {
   try {
     const availabilityBlocks = await ensureListingAvailabilityHydrated(row);
-    return mapListing(row, availabilityBlocks.map((block) => toAvailabilityBlockRecord(block)));
+    const settlementProfile = options?.includeSettlementProfile ? await getListingSettlementProfile(row.id) : null;
+    return mapListing(
+      row,
+      availabilityBlocks.map((block) => toAvailabilityBlockRecord(block)),
+      settlementProfile,
+    );
   } catch (error) {
     console.error(`Failed to hydrate availability for listing ${row.id}. Returning listing without availability blocks.`, error);
-    return mapListing(row, []);
+    const settlementProfile = options?.includeSettlementProfile ? await getListingSettlementProfile(row.id) : null;
+    return mapListing(row, [], settlementProfile);
   }
 }
 
-function mapListing(row: ListingRow, availabilityBlocks?: ListingAvailabilityBlockRecord[]): ListingRecord {
+function mapListing(
+  row: ListingRow,
+  availabilityBlocks?: ListingAvailabilityBlockRecord[],
+  settlementProfile?: ListingSettlementProfileRecord | null,
+): ListingRecord {
   const resolvedAvailabilityBlocks = availabilityBlocks ?? [];
   return {
     id: row.id,
@@ -693,6 +835,7 @@ function mapListing(row: ListingRow, availabilityBlocks?: ListingAvailabilityBlo
     blockedDates: row.blocked_dates ?? [],
     manualBlockedDates: buildManualBlockedDates(resolvedAvailabilityBlocks),
     availabilityBlocks: resolvedAvailabilityBlocks,
+    settlementProfile: settlementProfile ?? null,
     status: row.status,
     rejectionReason: row.rejection_reason,
     createdAt: row.created_at,
@@ -1041,7 +1184,7 @@ export const listListings = api<ListListingsParams, { listings: ListingRecord[] 
 
       const visibleRows = await filterPubliclyVisibleListings(rows);
       const availabilityByListing = await listAvailabilityBlocksForListings(visibleRows.map((row) => row.id));
-      return { listings: visibleRows.map((row) => mapListing(row, availabilityByListing.get(row.id) ?? [])) };
+      return { listings: visibleRows.map((row) => mapListing(row, availabilityByListing.get(row.id) ?? [], null)) };
     }
 
     const canSeeUnpublished =
@@ -1063,7 +1206,7 @@ export const listListings = api<ListListingsParams, { listings: ListingRecord[] 
 
       const visibleRows = await filterPubliclyVisibleListings(rows);
       const availabilityByListing = await listAvailabilityBlocksForListings(visibleRows.map((row) => row.id));
-      return { listings: visibleRows.map((row) => mapListing(row, availabilityByListing.get(row.id) ?? [])) };
+      return { listings: visibleRows.map((row) => mapListing(row, availabilityByListing.get(row.id) ?? [], null)) };
     }
 
     const rows = await catalogDB.rawQueryAll<ListingRow>(
@@ -1078,7 +1221,17 @@ export const listListings = api<ListListingsParams, { listings: ListingRecord[] 
     );
 
     const availabilityByListing = await listAvailabilityBlocksForListings(rows.map((row) => row.id));
-    return { listings: rows.map((row) => mapListing(row, availabilityByListing.get(row.id) ?? [])) };
+    return {
+      listings: await Promise.all(
+        rows.map(async (row) =>
+          mapListing(
+            row,
+            availabilityByListing.get(row.id) ?? [],
+            canReadListingSettlementProfile(auth, row.host_id) ? await getListingSettlementProfile(row.id) : null,
+          ),
+        ),
+      ),
+    };
   },
 );
 
@@ -1098,7 +1251,11 @@ export const getListing = api<{ id: string }, { listing: ListingRecord }>(
       throw APIError.notFound("Listing not found.");
     }
 
-    return { listing: await getListingWithAvailability(row) };
+    return {
+      listing: await getListingWithAvailability(row, {
+        includeSettlementProfile: canReadListingSettlementProfile(auth, row.host_id),
+      }),
+    };
   },
 );
 
@@ -1119,11 +1276,6 @@ export const saveListing = api<SaveListingParams, { listing: ListingRecord }>(
     if (!isStaffOperator) {
       await assertHostBillingOperationalAccess(auth.userID, "listings");
     }
-    const hostAccess = isStaffOperator ? null : await getHostAccess(auth.userID);
-    if (hostAccess) {
-      assertListingImageCount(params.images, hostAccess.host_plan);
-      assertListingVideoAccess(params.videoUrl, hostAccess.host_plan);
-    }
 
     if (params.id) {
       const existing = await catalogDB.queryRow<ListingRow>`
@@ -1133,11 +1285,14 @@ export const saveListing = api<SaveListingParams, { listing: ListingRecord }>(
       if (existing.host_id !== auth.userID && !isStaffOperator) {
         throw APIError.permissionDenied("You cannot edit another host's listing.");
       }
+      const hostAccess = await getHostAccess(existing.host_id);
+      assertListingImageCount(params.images, hostAccess.host_plan);
+      assertListingVideoAccess(params.videoUrl, hostAccess.host_plan);
 
       let nextStatus = params.status;
       let nextRejectionReason =
         params.status === "rejected" ? params.rejectionReason?.trim() || "Rejected during admin review." : null;
-      if (auth.role !== "admin") {
+      if (!isStaffOperator) {
         if (existing.status === "archived" && params.status !== "archived") {
           throw APIError.failedPrecondition("Archived listings cannot be reactivated by hosts.");
         }
@@ -1190,13 +1345,14 @@ export const saveListing = api<SaveListingParams, { listing: ListingRecord }>(
             updated_at = ${now}
         WHERE id = ${params.id}
       `;
+      await upsertListingSettlementProfile(params.id, params.settlementProfile, now);
 
       await safePublishPlatformEvent({
         type: "listing.updated",
         aggregateId: params.id,
         actorId: auth.userID,
         occurredAt: now,
-        payload: JSON.stringify({ hostId: auth.userID, status: nextStatus }),
+        payload: JSON.stringify({ hostId: existing.host_id, status: nextStatus }),
       }, `listing.updated:${params.id}`);
 
       if (
@@ -1224,16 +1380,20 @@ export const saveListing = api<SaveListingParams, { listing: ListingRecord }>(
       }
 
       return {
-        listing: await getListingWithAvailability(updatedRow),
+        listing: await getListingWithAvailability(updatedRow, { includeSettlementProfile: true }),
       };
     }
 
-    if (auth.role === "support") {
-      throw APIError.permissionDenied("Support staff can edit existing listings but cannot create new ones.");
+    const targetHostId = isStaffOperator ? params.hostId?.trim() : auth.userID;
+    if (!targetHostId) {
+      throw APIError.invalidArgument("Staff-created listings must specify the host that owns the listing.");
     }
+    const hostAccess = await getHostAccess(targetHostId);
+    assertListingImageCount(params.images, hostAccess.host_plan);
+    assertListingVideoAccess(params.videoUrl, hostAccess.host_plan);
 
-    if (auth.role !== "admin") {
-      await assertHostCanCreateListing(auth.userID);
+    if (!isStaffOperator) {
+      await assertHostCanCreateListing(targetHostId);
     }
     const createdStatus = auth.role === "admin" ? params.status : "pending";
 
@@ -1246,7 +1406,7 @@ export const saveListing = api<SaveListingParams, { listing: ListingRecord }>(
         has_restaurant, is_occupied, latitude, longitude, blocked_dates, status, rejection_reason, created_at, updated_at
       )
       VALUES (
-        ${id}, ${auth.userID}, ${params.title}, ${params.description}, ${params.location},
+        ${id}, ${targetHostId}, ${params.title}, ${params.description}, ${params.location},
         ${params.area ?? null}, ${params.province ?? null}, ${params.category}, ${params.type},
         ${params.pricePerNight}, ${params.discountPercent}, ${params.breakageDeposit ?? null}, ${params.adults}, ${params.children},
         ${params.bedrooms}, ${params.bathrooms}, ${params.amenities}, ${params.facilities},
@@ -1255,13 +1415,14 @@ export const saveListing = api<SaveListingParams, { listing: ListingRecord }>(
         ${params.latitude ?? null}, ${params.longitude ?? null}, ${[]}, ${createdStatus}, ${null}, ${now}, ${now}
       )
     `;
+    await upsertListingSettlementProfile(id, params.settlementProfile, now);
 
     await safePublishPlatformEvent({
       type: "listing.created",
       aggregateId: id,
       actorId: auth.userID,
       occurredAt: now,
-      payload: JSON.stringify({ hostId: auth.userID, status: createdStatus }),
+      payload: JSON.stringify({ hostId: targetHostId, status: createdStatus }),
     }, `listing.created:${id}`);
 
     const createdRow = await catalogDB.queryRow<ListingRow>`
@@ -1272,7 +1433,7 @@ export const saveListing = api<SaveListingParams, { listing: ListingRecord }>(
     }
 
     return {
-      listing: await getListingWithAvailability(createdRow),
+      listing: await getListingWithAvailability(createdRow, { includeSettlementProfile: true }),
     };
   },
 );
@@ -1302,6 +1463,10 @@ export const deleteListing = api<{ id: string }, { deleted: true }>(
     await Promise.all([
       billingDB.exec`
         DELETE FROM content_drafts
+        WHERE listing_id = ${id}
+      `,
+      catalogDB.exec`
+        DELETE FROM listing_settlement_profiles
         WHERE listing_id = ${id}
       `,
       reviewsDB.exec`
@@ -1390,7 +1555,7 @@ export const getListingAvailabilitySummary = api<{ listingId: string }, { summar
 export const requestListingMediaUpload = api<UploadUrlParams, { objectKey: string; uploadUrl: string; publicUrl: string }>(
   { expose: true, method: "POST", path: "/host/listings/media/upload-url", auth: true },
   async ({ listingId, filename, contentType }) => {
-    const auth = requireRole("host", "admin");
+    const auth = requireRole("host", "admin", "support");
     if (!ALLOWED_LISTING_MEDIA_CONTENT_TYPES.has(contentType)) {
       throw APIError.invalidArgument("Unsupported listing media content type.");
     }
@@ -1413,7 +1578,7 @@ export const requestListingMediaUpload = api<UploadUrlParams, { objectKey: strin
 export const uploadListingImage = api<UploadListingImageParams, { objectKey: string; publicUrl: string }>(
   { expose: true, method: "POST", path: "/host/listings/media/images", auth: true },
   async ({ listingId, filename, contentType, dataBase64 }) => {
-    const auth = requireRole("host", "admin");
+    const auth = requireRole("host", "admin", "support");
     if (!ALLOWED_LISTING_IMAGE_CONTENT_TYPES.has(contentType)) {
       throw APIError.invalidArgument("Unsupported image type. Please upload JPG, PNG, or WEBP.");
     }
@@ -1454,7 +1619,7 @@ export const uploadListingVideo = api.raw(
   },
   async (req: IncomingMessage, resp: ServerResponse) => {
     try {
-      const auth = requireRole("host", "admin");
+      const auth = requireRole("host", "admin", "support");
       const requestUrl = new URL(req.url || "/", "http://encore.local");
       const listingId = requestUrl.searchParams.get("listingId") || undefined;
       const filename = requestUrl.searchParams.get("filename") || req.headers["x-upload-filename"]?.toString() || "listing-video";
@@ -1465,7 +1630,7 @@ export const uploadListingVideo = api.raw(
       }
 
       await assertCanUploadMedia(auth, listingId);
-      if (auth.role !== "admin") {
+      if (auth.role === "host") {
         const hostAccess = await getHostAccess(auth.userID);
         if (!supportsListingVideo(hostAccess.host_plan)) {
           throw APIError.permissionDenied("Standard hosts cannot upload showcase videos.");

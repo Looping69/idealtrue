@@ -69,6 +69,7 @@ function createEncoreUser(overrides: Partial<Record<string, unknown>> = {}) {
     photoUrl: 'https://cdn.example.com/avatar.jpg',
     role: 'guest',
     hostPlan: 'standard',
+    managementMode: 'self_service',
     kycStatus: 'verified',
     accountStatus: 'active',
     accountStatusReason: null,
@@ -146,6 +147,7 @@ test('getEncoreSessionProfile maps the Encore user profile from the proxy respon
   assert.equal(profile.id, 'user-1');
   assert.equal(profile.role, 'host');
   assert.equal(profile.hostPlan, 'professional');
+  assert.equal(profile.managementMode, 'self_service');
   assert.equal(profile.kycStatus, 'verified');
   assert.equal(profile.paymentMethod, 'bank_transfer');
 });
@@ -181,6 +183,13 @@ test('getListing and saveListing use the canonical Encore listing contract', asy
           latitude: -33.9,
           longitude: 18.4,
           blockedDates: [],
+          settlementProfile: {
+            listingId: 'listing-1',
+            paymentMethod: 'bank_transfer',
+            paymentInstructions: 'Pay Sea Point Stay into the coastal account.',
+            paymentReferencePrefix: 'SEA',
+            updatedAt: '2026-03-01T10:00:00.000Z',
+          },
           status: 'active',
           rejectionReason: null,
           createdAt: '2026-03-01T10:00:00.000Z',
@@ -193,7 +202,7 @@ test('getListing and saveListing use the canonical Encore listing contract', asy
       return createJsonResponse({
         listing: {
           id: 'listing-2',
-          hostId: 'host-1',
+          hostId: 'host-managed-1',
           title: 'Winelands Escape',
           description: 'Quiet stay',
           location: 'Stellenbosch',
@@ -218,6 +227,13 @@ test('getListing and saveListing use the canonical Encore listing contract', asy
           latitude: null,
           longitude: null,
           blockedDates: [],
+          settlementProfile: {
+            listingId: 'listing-2',
+            paymentMethod: 'bank_transfer',
+            paymentInstructions: 'Use the managed host account and include the guest surname.',
+            paymentReferencePrefix: 'MANAGED',
+            updatedAt: '2026-03-02T10:00:00.000Z',
+          },
           status: 'rejected',
           rejectionReason: 'Photos were too blurry and the description was incomplete.',
           createdAt: '2026-03-02T10:00:00.000Z',
@@ -231,6 +247,7 @@ test('getListing and saveListing use the canonical Encore listing contract', asy
 
   const listing = await getListing('listing-1');
   const savedListing = await saveListing({
+    hostId: 'host-managed-1',
     title: 'Winelands Escape',
     description: 'Quiet stay',
     location: 'Stellenbosch',
@@ -254,6 +271,11 @@ test('getListing and saveListing use the canonical Encore listing contract', asy
     isOccupied: false,
     coordinates: null,
     blockedDates: [],
+    settlementProfile: {
+      paymentMethod: 'bank_transfer',
+      paymentInstructions: 'Use the managed host account and include the guest surname.',
+      paymentReferencePrefix: 'MANAGED',
+    },
     status: 'rejected',
     rejectionReason: 'Photos were too blurry and the description was incomplete.',
   });
@@ -263,6 +285,7 @@ test('getListing and saveListing use the canonical Encore listing contract', asy
   assert.equal(fetchCalls[1]?.url, `${DEFAULT_ENCORE_API_URL}/host/listings`);
   assert.equal(fetchCalls[1]?.init?.method, 'POST');
   assert.deepEqual(JSON.parse(String(fetchCalls[1]?.init?.body)), {
+    hostId: 'host-managed-1',
     title: 'Winelands Escape',
     description: 'Quiet stay',
     location: 'Stellenbosch',
@@ -288,12 +311,19 @@ test('getListing and saveListing use the canonical Encore listing contract', asy
     latitude: null,
     longitude: null,
     blockedDates: [],
+    settlementProfile: {
+      paymentMethod: 'bank_transfer',
+      paymentInstructions: 'Use the managed host account and include the guest surname.',
+      paymentReferencePrefix: 'MANAGED',
+    },
     status: 'rejected',
     rejectionReason: 'Photos were too blurry and the description was incomplete.',
   });
   assert.equal(savedListing.id, 'listing-2');
+  assert.equal(savedListing.hostId, 'host-managed-1');
   assert.equal(savedListing.status, 'rejected');
   assert.equal(savedListing.rejectionReason, 'Photos were too blurry and the description was incomplete.');
+  assert.equal(savedListing.settlementProfile?.paymentReferencePrefix, 'MANAGED');
 });
 
 test('deleteListing issues a real DELETE request to the listing endpoint', async () => {

@@ -86,6 +86,12 @@ type HostPaymentDetailsRow = {
   payment_reference_prefix: string | null;
 };
 
+type ListingSettlementProfileRow = {
+  payment_method: string | null;
+  payment_instructions: string | null;
+  payment_reference_prefix: string | null;
+};
+
 interface CreateBookingParams {
   listingId: string;
   hostId?: string;
@@ -287,7 +293,21 @@ async function syncListingAvailabilityForBookings(listingId: string) {
   );
 }
 
-async function getHostPaymentDetails(hostId: string): Promise<HostPaymentDetailsRow> {
+async function getHostPaymentDetails(listingId: string, hostId: string): Promise<HostPaymentDetailsRow> {
+  try {
+    const settlement = await catalogDB.queryRow<ListingSettlementProfileRow>`
+      SELECT payment_method, payment_instructions, payment_reference_prefix
+      FROM listing_settlement_profiles
+      WHERE listing_id = ${listingId}
+    `;
+
+    if (settlement) {
+      return settlement;
+    }
+  } catch (error) {
+    console.error(`Failed to load listing settlement profile for ${listingId}. Falling back to host payment settings.`, error);
+  }
+
   let host: HostPaymentDetailsRow | null = null;
   try {
     host = await identityDB.queryRow<HostPaymentDetailsRow>`
@@ -667,7 +687,7 @@ export const createBooking = api<CreateBookingParams, { booking: BookingRecord }
     if ((params.breakageDeposit ?? null) !== serverBreakageDeposit) {
       throw APIError.failedPrecondition("Listing breakage deposit changed. Please refresh the listing and try again.");
     }
-    const hostPaymentDetails = await getHostPaymentDetails(listing.hostId);
+    const hostPaymentDetails = await getHostPaymentDetails(listing.id, listing.hostId);
     const id = randomUUID();
     const now = new Date().toISOString();
     const expiresAt = computeInquiryExpiresAt("PENDING", now);
@@ -848,7 +868,7 @@ export const updateBookingStatus = api<UpdateBookingStatusParams, { booking: Boo
       }
     }
 
-    const hostPaymentDetails = await getHostPaymentDetails(existing.host_id);
+    const hostPaymentDetails = await getHostPaymentDetails(existing.listing_id, existing.host_id);
     const paymentReference =
       nextStatus === "APPROVED"
         ? existing.payment_reference ?? buildHostPaymentReference(hostPaymentDetails.payment_reference_prefix, existing.id)

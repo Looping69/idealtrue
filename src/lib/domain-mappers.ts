@@ -1,10 +1,12 @@
 import type {
   AccountStatus,
   Booking,
+  HostManagementMode,
   HostPlan,
   KycStatus,
   Listing,
   ListingAvailabilitySummary,
+  ListingSettlementProfile,
   Notification,
   PlatformSettings,
   Referral,
@@ -24,6 +26,7 @@ export interface EncoreUser {
   role: UserRole;
   isAdmin: boolean;
   hostPlan: HostPlan;
+  managementMode: HostManagementMode;
   kycStatus: KycStatus;
   accountStatus: AccountStatus;
   accountStatusReason?: string | null;
@@ -79,6 +82,7 @@ export interface EncoreListing {
   blockedDates?: string[];
   manualBlockedDates?: string[];
   availabilityBlocks?: Listing['availabilityBlocks'];
+  settlementProfile?: ListingSettlementProfile | null;
   status: Listing['status'];
   rejectionReason?: string | null;
   createdAt: string;
@@ -191,6 +195,7 @@ export interface EncoreSubscription {
 
 export interface SaveListingInput {
   id?: string;
+  hostId?: string;
   title: string;
   description: string;
   location: string;
@@ -216,6 +221,11 @@ export interface SaveListingInput {
   isOccupied: boolean;
   coordinates?: { lat: number; lng: number } | null;
   blockedDates?: string[];
+  settlementProfile?: {
+    paymentMethod?: string | null;
+    paymentInstructions?: string | null;
+    paymentReferencePrefix?: string | null;
+  } | null;
   status: Listing['status'];
   rejectionReason?: string | null;
 }
@@ -247,6 +257,7 @@ export function mapEncoreUserToProfile(user: EncoreUser): UserProfile {
     referralCount: user.referralCount,
     tier: user.tier,
     hostPlan: user.hostPlan,
+    managementMode: user.managementMode,
     kycStatus: user.kycStatus,
     paymentMethod: user.paymentMethod || null,
     paymentInstructions: user.paymentInstructions || null,
@@ -305,6 +316,7 @@ export function mapEncoreListing(listing: EncoreListing): Listing {
     blockedDates: listing.blockedDates || [],
     manualBlockedDates: listing.manualBlockedDates || [],
     availabilityBlocks: listing.availabilityBlocks || [],
+    settlementProfile: listing.settlementProfile || null,
   };
 }
 
@@ -444,6 +456,7 @@ export function mapEncorePlatformSettings(settings: EncorePlatformSettings): Pla
 export function toEncoreListingPayload(input: SaveListingInput) {
   return {
     id: input.id,
+    hostId: input.hostId,
     title: input.title,
     description: input.description,
     location: input.location,
@@ -469,6 +482,13 @@ export function toEncoreListingPayload(input: SaveListingInput) {
     latitude: input.coordinates?.lat ?? null,
     longitude: input.coordinates?.lng ?? null,
     blockedDates: input.blockedDates || [],
+    settlementProfile: input.settlementProfile
+      ? {
+          paymentMethod: input.settlementProfile.paymentMethod ?? null,
+          paymentInstructions: input.settlementProfile.paymentInstructions ?? null,
+          paymentReferencePrefix: input.settlementProfile.paymentReferencePrefix ?? null,
+        }
+      : undefined,
     status: input.status,
     rejectionReason: input.status === 'rejected' ? input.rejectionReason ?? null : null,
   };

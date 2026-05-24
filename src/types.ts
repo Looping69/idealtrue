@@ -2,6 +2,7 @@ export type UserRole = 'host' | 'guest' | 'admin' | 'support';
 export type ReferralTier = 'bronze' | 'silver' | 'gold';
 export type KycStatus = 'none' | 'pending' | 'verified' | 'rejected';
 export type HostPlan = 'standard' | 'professional' | 'premium';
+export type HostManagementMode = 'self_service' | 'managed';
 export type AccountStatus = 'active' | 'suspended' | 'deactivated';
 export type HostBillingSource = 'none' | 'voucher' | 'paid';
 export type HostBillingStatus = 'inactive' | 'active' | 'greylisted';
@@ -82,9 +83,17 @@ export interface ListingAvailabilityManualBlockInput {
 export interface ListingAvailabilitySummary {
   listingId: string;
   manualBlockCount: number;
-  manualBlockedDates: string[];
+  manualBlockedDates: string[]; 
   lockedDates: string[];
   upcomingBlocks: ListingAvailabilityBlock[];
+}
+
+export interface ListingSettlementProfile {
+  listingId: string;
+  paymentMethod?: string | null;
+  paymentInstructions?: string | null;
+  paymentReferencePrefix?: string | null;
+  updatedAt: string;
 }
 
 export interface UserProfile {
@@ -105,6 +114,7 @@ export interface UserProfile {
   referralCount: number;
   tier: ReferralTier;
   hostPlan?: HostPlan;
+  managementMode?: HostManagementMode;
   kycStatus: KycStatus;
   paymentMethod?: string | null;
   paymentInstructions?: string | null;
@@ -155,6 +165,7 @@ export interface Listing {
   blockedDates?: string[];
   manualBlockedDates?: string[];
   availabilityBlocks?: ListingAvailabilityBlock[];
+  settlementProfile?: ListingSettlementProfile | null;
 }
 
 export interface Booking {

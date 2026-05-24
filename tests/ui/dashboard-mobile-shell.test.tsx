@@ -41,6 +41,7 @@ vi.mock('@/features/admin/dashboard-sections', () => ({
   OverviewSection: () => <div>Overview section</div>,
   EnquiriesSection: () => <div>Enquiries section</div>,
   ListingsSection: () => <div>Listings section</div>,
+  ManagedHostingSection: () => <div>Managed hosting section</div>,
   PendingListingsSection: () => <div>Pending listings section</div>,
   UsersSection: () => <div>Users section</div>,
   KycSection: () => <div>KYC section</div>,
@@ -139,5 +140,26 @@ describe('dashboard mobile shells', () => {
 
     expect(screen.queryByText('Admin Menu')).not.toBeInTheDocument();
     expect(screen.getAllByText('Settings section').length).toBeGreaterThan(0);
+  });
+
+  it('opens the admin mobile menu and switches into the managed hosting section', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <AdminDashboard />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByLabelText('Open admin navigation'));
+
+    const menuTitle = screen.getByText('Admin Menu');
+    const mobileMenu = menuTitle.closest('aside');
+    expect(mobileMenu).not.toBeNull();
+
+    await user.click(within(mobileMenu as HTMLElement).getByRole('button', { name: 'Managed Hosting' }));
+
+    expect(screen.queryByText('Admin Menu')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Managed hosting section').length).toBeGreaterThan(0);
   });
 });

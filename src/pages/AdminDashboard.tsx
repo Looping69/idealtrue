@@ -40,6 +40,7 @@ import {
   FinancialsSection,
   KycSection,
   ListingsSection,
+  ManagedHostingSection,
   NotificationsSection,
   OverviewSection,
   PendingListingsSection,
@@ -105,6 +106,7 @@ export default function AdminDashboard() {
   const [accountStatusAction, setAccountStatusAction] = useState<AccountStatusAction | null>(null);
   const [accountStatusReason, setAccountStatusReason] = useState('');
   const [isUpdatingAccountStatus, setIsUpdatingAccountStatus] = useState(false);
+  const staffTitle = profile?.role === 'support' ? 'Support' : 'Admin';
 
   const {
     stats,
@@ -333,6 +335,7 @@ export default function AdminDashboard() {
         displayName: user.displayName,
         role: user.role,
         hostPlan: user.hostPlan,
+        managementMode: user.role === 'host' ? user.managementMode ?? 'self_service' : 'self_service',
         kycStatus: user.kycStatus,
         balance: user.balance,
         tier: user.tier,
@@ -355,13 +358,21 @@ export default function AdminDashboard() {
 
   const handleUpdateListing = async (listing: Listing) => {
     try {
-      await saveListing(toListingPayload(listing));
-      setAllListings((current) => current.map((item) => item.id === listing.id ? listing : item));
+      const savedListing = await saveListing(toListingPayload(listing));
+      setAllListings((current) => {
+        const next = current.map((item) => item.id === savedListing.id ? savedListing : item);
+        setTopListings(next.filter((item) => item.status === 'active').slice(0, 5));
+        setStats((existing) => ({
+          ...existing,
+          activeListings: next.filter((item) => item.status === 'active').length,
+        }));
+        return next;
+      });
       const notification = await createAdminNotification({
         title: 'Listing Updated',
-        message: `Your listing "${listing.title}" has been updated by an administrator.`,
+        message: `Your listing "${savedListing.title}" has been updated by an administrator.`,
         type: 'info',
-        target: listing.hostId,
+        target: savedListing.hostId,
         actionPath: '/host/listings',
       });
       setAllNotifications((current) => [notification, ...current]);
@@ -476,6 +487,7 @@ export default function AdminDashboard() {
     { id: 'pending', label: 'Pending Listings', icon: ClipboardList, section: 'MAIN MENU' },
     { id: 'kyc', label: 'KYC Verification', icon: ShieldCheck, section: 'MAIN MENU' },
     { id: 'users', label: 'Users', icon: Users, section: 'MAIN MENU' },
+    { id: 'managed-hosting', label: 'Managed Hosting', icon: Home, section: 'MAIN MENU' },
     { id: 'enquiries', label: 'Enquiries', icon: MessageSquare, section: 'MAIN MENU' },
     { id: 'listings', label: 'Listings', icon: Home, section: 'MAIN MENU' },
     { id: 'reviews', label: 'Reviews', icon: Star, section: 'MAIN MENU' },
@@ -496,6 +508,8 @@ export default function AdminDashboard() {
         return <KycSection allUsers={allUsers} handleApproveKYC={handleApproveKYC} handleReviewKYC={handleReviewKYC} kycSubmissions={kycSubmissions} openRejectKycDialog={openRejectKycDialog} />;
       case 'users':
         return <UsersSection allHostBillingAccounts={allHostBillingAccounts} allUsers={allUsers} handleReviewKYC={handleReviewKYC} handleSetHostGreylist={handleSetHostGreylist} handleUpdateUserRole={handleUpdateUserRole} kycSubmissions={kycSubmissions} navigate={navigate} openAccountStatusDialog={openAccountStatusDialog} setConfirmDelete={setConfirmDelete} setEditingUser={setEditingUser} />;
+      case 'managed-hosting':
+        return <ManagedHostingSection allBookings={allBookings} allListings={allListings} allUsers={allUsers} />;
       case 'enquiries':
         return <EnquiriesSection allBookings={allBookings} allListings={allListings} allUsers={allUsers} />;
       case 'listings':
@@ -529,7 +543,7 @@ export default function AdminDashboard() {
         <BrandLogo variant="inline" size="lg" priority className="h-16" />
         <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.24em] text-slate-500">
           <Settings className="h-3.5 w-3.5" />
-          Admin
+          {staffTitle}
         </div>
       </div>
 
@@ -563,7 +577,7 @@ export default function AdminDashboard() {
         <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0f172a] text-xs font-bold text-white">WI</div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-bold text-slate-900">Admin User</p>
+            <p className="truncate text-xs font-bold text-slate-900">{staffTitle} User</p>
             <p className="truncate text-[10px] text-slate-500">{profile?.email}</p>
           </div>
         </div>
@@ -746,9 +760,22 @@ export default function AdminDashboard() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-xs font-bold uppercase text-slate-500">Role</label>
-                  <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={editingUser.role} onChange={(event) => setEditingUser({ ...editingUser, role: event.target.value as UserProfile['role'] })}>
+                  <select
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={editingUser.role}
+                    onChange={(event) => {
+                      const nextRole = event.target.value as UserProfile['role'];
+                      setEditingUser({
+                        ...editingUser,
+                        role: nextRole,
+                        hostPlan: nextRole === 'host' ? editingUser.hostPlan ?? 'standard' : editingUser.hostPlan,
+                        managementMode: nextRole === 'host' ? editingUser.managementMode ?? 'self_service' : 'self_service',
+                      });
+                    }}
+                  >
                     <option value="guest">Guest</option>
                     <option value="host">Host</option>
+                    <option value="support">Support</option>
                     <option value="admin">Admin</option>
                   </select>
                 </div>
@@ -762,6 +789,33 @@ export default function AdminDashboard() {
                   </select>
                 </div>
               </div>
+              {editingUser.role === 'host' ? (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase text-slate-500">Host Plan</label>
+                    <select
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      value={editingUser.hostPlan ?? 'standard'}
+                      onChange={(event) => setEditingUser({ ...editingUser, hostPlan: event.target.value as UserProfile['hostPlan'] })}
+                    >
+                      <option value="standard">Standard</option>
+                      <option value="professional">Professional</option>
+                      <option value="premium">Premium</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase text-slate-500">Management Mode</label>
+                    <select
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      value={editingUser.managementMode ?? 'self_service'}
+                      onChange={(event) => setEditingUser({ ...editingUser, managementMode: event.target.value as UserProfile['managementMode'] })}
+                    >
+                      <option value="self_service">Self-service</option>
+                      <option value="managed">Managed by Ideal Stay</option>
+                    </select>
+                  </div>
+                </div>
+              ) : null}
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase text-slate-500">Balance (R)</label>
                 <Input type="number" value={editingUser.balance} onChange={(event) => setEditingUser({ ...editingUser, balance: Number(event.target.value) })} />
@@ -852,6 +906,70 @@ export default function AdminDashboard() {
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase text-slate-500">Description</label>
                 <textarea className="min-h-[100px] w-full rounded-md border border-input bg-background p-3 text-sm" value={editingListing.description} onChange={(event) => setEditingListing({ ...editingListing, description: event.target.value })} />
+              </div>
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div>
+                  <label className="text-xs font-bold uppercase text-slate-500">Listing Settlement Profile</label>
+                  <p className="mt-1 text-xs text-slate-500">Managed listings should keep payment method and instructions per listing, not at host-profile level.</p>
+                </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase text-slate-500">Payment Method</label>
+                    <Input
+                      value={editingListing.settlementProfile?.paymentMethod ?? ''}
+                      onChange={(event) =>
+                        setEditingListing({
+                          ...editingListing,
+                          settlementProfile: {
+                            listingId: editingListing.id,
+                            updatedAt: editingListing.settlementProfile?.updatedAt ?? editingListing.updatedAt ?? editingListing.createdAt,
+                            paymentMethod: event.target.value,
+                            paymentInstructions: editingListing.settlementProfile?.paymentInstructions ?? null,
+                            paymentReferencePrefix: editingListing.settlementProfile?.paymentReferencePrefix ?? null,
+                          },
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase text-slate-500">Reference Prefix</label>
+                    <Input
+                      value={editingListing.settlementProfile?.paymentReferencePrefix ?? ''}
+                      onChange={(event) =>
+                        setEditingListing({
+                          ...editingListing,
+                          settlementProfile: {
+                            listingId: editingListing.id,
+                            updatedAt: editingListing.settlementProfile?.updatedAt ?? editingListing.updatedAt ?? editingListing.createdAt,
+                            paymentMethod: editingListing.settlementProfile?.paymentMethod ?? null,
+                            paymentInstructions: editingListing.settlementProfile?.paymentInstructions ?? null,
+                            paymentReferencePrefix: event.target.value,
+                          },
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase text-slate-500">Payment Instructions</label>
+                  <Textarea
+                    value={editingListing.settlementProfile?.paymentInstructions ?? ''}
+                    onChange={(event) =>
+                      setEditingListing({
+                        ...editingListing,
+                        settlementProfile: {
+                          listingId: editingListing.id,
+                          updatedAt: editingListing.settlementProfile?.updatedAt ?? editingListing.updatedAt ?? editingListing.createdAt,
+                          paymentMethod: editingListing.settlementProfile?.paymentMethod ?? null,
+                          paymentInstructions: event.target.value,
+                          paymentReferencePrefix: editingListing.settlementProfile?.paymentReferencePrefix ?? null,
+                        },
+                      })
+                    }
+                    className="min-h-[120px]"
+                    placeholder="Bank transfer, cash-on-arrival rules, or other host-supplied instructions for this listing."
+                  />
+                </div>
               </div>
             </div>
           ) : null}

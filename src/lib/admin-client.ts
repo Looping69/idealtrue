@@ -22,6 +22,7 @@ import {
 type EncoreReferralTier = EncoreUser['tier'];
 type EncoreUserRole = EncoreUser['role'];
 type EncoreHostPlan = EncoreUser['hostPlan'];
+type EncoreHostManagementMode = EncoreUser['managementMode'];
 type EncoreKycStatus = EncoreUser['kycStatus'];
 
 export interface AdminCheckout {
@@ -124,6 +125,7 @@ export async function updateAdminUser(params: {
   displayName?: string;
   role?: EncoreUserRole;
   hostPlan?: EncoreHostPlan;
+  managementMode?: EncoreHostManagementMode;
   kycStatus?: EncoreKycStatus;
   balance?: number;
   tier?: EncoreReferralTier;

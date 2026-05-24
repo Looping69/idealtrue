@@ -51,7 +51,7 @@ function AppContent() {
     setBookingForPaymentProof,
   } = useAppShellState();
 
-  const isAdmin = useMemo(() => profile?.role === 'admin', [profile]);
+  const isAdmin = useMemo(() => profile?.role === 'admin' || profile?.role === 'support', [profile]);
   const isAdminAccount = useMemo(() => !!profile?.isAdmin, [profile]);
   const isHostRoute = location.pathname === '/host' || location.pathname.startsWith('/host/');
   const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
