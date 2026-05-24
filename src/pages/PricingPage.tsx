@@ -27,7 +27,19 @@ interface Plan {
   features: PlanFeature[];
 }
 
-const plans: Plan[] = [
+interface ManagedOffer {
+  id: "managed";
+  name: string;
+  price: string;
+  description: string;
+  bestFor: string;
+  cta: string;
+  badge?: string;
+  tone: string;
+  features: PlanFeature[];
+}
+
+const subscriptionPlans: Plan[] = [
   {
     id: "standard",
     name: "Standard",
@@ -85,6 +97,27 @@ const plans: Plan[] = [
   },
 ];
 
+const managedOffer: ManagedOffer = {
+  id: "managed",
+  name: "Managed Hosting",
+  price: "Custom monthly package",
+  description: "For hosts who want Ideal Stay to manage the listing work while they keep the upside of direct guest enquiries.",
+  bestFor: "Busy hosts, premium homes, multi-property operators, and owners who want the visibility without carrying the day-to-day listing workload themselves.",
+  cta: "Apply for Managed Hosting",
+  badge: "Concierge",
+  tone: "border-emerald-200 bg-[linear-gradient(135deg,#ecfdf5_0%,#ffffff_45%,#f0fdf4_100%)]",
+  features: [
+    { text: "Ideal Stay manages your profile and listing operations" },
+    { text: "We keep your listing polished, updated, and visible" },
+    { text: "Listing-level payment instructions per property" },
+    { text: "Managed support across multiple listings" },
+    { text: "You get the upside without handling the admin load" },
+    { text: "0% booking commission still applies" },
+  ],
+};
+
+const plans = [...subscriptionPlans, managedOffer] as const;
+
 const pressurePoints = [
   {
     icon: Wallet,
@@ -113,7 +146,7 @@ const valuePoints = [
   "Receive direct enquiries from travellers",
   "Keep control of your guest communication",
   "Keep more of your booking income",
-  "Choose a monthly plan that fits your visibility goals",
+  "Choose self-service or let Ideal Stay manage the listing work for you",
 ];
 
 const faqs = [
@@ -135,7 +168,7 @@ const faqs = [
   },
   {
     question: "Do you manage my property or bookings?",
-    answer: "No. You remain in control of your property, pricing, availability, guest communication, and booking process.",
+    answer: "The Standard, Professional, and Premium plans are self-service. Managed Hosting is different: the Ideal Stay team manages the listing/profile operations for you while you keep the commercial benefit of direct enquiries.",
   },
   {
     question: "How do referral rewards work?",
@@ -260,6 +293,16 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
     },
     [navigate, user],
   );
+
+  const handleManagedHosting = useCallback(() => {
+    if (!user) {
+      navigate("/signup?returnTo=%2Fpricing&role=host&management=managed");
+      return;
+    }
+
+    toast.message("Managed Hosting is onboarded directly by the Ideal Stay team. Your account can now be routed for manual setup.");
+    navigate(profile?.role === "host" ? "/host" : "/account");
+  }, [navigate, profile?.role, user]);
 
   if (fetchingPlan) {
     return (
@@ -438,27 +481,55 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
           <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-600">
             Plans
           </div>
-          <h2 className="text-3xl font-black text-slate-950 md:text-4xl">Choose how much visibility you want.</h2>
+          <h2 className="text-3xl font-black text-slate-950 md:text-4xl">Choose how hands-on you want to be.</h2>
           <p className="text-base leading-7 text-slate-600">
-            Every plan includes one important promise: Ideal Stay takes 0% commission from your bookings.
+            Three options are self-service. The fourth is managed. Every route keeps the same commercial promise: Ideal Stay takes 0% commission from your bookings.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
           {plans.map((plan) => {
-            const isCurrent = showCurrentPlanState && currentPlan === plan.id;
-            const isLoading = loadingPlan === plan.id;
+            const isManagedPlan = plan.id === "managed";
+            const isCurrent = !isManagedPlan && showCurrentPlanState && currentPlan === plan.id;
+            const isLoading = !isManagedPlan && loadingPlan === plan.id;
             const darkCard = plan.id === "premium";
+            const accentBarClass = darkCard ? "bg-cyan-400" : isManagedPlan ? "bg-emerald-500" : "bg-[#08a8c8]";
+            const badgeClass = darkCard
+              ? "bg-white text-slate-950"
+              : isManagedPlan
+                ? "bg-emerald-600 text-white"
+                : "bg-[#08a8c8] text-white";
+            const chipClass = darkCard
+              ? "bg-white/10 text-cyan-100"
+              : isManagedPlan
+                ? "bg-emerald-100 text-emerald-800"
+                : "bg-slate-100 text-slate-600";
+            const featureIconClass = darkCard ? "text-cyan-300" : isManagedPlan ? "text-emerald-600" : "text-emerald-600";
+            const bestForCardClass = darkCard
+              ? "border-white/10 bg-white/5"
+              : isManagedPlan
+                ? "border-emerald-200 bg-emerald-50/80"
+                : "border-slate-200 bg-slate-50/70";
+            const bestForLabelClass = darkCard ? "text-cyan-100" : isManagedPlan ? "text-emerald-700" : "text-slate-500";
+            const descriptionClass = darkCard ? "text-slate-200" : "text-slate-600";
+            const buttonVariant = darkCard ? "secondary" : isManagedPlan || plan.id === "professional" ? "default" : "outline";
+            const buttonClass = darkCard
+              ? "border-white/15 bg-white text-slate-950 hover:bg-slate-100"
+              : isManagedPlan
+                ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                : plan.id === "professional"
+                  ? "bg-[#08a8c8] text-white hover:bg-[#08a8c8]/90"
+                  : "border-slate-300 bg-white text-slate-950 hover:bg-slate-50";
 
             return (
               <Card
                 key={plan.id}
                 className={`relative flex h-full flex-col overflow-hidden border transition-all duration-200 hover:-translate-y-1 hover:shadow-xl ${plan.tone} ${isCurrent ? "ring-2 ring-primary ring-offset-2" : ""}`}
               >
-                <div className={`absolute inset-x-0 top-0 h-1 ${darkCard ? "bg-cyan-400" : "bg-[#08a8c8]"}`} />
+                <div className={`absolute inset-x-0 top-0 h-1 ${accentBarClass}`} />
                 {plan.badge ? (
                   <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                    <span className={`${darkCard ? "bg-white text-slate-950" : "bg-[#08a8c8] text-white"} rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-[0.2em]`}>
+                    <span className={`${badgeClass} rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-[0.2em]`}>
                       {plan.badge}
                     </span>
                   </div>
@@ -466,7 +537,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
 
                 <CardHeader className="pb-4 text-left">
                   <div className="mb-4 flex items-center justify-between">
-                    <span className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] ${darkCard ? "bg-white/10 text-cyan-100" : "bg-slate-100 text-slate-600"}`}>
+                    <span className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] ${chipClass}`}>
                       {plan.name}
                     </span>
                     {isCurrent ? (
@@ -478,7 +549,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
 
                   <CardTitle className={`text-2xl font-black ${darkCard ? "text-white" : "text-slate-950"}`}>{plan.name}</CardTitle>
                   <div className={`mt-4 text-4xl font-black tracking-tight ${darkCard ? "text-white" : "text-slate-950"}`}>{plan.price}</div>
-                  <CardDescription className={`pt-3 text-left leading-6 ${darkCard ? "text-slate-200" : "text-slate-600"}`}>
+                  <CardDescription className={`pt-3 text-left leading-6 ${descriptionClass}`}>
                     {plan.description}
                   </CardDescription>
                 </CardHeader>
@@ -487,24 +558,24 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
                   <ul className="space-y-3">
                     {plan.features.map((feature) => (
                       <li key={feature.text} className="flex items-start gap-3 text-sm">
-                        <BadgeCheck className={`mt-0.5 h-4 w-4 shrink-0 ${darkCard ? "text-cyan-300" : "text-emerald-600"}`} />
+                        <BadgeCheck className={`mt-0.5 h-4 w-4 shrink-0 ${featureIconClass}`} />
                         <span className={darkCard ? "text-slate-100" : "font-medium text-slate-700"}>{feature.text}</span>
                       </li>
                     ))}
                   </ul>
 
-                  <div className={`mt-6 rounded-2xl border p-4 ${darkCard ? "border-white/10 bg-white/5" : "border-slate-200 bg-slate-50/70"}`}>
-                    <div className={`text-xs font-bold uppercase tracking-[0.18em] ${darkCard ? "text-cyan-100" : "text-slate-500"}`}>Best for</div>
-                    <p className={`mt-2 text-sm leading-6 ${darkCard ? "text-slate-200" : "text-slate-600"}`}>{plan.bestFor}</p>
+                  <div className={`mt-6 rounded-2xl border p-4 ${bestForCardClass}`}>
+                    <div className={`text-xs font-bold uppercase tracking-[0.18em] ${bestForLabelClass}`}>Best for</div>
+                    <p className={`mt-2 text-sm leading-6 ${descriptionClass}`}>{plan.bestFor}</p>
                   </div>
                 </CardContent>
 
                 <CardFooter>
                   <Button
-                    onClick={() => handleUpgrade(plan.id)}
+                    onClick={() => isManagedPlan ? handleManagedHosting() : handleUpgrade(plan.id)}
                     disabled={loadingPlan !== null || isCurrent}
-                    variant={darkCard ? "secondary" : plan.id === "professional" ? "default" : "outline"}
-                    className={`h-12 w-full rounded-xl text-base font-semibold ${darkCard ? "border-white/15 bg-white text-slate-950 hover:bg-slate-100" : plan.id === "professional" ? "bg-[#08a8c8] text-white hover:bg-[#08a8c8]/90" : "border-slate-300 bg-white text-slate-950 hover:bg-slate-50"}`}
+                    variant={buttonVariant}
+                    className={`h-12 w-full rounded-xl text-base font-semibold ${buttonClass}`}
                   >
                     {isLoading ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />

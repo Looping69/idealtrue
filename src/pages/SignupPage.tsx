@@ -20,6 +20,8 @@ export default function SignupPage() {
   const { signIn, signInWithGoogle, signUp } = useAuth();
   const urlMode = searchParams.get('mode');
   const actionToken = searchParams.get('token') || '';
+  const requestedRole = searchParams.get('role');
+  const requestedManagement = searchParams.get('management');
   const safeReturnPath = getSafeAuthReturnPath(searchParams.get('returnTo'));
   const authIntent = searchParams.get('intent');
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
@@ -40,6 +42,7 @@ export default function SignupPage() {
   const isSignupMode = authMode === 'signup';
   const isResetPasswordMode = urlMode === 'reset-password' && !!actionToken;
   const isVerifyEmailMode = urlMode === 'verify-email' && !!actionToken;
+  const isManagedOnboarding = isSignupMode && requestedManagement === 'managed' && selectedRole === 'host';
 
   const passwordActionTitle = useMemo(() => {
     if (isVerifyEmailMode) return 'Verify your email';
@@ -164,6 +167,16 @@ export default function SignupPage() {
       cancelled = true;
     };
   }, [googleClientId, handleGoogleAuth, isResetPasswordMode, isSignupMode, isVerifyEmailMode, selectedRole]);
+
+  useEffect(() => {
+    if (!isSignupMode || isResetPasswordMode || isVerifyEmailMode || selectedRole) {
+      return;
+    }
+
+    if (requestedRole === 'guest' || requestedRole === 'host') {
+      setSelectedRole(requestedRole);
+    }
+  }, [isResetPasswordMode, isSignupMode, isVerifyEmailMode, requestedRole, selectedRole]);
 
   const handlePasswordResetRequest = async () => {
     if (!email.trim()) return;
@@ -292,6 +305,11 @@ export default function SignupPage() {
           {!isResetPasswordMode && authIntent === 'planner' && (
             <p className="text-sm font-medium text-[#08a8c8]">
               Sign in to use the AI trip planner.
+            </p>
+          )}
+          {isManagedOnboarding && (
+            <p className="mx-auto max-w-2xl rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+              Managed Hosting selected. Create your host account and the Ideal Stay team can onboard the managed package and handle the listing work for you.
             </p>
           )}
         </div>
