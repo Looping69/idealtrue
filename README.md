@@ -125,11 +125,24 @@ Dev login is now opt-in only and should never be enabled in a shared environment
 IDEAL_STAY_ENABLE_DEV_LOGIN=true
 ```
 
-The demo seed script also defaults to local and refuses to hit a non-local API target unless you opt in:
+The demo seed script defaults to local and refuses to hit a non-local API target unless you opt in:
 
 ```bash
 IDEAL_STAY_ALLOW_REMOTE_SEED=true
 ```
+
+For shared preview or staging environments, the same script can now create disposable guest and host smoke accounts through the real auth flow, then use an existing admin account to normalize passwords, host plans, KYC state, and demo listings:
+
+```bash
+IDEAL_STAY_API_URL=https://your-encore-host \
+IDEAL_STAY_ALLOW_REMOTE_SEED=true \
+IDEAL_STAY_SEED_ADMIN_EMAIL=admin@example.com \
+IDEAL_STAY_SEED_ADMIN_PASSWORD=admin-password \
+IDEAL_STAY_DEMO_PASSWORD='IdealStayDemo123!' \
+npm run seed:demo
+```
+
+That shared-environment path does not mint a new admin. It expects one existing admin login, then provisions disposable smoke users and listing data around it.
 
 Backend auth email delivery is optional in local/dev but should be configured in any serious environment:
 
@@ -184,16 +197,22 @@ cd encore
 npx tsc --noEmit
 ```
 
-Before calling a preview or production deployment launch-ready, run the live smoke check against the deployed frontend host so the same-origin proxy, session cookie flow, public listing reads, and real role-based access are verified in a real environment:
+Before calling a preview or production deployment launch-ready, run the shared-environment seed if you need disposable smoke users, then run the live smoke check against the deployed frontend host so the same-origin proxy, session cookie flow, public listing reads, and real role-based access are verified in a real environment:
 
 ```bash
+IDEAL_STAY_API_URL=https://your-encore-host \
+IDEAL_STAY_ALLOW_REMOTE_SEED=true \
+IDEAL_STAY_SEED_ADMIN_EMAIL=admin@example.com \
+IDEAL_STAY_SEED_ADMIN_PASSWORD=admin-password \
+npm run seed:demo
+
 IDEAL_STAY_SMOKE_BASE_URL=https://your-preview-or-production-host \
 IDEAL_STAY_SMOKE_REQUIRE_ROLE_CREDENTIALS=true \
 IDEAL_STAY_SMOKE_EXPECT_LISTINGS_MIN=1 \
-IDEAL_STAY_SMOKE_GUEST_EMAIL=guest@example.com \
-IDEAL_STAY_SMOKE_GUEST_PASSWORD=guest-password \
-IDEAL_STAY_SMOKE_HOST_EMAIL=host@example.com \
-IDEAL_STAY_SMOKE_HOST_PASSWORD=host-password \
+IDEAL_STAY_SMOKE_GUEST_EMAIL=guest.nomusa@idealstay.demo \
+IDEAL_STAY_SMOKE_GUEST_PASSWORD='IdealStayDemo123!' \
+IDEAL_STAY_SMOKE_HOST_EMAIL=thandi.mokoena@idealstay.demo \
+IDEAL_STAY_SMOKE_HOST_PASSWORD='IdealStayDemo123!' \
 IDEAL_STAY_SMOKE_ADMIN_EMAIL=admin@example.com \
 IDEAL_STAY_SMOKE_ADMIN_PASSWORD=admin-password \
 npm run smoke:live
