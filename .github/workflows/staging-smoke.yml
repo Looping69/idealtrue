@@ -1,0 +1,78 @@
+name: Staging Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_seed:
+        description: "Seed disposable smoke users before live verification"
+        required: false
+        default: true
+        type: boolean
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/staging-smoke.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "server.ts"
+      - "scripts/**"
+      - "src/**"
+      - "tests/**"
+      - "encore/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ENCORE_API_URL: ${{ secrets.ENCORE_API_URL }}
+      IDEAL_STAY_API_URL: ${{ secrets.ENCORE_API_URL }}
+      IDEAL_STAY_ALLOW_REMOTE_SEED: "true"
+      IDEAL_STAY_SEED_ADMIN_EMAIL: ${{ secrets.IDEAL_STAY_SEED_ADMIN_EMAIL }}
+      IDEAL_STAY_SEED_ADMIN_PASSWORD: ${{ secrets.IDEAL_STAY_SEED_ADMIN_PASSWORD }}
+      IDEAL_STAY_DEMO_PASSWORD: ${{ secrets.IDEAL_STAY_DEMO_PASSWORD }}
+      IDEAL_STAY_SMOKE_BASE_URL: ${{ secrets.IDEAL_STAY_SMOKE_BASE_URL }}
+      IDEAL_STAY_SMOKE_REQUIRE_ROLE_CREDENTIALS: "true"
+      IDEAL_STAY_SMOKE_EXPECT_LISTINGS_MIN: "1"
+      IDEAL_STAY_SMOKE_GUEST_EMAIL: guest.nomusa@idealstay.demo
+      IDEAL_STAY_SMOKE_GUEST_PASSWORD: ${{ secrets.IDEAL_STAY_DEMO_PASSWORD }}
+      IDEAL_STAY_SMOKE_HOST_EMAIL: thandi.mokoena@idealstay.demo
+      IDEAL_STAY_SMOKE_HOST_PASSWORD: ${{ secrets.IDEAL_STAY_DEMO_PASSWORD }}
+      IDEAL_STAY_SMOKE_ADMIN_EMAIL: ${{ secrets.IDEAL_STAY_SMOKE_ADMIN_EMAIL }}
+      IDEAL_STAY_SMOKE_ADMIN_PASSWORD: ${{ secrets.IDEAL_STAY_SMOKE_ADMIN_PASSWORD }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+
+      - name: Seed shared staging smoke users
+        if: github.event_name != 'workflow_dispatch' || inputs.run_seed
+        run: npm run seed:demo
+
+      - name: Run live staging smoke
+        run: npm run smoke:live
