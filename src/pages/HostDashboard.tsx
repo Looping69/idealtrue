@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Booking, HostBillingAccount, Listing, UserProfile } from '../types';
+import { Booking, BookingOpsSummary, HostBillingAccount, Listing, UserProfile } from '../types';
 import { 
   LayoutDashboard, 
   Calendar, 
@@ -39,6 +39,7 @@ import {
   isPendingHostDecision,
 } from '@/lib/inquiry-state';
 import { useHostBookingActions } from '@/hooks/use-host-booking-actions';
+import { useBookingOpsSummaries } from '@/hooks/use-booking-ops-summaries';
 import { cn } from '@/lib/utils';
 
 function getMetricPercentage(value: number, total: number) {
@@ -47,6 +48,17 @@ function getMetricPercentage(value: number, total: number) {
   }
 
   return Math.round((value / total) * 100);
+}
+
+function getDashboardOpsDeadline(summary: BookingOpsSummary | undefined) {
+  if (!summary?.activeDeadlineAt || summary.activeDeadlineKind === 'NONE') {
+    return null;
+  }
+
+  return {
+    deadlineAt: summary.activeDeadlineAt,
+    deadlineKind: summary.activeDeadlineKind === 'HOST_RESPONSE' ? 'response_due' : 'payment_due',
+  };
 }
 
 function HostMetricCard({
@@ -119,6 +131,7 @@ export default function HostDashboard({
   const [searchParams] = useSearchParams();
   const [billingAccount, setBillingAccount] = useState<HostBillingAccount | null>(null);
   const [startingBillingSetup, setStartingBillingSetup] = useState(false);
+  const bookingOpsSummaries = useBookingOpsSummaries(bookings);
 
   const {
     approveBooking,
@@ -271,16 +284,24 @@ export default function HostDashboard({
           : 'neutral';
   const approvedHoldWatchlist = useMemo(() => {
     return [...awaitingGuestPaymentBookings, ...groupedBookings.paymentReview]
-      .map((booking) => ({
-        booking,
-        urgency: getInquiryDeadlineUrgency(booking),
-      }))
+      .map((booking) => {
+        const urgency = getInquiryDeadlineUrgency(booking);
+        const summary = bookingOpsSummaries[booking.id];
+        const opsDeadline = getDashboardOpsDeadline(summary);
+
+        return {
+          booking,
+          urgency,
+          summary,
+          sortDeadlineAt: opsDeadline?.deadlineAt ?? urgency?.deadlineAt ?? null,
+        };
+      })
       .sort((left, right) => {
-        const leftDeadline = left.urgency ? new Date(left.urgency.deadlineAt).getTime() : Number.POSITIVE_INFINITY;
-        const rightDeadline = right.urgency ? new Date(right.urgency.deadlineAt).getTime() : Number.POSITIVE_INFINITY;
+        const leftDeadline = left.sortDeadlineAt ? new Date(left.sortDeadlineAt).getTime() : Number.POSITIVE_INFINITY;
+        const rightDeadline = right.sortDeadlineAt ? new Date(right.sortDeadlineAt).getTime() : Number.POSITIVE_INFINITY;
         return leftDeadline - rightDeadline;
       });
-  }, [awaitingGuestPaymentBookings, groupedBookings.paymentReview]);
+  }, [awaitingGuestPaymentBookings, bookingOpsSummaries, groupedBookings.paymentReview]);
   const activeQueueCount = needsResponseBookings.length + awaitingGuestPaymentBookings.length + groupedBookings.paymentReview.length;
   const mostUrgentApprovedHold = approvedHoldWatchlist[0] ?? null;
 
@@ -431,15 +452,20 @@ export default function HostDashboard({
               <Button variant="ghost" size="sm" onClick={() => navigate('/host/enquiries')}>Open Queue</Button>
             </div>
             <div className="mt-4 space-y-3">
-              {approvedHoldWatchlist.slice(0, 4).map(({ booking, urgency }) => {
+              {approvedHoldWatchlist.slice(0, 4).map(({ booking, urgency, summary }) => {
                 const listing = listings.find((item) => item.id === booking.listingId);
-                const deadlineLabel = urgency
-                  ? urgency.isExpired
-                    ? 'Hold already expired'
-                    : urgency.deadlineKind === 'confirmation_due'
-                      ? `Confirm before ${formatDistanceToNowStrict(new Date(urgency.deadlineAt), { addSuffix: true })}`
-                      : `Payment due ${formatDistanceToNowStrict(new Date(urgency.deadlineAt), { addSuffix: true })}`
-                  : 'Awaiting the next workflow step';
+                const opsDeadline = getDashboardOpsDeadline(summary);
+                const deadlineLabel = opsDeadline
+                  ? opsDeadline.deadlineKind === 'response_due'
+                    ? `Host response due ${formatDistanceToNowStrict(new Date(opsDeadline.deadlineAt), { addSuffix: true })}`
+                    : `Payment due ${formatDistanceToNowStrict(new Date(opsDeadline.deadlineAt), { addSuffix: true })}`
+                  : urgency
+                    ? urgency.isExpired
+                      ? 'Hold already expired'
+                      : urgency.deadlineKind === 'confirmation_due'
+                        ? `Confirm before ${formatDistanceToNowStrict(new Date(urgency.deadlineAt), { addSuffix: true })}`
+                        : `Payment due ${formatDistanceToNowStrict(new Date(urgency.deadlineAt), { addSuffix: true })}`
+                    : 'Awaiting the next workflow step';
 
                 return (
                   <div key={booking.id} className="rounded-2xl border border-outline-variant bg-background/70 p-4">
@@ -451,7 +477,7 @@ export default function HostDashboard({
                         </p>
                       </div>
                       <Badge variant={urgency?.tone === 'danger' ? 'danger' : urgency?.tone === 'warning' ? 'warning' : 'neutral'}>
-                        {urgency?.deadlineKind === 'confirmation_due' ? 'Confirm' : 'Hold'}
+                        {summary?.openDisputeCount ? `Disputes ${summary.openDisputeCount}` : urgency?.deadlineKind === 'confirmation_due' ? 'Confirm' : 'Hold'}
                       </Badge>
                     </div>
                     <p className="mt-2 text-sm text-on-surface-variant">{deadlineLabel}</p>
@@ -463,13 +489,13 @@ export default function HostDashboard({
                   No approved holds are currently close enough to worry about. New approved enquiries will surface here automatically.
                 </div>
               ) : null}
-              {mostUrgentApprovedHold?.urgency && !mostUrgentApprovedHold.urgency.isExpired ? (
+              {mostUrgentApprovedHold?.sortDeadlineAt ? (
                 <div className="rounded-2xl border border-outline-variant bg-background/60 p-4 text-sm">
                   <span className="font-semibold">Nearest deadline:</span>{' '}
-                  {mostUrgentApprovedHold.urgency.deadlineKind === 'confirmation_due'
-                    ? 'payment confirmation'
+                  {mostUrgentApprovedHold.summary?.activeDeadlineKind === 'HOST_RESPONSE'
+                    ? 'host response'
                     : 'guest payment'} closes{' '}
-                  {formatDistanceToNowStrict(new Date(mostUrgentApprovedHold.urgency.deadlineAt), { addSuffix: true })}.
+                  {formatDistanceToNowStrict(new Date(mostUrgentApprovedHold.sortDeadlineAt), { addSuffix: true })}.
                 </div>
               ) : null}
             </div>
