@@ -13,7 +13,9 @@
     "test": "node scripts/run-tests.mjs",
     "test:unit": "tsx --test tests/*.test.ts",
     "test:ui": "vitest run",
-    "test:e2e": "playwright test",
+    "test:e2e": "npm run test:e2e:mocked",
+    "test:e2e:mocked": "playwright test",
+    "smoke:live": "node scripts/live-smoke.mjs",
     "seed:demo": "node scripts/seed-demo-data.mjs"
   },
   "dependencies": {
