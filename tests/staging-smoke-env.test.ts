@@ -48,3 +48,12 @@ test("staging smoke env check fails when smoke accounts drift from seeded identi
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /IDEAL_STAY_SMOKE_HOST_EMAIL must stay aligned/);
 });
+
+test("staging smoke env check fails when the smoke target points at the raw Encore host", () => {
+  const result = runWithEnv({
+    IDEAL_STAY_SMOKE_BASE_URL: "https://staging-ideal-stay-online-gh5i.encr.app",
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /deployed frontend host, not the raw Encore API host/);
+});
