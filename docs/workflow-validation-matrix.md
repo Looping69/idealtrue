@@ -7,7 +7,7 @@ This document is the source of truth for Ideal Stay workflow coverage. If a rout
 - Route map: `src/components/AppRoutes.tsx`
 - Service split: `README.md`
 - Backend endpoint surface: `encore/*/api.ts`
-- Current automated coverage: `tests/**/*.test.ts`, `tests/ui/**/*.test.tsx`, `tests/e2e/**/*.spec.ts`
+- Current automated coverage: `tests/**/*.test.ts`, `tests/ui/**/*.test.tsx`, `tests/e2e/**/*.spec.ts`, `scripts/live-smoke.mjs`
 
 ## Completion Gate
 
@@ -27,6 +27,11 @@ Layer ownership:
 - page behavior and state transitions: UI tests
 - cross-role journeys: Playwright e2e
 - cron, webhook, signed upload, and provider behavior: backend-focused tests
+
+Reality check:
+
+- current `tests/e2e/*.spec.ts` coverage mostly routes `/api/encore/**` through Playwright mocks and should be treated as UI-contract coverage unless a spec explicitly says it is live
+- `scripts/live-smoke.mjs` is the live environment gate for preview and production hosts through the same-origin proxy
 
 ## Route And Service Map
 
@@ -136,7 +141,7 @@ Async and external-dependency workflows requiring backend-focused tests:
 
 ## CI Baseline
 
-The workflow gate sits on top of the existing verification entry points:
+The repo verification baseline is:
 
 ```bash
 npm run lint
@@ -144,6 +149,14 @@ npm run test
 npm run test:e2e
 npm run build
 cd encore && npx tsc --noEmit
+```
+
+The live environment gate is separate and should run against a deployed frontend host through the same-origin proxy:
+
+```bash
+IDEAL_STAY_RUN_LIVE_SMOKE=true npm run test
+# or
+npm run smoke:live
 ```
 
 Do not mark a workflow as complete in this matrix unless its coverage row names the automated tests that prove both the happy path and the core failure mode.
