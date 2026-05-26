@@ -2,6 +2,7 @@ import { encoreRequest } from './encore-client';
 import type { SerializedImageAsset } from './media-client';
 import type {
   Booking,
+  BookingOpsSummary,
   InquiryDeclineReason,
   Listing,
   ListingAvailabilityManualBlockInput,
@@ -134,6 +135,15 @@ export async function deleteListing(id: string) {
 export async function listMyBookings() {
   const response = await encoreRequest<{ bookings: EncoreBooking[] }>('/bookings/me', {}, { auth: true });
   return response.bookings.map(mapEncoreBooking);
+}
+
+export async function getBookingOpsSummary(id: string): Promise<BookingOpsSummary> {
+  const response = await encoreRequest<{ summary: BookingOpsSummary }>(
+    `/bookings/${id}/ops-summary`,
+    {},
+    { auth: true },
+  );
+  return response.summary;
 }
 
 export async function createBooking(params: {
