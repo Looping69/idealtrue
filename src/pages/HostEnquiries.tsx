@@ -12,13 +12,12 @@ import {
   User,
   XCircle,
 } from 'lucide-react';
-import { toast } from 'sonner';
 
 import InquiryDeclineDialog from '@/components/InquiryDeclineDialog';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { Booking, Listing } from '../types';
+import { Booking, BookingOpsSummary, Listing } from '../types';
 import { formatRand } from '@/lib/currency';
 import {
   getInquiryBadgeLabel,
@@ -28,6 +27,7 @@ import {
   isAwaitingGuestPayment,
 } from '@/lib/inquiry-state';
 import { useHostBookingActions } from '@/hooks/use-host-booking-actions';
+import { useBookingOpsSummaries } from '@/hooks/use-booking-ops-summaries';
 
 type SummaryCard = {
   title: string;
@@ -36,6 +36,36 @@ type SummaryCard = {
   tone: 'warning' | 'secondary' | 'success';
   icon: React.ComponentType<{ className?: string }>;
 };
+
+function formatOpsActor(actor: BookingOpsSummary['lastActor']) {
+  switch (actor) {
+    case 'admin':
+      return 'Admin';
+    case 'guest':
+      return 'Guest';
+    case 'host':
+      return 'Host';
+    case 'support':
+      return 'Support';
+    case 'system':
+      return 'System';
+    default:
+      return 'Unknown';
+  }
+}
+
+function getOpsDeadlineCopy(summary: BookingOpsSummary | undefined) {
+  if (!summary?.activeDeadlineAt || summary.activeDeadlineKind === 'NONE') {
+    return null;
+  }
+
+  const distance = formatDistanceToNowStrict(new Date(summary.activeDeadlineAt), { addSuffix: true });
+  if (summary.activeDeadlineKind === 'HOST_RESPONSE') {
+    return `Backend deadline: host response due ${distance}.`;
+  }
+
+  return `Backend deadline: guest payment due ${distance}.`;
+}
 
 export default function HostEnquiries({
   bookings,
@@ -49,6 +79,7 @@ export default function HostEnquiries({
   onBookingUpdated: (booking: Booking) => void;
 }) {
   const groupedBookings = useMemo(() => groupHostInquiries(bookings), [bookings]);
+  const bookingOpsSummaries = useBookingOpsSummaries(bookings);
   const {
     approveBooking,
     confirmBookingPayment,
@@ -114,10 +145,12 @@ export default function HostEnquiries({
     },
   ) => {
     const listing = listings.find((l) => l.id === booking.listingId);
+    const opsSummary = bookingOpsSummaries[booking.id];
     const statusLabel = getInquiryBadgeLabel(booking);
-    const deadlineCopy = getHostInquiryDeadlineText(booking);
+    const deadlineCopy = getOpsDeadlineCopy(opsSummary) ?? getHostInquiryDeadlineText(booking);
     const totalExposure = booking.totalPrice + (booking.breakageDeposit ?? 0);
     const lastTouchAt =
+      opsSummary?.lastEventAt ??
       booking.paymentSubmittedAt ??
       booking.paymentUnlockedAt ??
       booking.respondedAt ??
@@ -184,13 +217,21 @@ export default function HostEnquiries({
 
             <div className="rounded-lg border border-outline-variant bg-surface-container-lowest p-4 text-sm text-on-surface-variant space-y-2">
               <p>
-                {booking.respondedAt
-                  ? `Responded ${formatDistanceToNowStrict(new Date(booking.respondedAt), { addSuffix: true })}.`
-                  : booking.viewedAt
-                    ? `Viewed ${formatDistanceToNowStrict(new Date(booking.viewedAt), { addSuffix: true })}.`
-                    : 'No host action logged yet.'}
+                {opsSummary
+                  ? `Last actor: ${formatOpsActor(opsSummary.lastActor)}.`
+                  : booking.respondedAt
+                    ? `Responded ${formatDistanceToNowStrict(new Date(booking.respondedAt), { addSuffix: true })}.`
+                    : booking.viewedAt
+                      ? `Viewed ${formatDistanceToNowStrict(new Date(booking.viewedAt), { addSuffix: true })}.`
+                      : 'No host action logged yet.'}
               </p>
               {deadlineCopy && <p>{deadlineCopy}</p>}
+              {typeof opsSummary?.openDisputeCount === 'number' && opsSummary.openDisputeCount > 0 && (
+                <p>
+                  Open payment disputes:{' '}
+                  <span className="font-medium text-on-surface">{opsSummary.openDisputeCount}</span>
+                </p>
+              )}
               {booking.inquiryState === 'DECLINED' && getInquiryDeclineReasonDetail(booking) && (
                 <p>
                   Decline reason:{' '}
