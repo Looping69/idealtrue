@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx --eval \"import { join } from 'node:path'; import { pathToFileURL } from 'node:url'; import(pathToFileURL(join(process.cwd().replace(/^\\\\\\\\\\?\\\\/, ''), 'server.ts')).href);\"",
     "check:config": "node scripts/check-production-config.mjs",
+    "check:staging-smoke-env": "node scripts/check-staging-smoke-env.mjs",
     "build": "node scripts/build.mjs",
     "preview": "vite preview",
     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
