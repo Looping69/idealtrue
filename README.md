@@ -52,7 +52,7 @@ This is now an Encore-first repo, not a Firebase bridge with new paint.
 - listing media uploads through Encore bucket URLs
 - profile photo uploads through Encore bucket URLs
 - KYC submission review, audit-backed submission/review history, and secure asset previews through Encore ops APIs
-- booking payment dispute escalation history through Encore booking ledger APIs
+- booking payment dispute escalation history and booking ops summaries through Encore booking APIs
 - subscription upgrades and downgrades through Encore billing APIs
 - content studio entitlements, monthly included usage, credit top-ups, and saved drafts through Encore billing APIs
 
@@ -64,6 +64,7 @@ This is now an Encore-first repo, not a Firebase bridge with new paint.
 - stay dates are end-exclusive for occupancy logic, so checkout day is not treated as a blocked overnight
 - the frontend uses shared availability logic in [`src/lib/listing-availability.ts`](/C:/Git%20Repos/IdealTrue/src/lib/listing-availability.ts) so explore filtering and booking validation stay consistent
 - the host enquiries screen is now treated as a workflow board with `Needs Response`, `Awaiting Guest Payment`, `Awaiting Payment Confirmation`, `Confirmed Stays`, and `Closed Loop` buckets
+- booking ops summary data now comes from Encore for the latest actor, latest workflow movement, active deadline, and open dispute count
 - the host availability calendar now supports bulk range actions, notes on manual block intervals, selected-day inspection, and backend summary tracking instead of only single-day toggles
 
 See [`docs/booking-and-enquiry-workflow.md`](/C:/Git%20Repos/IdealTrue/docs/booking-and-enquiry-workflow.md) for the full workflow and operational expectations.
@@ -73,7 +74,7 @@ See [`docs/workflow-validation-matrix.md`](/C:/Git%20Repos/IdealTrue/docs/workfl
 ## What does not fully route through Encore yet
 
 - KYC document submission now records audit-backed submission/review history, but richer ops case management is still missing
-- stay-payment coordination now has a lightweight dispute escalation trail, but off-platform payment operations still need fuller case handling, refund automation, and SLA tooling
+- stay-payment coordination now has a lightweight dispute escalation trail and backend ops summary metadata, but off-platform payment operations still need fuller case handling, refund automation, assignee workflow, and SLA tooling
 - billing/subscriptions are scaffolded on the backend but not commercially complete
 - AI content engine still needs real social publishing integrations beyond draft scheduling and publish tracking
 - generated Encore frontend clients are still blocked, so the frontend uses a manual request client
@@ -254,7 +255,7 @@ After that it optionally runs `seed:demo`, then runs `smoke:live` against the de
 
 ## Immediate next engineering work
 
-1. Tighten the host/guest payment-coordination flow beyond the new dispute trail with real case handling and refund orchestration.
+1. Extend stay-payment operations beyond the current dispute trail and ops summary with assignee workflow, SLA handling, and refund orchestration.
 2. Tighten KYC ops workflows beyond audit-backed history and simple approve/reject.
 3. Add real payment provider integration for subscriptions and content-credit purchases.
 4. Ship actual social platform publishing integrations on top of the new content draft workflow.
