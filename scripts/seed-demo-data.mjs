@@ -1,5 +1,7 @@
 const API_BASE = process.env.IDEAL_STAY_API_URL || "http://127.0.0.1:4000";
 const DEMO_PASSWORD = process.env.IDEAL_STAY_DEMO_PASSWORD || "IdealStayDemo123!";
+const REMOTE_ADMIN_EMAIL = process.env.IDEAL_STAY_SEED_ADMIN_EMAIL || "";
+const REMOTE_ADMIN_PASSWORD = process.env.IDEAL_STAY_SEED_ADMIN_PASSWORD || "";
 
 function isLocalApi(url) {
   try {
@@ -10,11 +12,23 @@ function isLocalApi(url) {
   }
 }
 
+function shouldUseLocalBootstrap() {
+  return isLocalApi(API_BASE) && !REMOTE_ADMIN_EMAIL && !REMOTE_ADMIN_PASSWORD;
+}
+
 if (!isLocalApi(API_BASE) && process.env.IDEAL_STAY_ALLOW_REMOTE_SEED !== "true") {
   throw new Error(
     `Refusing to seed non-local API target ${API_BASE}. Set IDEAL_STAY_ALLOW_REMOTE_SEED=true if you really mean it.`,
   );
 }
+
+const guests = [
+  {
+    email: "guest.nomusa@idealstay.demo",
+    displayName: "Nomusa Khumalo",
+    role: "guest",
+  },
+];
 
 const hosts = [
   {
@@ -135,27 +149,77 @@ const hosts = [
 
 async function apiRequest(path, init = {}, token) {
   const headers = new Headers(init.headers || {});
-  headers.set("Content-Type", "application/json");
-  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const method = init.method || "GET";
+  if (init.body !== undefined) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
 
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
+    method,
     headers,
   });
 
   const text = await response.text();
+  const payload = text
+    ? (() => {
+        try {
+          return JSON.parse(text);
+        } catch {
+          return text;
+        }
+      })()
+    : {};
+
   if (!response.ok) {
-    throw new Error(`${init.method || "GET"} ${path} failed: ${response.status} ${text}`);
+    const error = new Error(`${method} ${path} failed: ${response.status} ${text}`);
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
   }
 
-  return text ? JSON.parse(text) : {};
+  return payload;
 }
 
-async function ensureUser({ email, displayName, role }) {
+async function devLogin({ email, displayName, role, referredByCode, photoUrl }) {
   return apiRequest("/auth/dev-login", {
     method: "POST",
-    body: JSON.stringify({ email, displayName, role }),
+    body: JSON.stringify({ email, displayName, role, referredByCode, photoUrl }),
   });
+}
+
+async function signup({ email, displayName, role, password, referredByCode, photoUrl }) {
+  return apiRequest("/auth/signup", {
+    method: "POST",
+    body: JSON.stringify({ email, displayName, role, password, referredByCode, photoUrl }),
+  });
+}
+
+async function login(email, password) {
+  return apiRequest("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+async function listAdminUsers(adminToken) {
+  const response = await apiRequest("/admin/users", {}, adminToken);
+  if (Array.isArray(response?.users)) {
+    return response.users;
+  }
+  if (Array.isArray(response)) {
+    return response;
+  }
+  return [];
+}
+
+async function findUserByEmail(adminToken, email) {
+  const normalizedEmail = email.trim().toLowerCase();
+  const users = await listAdminUsers(adminToken);
+  return users.find((user) => `${user.email || ""}`.trim().toLowerCase() === normalizedEmail) || null;
 }
 
 async function setPassword(adminToken, userId, password) {
@@ -191,6 +255,37 @@ async function updateUser(adminToken, userId, { displayName, role, hostPlan, kyc
   }
 }
 
+async function ensureSharedUser(user, adminToken) {
+  const existingUser = await findUserByEmail(adminToken, user.email);
+
+  if (existingUser) {
+    await updateUser(adminToken, existingUser.id, user);
+    await setPassword(adminToken, existingUser.id, DEMO_PASSWORD);
+    return login(user.email, DEMO_PASSWORD);
+  }
+
+  const createdSession = await signup({
+    email: user.email,
+    displayName: user.displayName,
+    role: user.role,
+    password: DEMO_PASSWORD,
+    referredByCode: user.referredByCode,
+    photoUrl: user.photoUrl,
+  });
+
+  await updateUser(adminToken, createdSession.user.id, user);
+  await setPassword(adminToken, createdSession.user.id, DEMO_PASSWORD);
+  return login(user.email, DEMO_PASSWORD);
+}
+
+async function ensureSeedUser(user, adminToken, bootstrapMode) {
+  if (bootstrapMode === "dev-login") {
+    return devLogin(user);
+  }
+
+  return ensureSharedUser(user, adminToken);
+}
+
 async function listHostListings(hostId) {
   const response = await apiRequest(`/listings?hostId=${encodeURIComponent(hostId)}`);
   return response.listings || [];
@@ -213,31 +308,60 @@ async function saveListing(hostToken, listing, existingId) {
   );
 }
 
+async function bootstrapAdminSession(bootstrapMode) {
+  if (bootstrapMode === "dev-login") {
+    const adminSession = await devLogin({
+      email: "admin@idealstay.demo",
+      displayName: "Ideal Stay Admin",
+      role: "admin",
+    });
+    await setPassword(adminSession.token, adminSession.user.id, DEMO_PASSWORD);
+    return {
+      ...adminSession,
+      bootstrapEmail: adminSession.user.email,
+    };
+  }
+
+  if (!REMOTE_ADMIN_EMAIL || !REMOTE_ADMIN_PASSWORD) {
+    throw new Error(
+      "Shared-environment seeding requires IDEAL_STAY_SEED_ADMIN_EMAIL and IDEAL_STAY_SEED_ADMIN_PASSWORD.",
+    );
+  }
+
+  const adminSession = await login(REMOTE_ADMIN_EMAIL, REMOTE_ADMIN_PASSWORD);
+  return {
+    ...adminSession,
+    bootstrapEmail: REMOTE_ADMIN_EMAIL,
+  };
+}
+
 async function main() {
-  console.log(`Seeding demo data into ${API_BASE}`);
+  const bootstrapMode = shouldUseLocalBootstrap() ? "dev-login" : "shared-auth";
+  console.log(`Seeding demo data into ${API_BASE} using ${bootstrapMode}`);
 
-  const admin = await ensureUser({
-    email: "admin@idealstay.demo",
-    displayName: "Ideal Stay Admin",
-    role: "admin",
-  });
+  const adminSession = await bootstrapAdminSession(bootstrapMode);
+  const adminToken = adminSession.token;
+  const guestSummary = [];
+  const hostSummary = [];
 
-  const adminToken = admin.token;
-  const summary = [];
-
-  await setPassword(adminToken, admin.user.id, DEMO_PASSWORD);
+  for (const guest of guests) {
+    const guestSession = await ensureSeedUser(guest, adminToken, bootstrapMode);
+    guestSummary.push({
+      id: guestSession.user.id,
+      email: guest.email,
+      displayName: guest.displayName,
+      role: guestSession.user.role,
+    });
+  }
 
   for (const host of hosts) {
-    const hostSession = await ensureUser(host);
-    await updateUser(adminToken, hostSession.user.id, host);
-    await setPassword(adminToken, hostSession.user.id, DEMO_PASSWORD);
-    const refreshedHostSession = await ensureUser(host);
-    const existingListings = await listHostListings(refreshedHostSession.user.id);
+    const hostSession = await ensureSeedUser(host, adminToken, bootstrapMode);
+    const existingListings = await listHostListings(hostSession.user.id);
 
     const seededListings = [];
     for (const listing of host.listings) {
       const existing = existingListings.find((item) => item.title === listing.title);
-      const saved = await saveListing(refreshedHostSession.token, listing, existing?.id);
+      const saved = await saveListing(hostSession.token, listing, existing?.id);
       seededListings.push({
         id: saved.listing.id,
         title: saved.listing.title,
@@ -245,7 +369,7 @@ async function main() {
       });
     }
 
-    summary.push({
+    hostSummary.push({
       host: host.displayName,
       email: host.email,
       plan: host.hostPlan,
@@ -254,7 +378,20 @@ async function main() {
     });
   }
 
-  console.log(JSON.stringify({ apiBase: API_BASE, demoPassword: DEMO_PASSWORD, hosts: summary }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        apiBase: API_BASE,
+        bootstrapMode,
+        adminBootstrapEmail: adminSession.bootstrapEmail,
+        demoPassword: DEMO_PASSWORD,
+        guests: guestSummary,
+        hosts: hostSummary,
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 main().catch((error) => {
