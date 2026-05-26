@@ -16,6 +16,7 @@ export type InquiryDeclineReason =
 export type InquiryState = 'PENDING' | 'VIEWED' | 'RESPONDED' | 'APPROVED' | 'DECLINED' | 'EXPIRED' | 'BOOKED';
 export type PaymentState = 'UNPAID' | 'INITIATED' | 'COMPLETED' | 'FAILED';
 export type BookingOpsDeadlineKind = 'HOST_RESPONSE' | 'GUEST_PAYMENT' | 'NONE';
+export type PaymentDisputeResolution = 'PAYMENT_CONFIRMED' | 'PAYMENT_REJECTED' | 'REFUND_OUTSIDE_PLATFORM' | 'OTHER';
 export type AvailabilityBlockSource = 'MANUAL' | 'APPROVED_HOLD' | 'BOOKED';
 export type MessageSuggestionType = 'checkin' | 'checkout' | 'payment_info' | 'directions' | 'house_rules';
 
@@ -210,6 +211,22 @@ export interface BookingOpsSummary {
   activeDeadlineKind: BookingOpsDeadlineKind;
   activeDeadlineAt?: string | null;
   openDisputeCount: number;
+}
+
+export interface PaymentDispute {
+  id: string;
+  inquiryId: string;
+  status: 'OPEN' | 'RESOLVED';
+  openedBy: 'guest' | 'host' | 'admin' | 'support';
+  openedByUserId: string;
+  reason: string;
+  details?: string | null;
+  resolution?: PaymentDisputeResolution | null;
+  resolutionNote?: string | null;
+  resolvedBy?: 'host' | 'admin' | 'support' | null;
+  resolvedByUserId?: string | null;
+  createdAt: string;
+  resolvedAt?: string | null;
 }
 
 export interface SocialPost {
