@@ -9,6 +9,11 @@ import type { Booking, HostBillingAccount, Listing, UserProfile } from '@/types'
 
 const getMyHostBillingAccountMock = vi.fn();
 const createHostBillingSetupCheckoutMock = vi.fn();
+const mockUseBookingOpsSummaries = vi.fn();
+
+vi.mock('@/hooks/use-booking-ops-summaries', () => ({
+  useBookingOpsSummaries: (...args: unknown[]) => mockUseBookingOpsSummaries(...args),
+}));
 
 vi.mock('@/lib/billing-client', () => ({
   createHostBillingSetupCheckout: (...args: unknown[]) => createHostBillingSetupCheckoutMock(...args),
@@ -25,6 +30,7 @@ vi.mock('sonner', () => ({
     success: vi.fn(),
     error: vi.fn(),
     info: vi.fn(),
+    message: vi.fn(),
   },
 }));
 
@@ -110,6 +116,8 @@ function makeBooking(
 describe('HostDashboard', () => {
   beforeEach(() => {
     createHostBillingSetupCheckoutMock.mockReset();
+    mockUseBookingOpsSummaries.mockReset();
+    mockUseBookingOpsSummaries.mockReturnValue({});
     const billingAccount: HostBillingAccount = {
       userId: profile.id,
       plan: 'professional',
@@ -193,6 +201,46 @@ describe('HostDashboard', () => {
     expect(screen.getByText('Confirm')).toBeInTheDocument();
     expect(screen.getByText(/Nearest deadline:/)).toBeInTheDocument();
     expect(screen.getByText(/(payment confirmation|guest payment) closes/i)).toBeInTheDocument();
+  });
+
+  it('prefers backend ops summary data in the approved-hold watchlist when available', async () => {
+    const bookings = [
+      makeBooking('payment-open', 'APPROVED', {
+        expiresAt: '2026-04-22T18:00:00.000Z',
+      }),
+    ];
+
+    mockUseBookingOpsSummaries.mockReturnValue({
+      'payment-open': {
+        inquiryId: 'payment-open',
+        lastActor: 'support',
+        lastEvent: 'DISPUTE_OPENED',
+        lastEventAt: '2026-04-21T09:30:00.000Z',
+        activeDeadlineKind: 'GUEST_PAYMENT',
+        activeDeadlineAt: '2099-04-22T18:00:00.000Z',
+        openDisputeCount: 2,
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <HostDashboard
+          profile={profile}
+          listings={[listing]}
+          bookings={bookings}
+          onUpgrade={vi.fn()}
+          onChat={vi.fn()}
+          onBookingUpdated={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(getMyHostBillingAccountMock).toHaveBeenCalled());
+
+    expect(screen.getByText('Disputes 2')).toBeInTheDocument();
+    expect(screen.getByText(/Payment due/i)).toBeInTheDocument();
+    expect(screen.getByText(/Nearest deadline:/)).toBeInTheDocument();
+    expect(screen.getByText(/guest payment closes/i)).toBeInTheDocument();
   });
 
   it('starts the Yoco-backed billing setup checkout instead of showing a dead manual card path', async () => {
