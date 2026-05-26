@@ -122,6 +122,20 @@ Key host-screen expectations:
 - retain closed enquiries for audit context instead of dropping them from view
 - prefer backend-derived ops summary data for last actor, last movement, deadlines, and open dispute count when that summary is available
 
+## Host dashboard watchlist
+
+The host dashboard is also expected to use backend queue metadata when it highlights urgent approved holds.
+
+`src/pages/HostDashboard.tsx` now prefers booking ops summary data when it:
+
+- orders the approved-hold watchlist
+- shows the nearest deadline copy
+- surfaces open dispute count inside the watchlist
+
+Important behavior rule:
+
+- the host dashboard and host enquiries views should no longer disagree on urgency just because one of them relied on local-only date heuristics
+
 ## Host availability calendar
 
 The host availability calendar is now expected to behave like an operational inventory tool, not just a date picker.
