@@ -226,6 +226,24 @@ If you want the main test command to include the live environment gate in CI or 
 IDEAL_STAY_RUN_LIVE_SMOKE=true
 ```
 
+### GitHub Actions staging workflow
+
+The repo now includes `.github/workflows/staging-smoke.yml`.
+
+It runs on pushes to `main` that touch app, test, script, or Encore files, and it also supports manual runs through `workflow_dispatch` with an optional `run_seed` toggle.
+
+Set these repository secrets before relying on it:
+
+- `ENCORE_API_URL`
+- `IDEAL_STAY_SEED_ADMIN_EMAIL`
+- `IDEAL_STAY_SEED_ADMIN_PASSWORD`
+- `IDEAL_STAY_DEMO_PASSWORD`
+- `IDEAL_STAY_SMOKE_BASE_URL`
+- `IDEAL_STAY_SMOKE_ADMIN_EMAIL`
+- `IDEAL_STAY_SMOKE_ADMIN_PASSWORD`
+
+The workflow installs dependencies, runs `lint`, `test`, and `build`, optionally runs `seed:demo`, then runs `smoke:live` against the deployed frontend host.
+
 ## Immediate next engineering work
 
 1. Finish the host/guest payment-coordination flow around proof-of-payment and dispute handling.
