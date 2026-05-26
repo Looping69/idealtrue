@@ -154,8 +154,9 @@ describe('HostEnquiries', () => {
     );
 
     expect(screen.getByText('Last actor: Admin.')).toBeInTheDocument();
-    expect(screen.getByText('Open payment disputes:')).toBeInTheDocument();
-    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(
+      screen.getByText((_, node) => node?.textContent === 'Open payment disputes: 2'),
+    ).toBeInTheDocument();
     expect(screen.getByText(/Backend deadline: guest payment due/i)).toBeInTheDocument();
   });
 });
