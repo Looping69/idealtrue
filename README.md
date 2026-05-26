@@ -230,7 +230,7 @@ IDEAL_STAY_RUN_LIVE_SMOKE=true
 
 The repo now includes `.github/workflows/staging-smoke.yml`.
 
-It runs on pushes to `main` that touch app, test, script, or Encore files, and it also supports manual runs through `workflow_dispatch` with an optional `run_seed` toggle.
+It runs on pushes to `main` that touch app, test, script, or Encore files, on a nightly schedule at `03:17 UTC`, and through `workflow_dispatch` with an optional `run_seed` toggle.
 
 Set these repository secrets before relying on it:
 
@@ -242,7 +242,14 @@ Set these repository secrets before relying on it:
 - `IDEAL_STAY_SMOKE_ADMIN_EMAIL`
 - `IDEAL_STAY_SMOKE_ADMIN_PASSWORD`
 
-The workflow installs dependencies, runs `lint`, `test`, and `build`, optionally runs `seed:demo`, then runs `smoke:live` against the deployed frontend host.
+The workflow now does four important things before it ever touches the live smoke path:
+
+- runs `npm run check:staging-smoke-env` so missing secrets and bad URLs fail early
+- runs frontend unit/UI tests plus the mocked Playwright pack
+- installs Encore backend dependencies and typechecks the backend separately
+- uploads Playwright artifacts from CI so browser failures are inspectable instead of opaque
+
+After that it optionally runs `seed:demo`, then runs `smoke:live` against the deployed frontend host.
 
 ## Immediate next engineering work
 
