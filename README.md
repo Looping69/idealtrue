@@ -168,7 +168,12 @@ These are the important runtime expectations now:
 
 ## Verification
 
-The following pass in the current repo state:
+The repo currently has two separate verification layers:
+
+- `npm run test` and `npm run test:e2e` prove local rules, client contracts, and UI workflows.
+- the Playwright specs under `tests/e2e` currently mock `/api/encore/**`, so they should be treated as frontend workflow coverage, not proof that a live Encore environment is healthy.
+
+The baseline local verification commands are:
 
 ```bash
 npm run lint
@@ -177,6 +182,29 @@ npm run test:e2e
 npm run build
 cd encore
 npx tsc --noEmit
+```
+
+Before calling a preview or production deployment launch-ready, run the live smoke check against the deployed frontend host so the same-origin proxy, session cookie flow, public listing reads, and real role-based access are verified in a real environment:
+
+```bash
+IDEAL_STAY_SMOKE_BASE_URL=https://your-preview-or-production-host \
+IDEAL_STAY_SMOKE_REQUIRE_ROLE_CREDENTIALS=true \
+IDEAL_STAY_SMOKE_EXPECT_LISTINGS_MIN=1 \
+IDEAL_STAY_SMOKE_GUEST_EMAIL=guest@example.com \
+IDEAL_STAY_SMOKE_GUEST_PASSWORD=guest-password \
+IDEAL_STAY_SMOKE_HOST_EMAIL=host@example.com \
+IDEAL_STAY_SMOKE_HOST_PASSWORD=host-password \
+IDEAL_STAY_SMOKE_ADMIN_EMAIL=admin@example.com \
+IDEAL_STAY_SMOKE_ADMIN_PASSWORD=admin-password \
+npm run smoke:live
+```
+
+The smoke runner also supports an optional throwaway signup probe through `IDEAL_STAY_SMOKE_SIGNUP_*` environment variables when you want to validate account creation in a shared test environment.
+
+If you want the main test command to include the live environment gate in CI or a release checklist, set:
+
+```bash
+IDEAL_STAY_RUN_LIVE_SMOKE=true
 ```
 
 ## Immediate next engineering work
