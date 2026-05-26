@@ -53,6 +53,28 @@ Expiry enforcement:
 - expiry is enforced server-side when bookings are read or mutated, and an hourly booking cron sweeps stale rows so inventory does not depend on someone opening a screen
 - when an approved enquiry expires, the booking moves to `EXPIRED` and its `APPROVED_HOLD` inventory is released on the next availability sync
 
+## Payment dispute trail
+
+Ideal Stay now has a lightweight payment dispute escalation path built on the booking inquiry ledger.
+
+Current dispute flow:
+
+1. Guest, host, admin, or support opens a payment dispute after payment activity starts.
+2. The dispute is recorded as a durable ledger event on the inquiry.
+3. Host, admin, or support resolves the dispute with a typed resolution.
+4. If an approved enquiry is resolved as `PAYMENT_REJECTED`, the payment state is pushed back to `FAILED` and the approved hold is re-synced.
+
+Current resolution types:
+
+- `PAYMENT_CONFIRMED`
+- `PAYMENT_REJECTED`
+- `REFUND_OUTSIDE_PLATFORM`
+- `OTHER`
+
+Important limitation:
+
+- this is an operational trace and escalation rail, not a full refund or chargeback engine
+
 ## Host enquiries screen
 
 The host enquiries page is intended to be an operational queue, not a passive list.
@@ -113,7 +135,7 @@ Implementation note:
 The workflow is stronger than before, but still incomplete in a few places:
 
 - structured decline reasons now exist and are required when a host declines an enquiry
-- no explicit dispute workflow yet
+- payment disputes now have a durable trail, but there is still no full case-management workflow with SLAs, refunds, or payout reconciliation
 - no backend-side SLA timestamps or last-actor metadata yet
 - off-platform payment still depends on host discipline, but proof storage/access is now bucket-backed and confirmation must fail closed when the stored asset cannot be opened
 - host availability still lacks recurring rules and import/export style controls
