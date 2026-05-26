@@ -22,6 +22,7 @@ export type InquiryState =
   | "BOOKED";
 export type PaymentState = "UNPAID" | "INITIATED" | "COMPLETED" | "FAILED";
 export type PaymentDisputeResolution = "PAYMENT_CONFIRMED" | "PAYMENT_REJECTED" | "REFUND_OUTSIDE_PLATFORM" | "OTHER";
+export type BookingOpsDeadlineKind = "HOST_RESPONSE" | "GUEST_PAYMENT" | "NONE";
 export type ReviewStatus = "pending" | "approved" | "rejected";
 export type ReferralProgram = "guest" | "host";
 export type ReferralRewardStatus = "pending" | "earned" | "paid" | "rejected";
@@ -155,6 +156,16 @@ export interface BookingRecord {
   bookedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface BookingOpsSummaryRecord {
+  inquiryId: string;
+  lastActor: "host" | "system" | "guest" | "admin" | "support";
+  lastEvent: InquiryLedgerEventRecord["event"];
+  lastEventAt: string;
+  activeDeadlineKind: BookingOpsDeadlineKind;
+  activeDeadlineAt?: string | null;
+  openDisputeCount: number;
 }
 
 export interface PaymentDisputeRecord {
