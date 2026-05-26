@@ -65,6 +65,8 @@ This is now an Encore-first repo, not a Firebase bridge with new paint.
 - the frontend uses shared availability logic in [`src/lib/listing-availability.ts`](/C:/Git%20Repos/IdealTrue/src/lib/listing-availability.ts) so explore filtering and booking validation stay consistent
 - the host enquiries screen is now treated as a workflow board with `Needs Response`, `Awaiting Guest Payment`, `Awaiting Payment Confirmation`, `Confirmed Stays`, and `Closed Loop` buckets
 - booking ops summary data now comes from Encore for the latest actor, latest workflow movement, active deadline, and open dispute count
+- the host dashboard watchlist now prefers those same backend booking ops summaries when ordering urgent approved holds and surfacing open disputes
+- the frontend now has typed booking dispute and booking ops summary clients instead of ad hoc route calls
 - the host availability calendar now supports bulk range actions, notes on manual block intervals, selected-day inspection, and backend summary tracking instead of only single-day toggles
 
 See [`docs/booking-and-enquiry-workflow.md`](/C:/Git%20Repos/IdealTrue/docs/booking-and-enquiry-workflow.md) for the full workflow and operational expectations.
