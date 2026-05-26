@@ -51,7 +51,7 @@ This is now an Encore-first repo, not a Firebase bridge with new paint.
 - admin reads and writes for users, bookings, listings, reviews, referrals, subscriptions, notifications, and platform settings
 - listing media uploads through Encore bucket URLs
 - profile photo uploads through Encore bucket URLs
-- KYC submission review and secure asset previews through Encore ops APIs
+- KYC submission review, audit-backed submission/review history, and secure asset previews through Encore ops APIs
 - subscription upgrades and downgrades through Encore billing APIs
 - content studio entitlements, monthly included usage, credit top-ups, and saved drafts through Encore billing APIs
 
@@ -71,7 +71,7 @@ See [`docs/workflow-validation-matrix.md`](/C:/Git%20Repos/IdealTrue/docs/workfl
 
 ## What does not fully route through Encore yet
 
-- KYC document submission still needs a more complete ops workflow around review history and disputes
+- KYC document submission now records audit-backed submission/review history, but disputes and richer ops case management are still missing
 - stay-payment coordination now uses private stored payment-proof assets, but off-platform payment operations still depend on host discipline and would benefit from a fuller dispute/escalation path
 - billing/subscriptions are scaffolded on the backend but not commercially complete
 - AI content engine still needs real social publishing integrations beyond draft scheduling and publish tracking
@@ -254,16 +254,7 @@ After that it optionally runs `seed:demo`, then runs `smoke:live` against the de
 ## Immediate next engineering work
 
 1. Finish the host/guest payment-coordination flow around proof-of-payment and dispute handling.
-2. Tighten KYC ops workflows beyond simple approve/reject.
+2. Tighten KYC ops workflows beyond audit-backed history and simple approve/reject.
 3. Add real payment provider integration for subscriptions and content-credit purchases.
 4. Ship actual social platform publishing integrations on top of the new content draft workflow.
 5. Solve the Encore auth metadata shape so generated frontend clients can replace the manual fetch bridge.
-
-## Already cleaned up
-
-- Gemini client usage removed
-- AI Studio/template residue removed
-- deterministic content and trip-planning helpers added
-- root app identity rewritten toward Ideal Stay
-- mock listing fallback removed from the marketplace shell
-- Firebase auth/storage/firestore app dependencies removed from the frontend code path
