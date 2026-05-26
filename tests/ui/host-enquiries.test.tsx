@@ -2,10 +2,16 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import HostEnquiries from '@/pages/HostEnquiries';
 import type { Booking, Listing } from '@/types';
+
+const mockUseBookingOpsSummaries = vi.fn();
+
+vi.mock('@/hooks/use-booking-ops-summaries', () => ({
+  useBookingOpsSummaries: (...args: unknown[]) => mockUseBookingOpsSummaries(...args),
+}));
 
 const listing: Listing = {
   id: 'listing-1',
@@ -74,6 +80,11 @@ function makeReviewBooking(overrides: Partial<Booking> = {}): Booking {
 }
 
 describe('HostEnquiries', () => {
+  beforeEach(() => {
+    mockUseBookingOpsSummaries.mockReset();
+    mockUseBookingOpsSummaries.mockReturnValue({});
+  });
+
   it('blocks confirmation when the stored private proof asset is not accessible', () => {
     render(
       <MemoryRouter>
@@ -116,5 +127,35 @@ describe('HostEnquiries', () => {
       '/signed/payment-proof.jpg?sig=abc',
     );
     expect(screen.getByRole('button', { name: 'Confirm Payment' })).toBeEnabled();
+  });
+
+  it('prefers backend ops summary data when it is available', () => {
+    mockUseBookingOpsSummaries.mockReturnValue({
+      'booking-review': {
+        inquiryId: 'booking-review',
+        lastActor: 'admin',
+        lastEvent: 'DISPUTE_OPENED',
+        lastEventAt: '2026-04-21T09:30:00.000Z',
+        activeDeadlineKind: 'GUEST_PAYMENT',
+        activeDeadlineAt: '2099-04-22T18:00:00.000Z',
+        openDisputeCount: 2,
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <HostEnquiries
+          bookings={[makeReviewBooking()]}
+          listings={[listing]}
+          onChat={vi.fn()}
+          onBookingUpdated={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Last actor: Admin.')).toBeInTheDocument();
+    expect(screen.getByText('Open payment disputes:')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText(/Backend deadline: guest payment due/i)).toBeInTheDocument();
   });
 });
