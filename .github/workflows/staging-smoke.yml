@@ -8,6 +8,8 @@ on:
         required: false
         default: true
         type: boolean
+  schedule:
+    - cron: "17 3 * * *"
   push:
     branches:
       - main
@@ -31,7 +33,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
       ENCORE_API_URL: ${{ secrets.ENCORE_API_URL }}
       IDEAL_STAY_API_URL: ${{ secrets.ENCORE_API_URL }}
@@ -57,17 +59,34 @@ jobs:
         with:
           node-version: 24
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            encore/package-lock.json
 
-      - name: Install dependencies
+      - name: Validate staging smoke environment
+        run: npm run check:staging-smoke-env
+
+      - name: Install frontend dependencies
         run: npm ci
 
-      - name: Lint
+      - name: Install Encore backend dependencies
+        run: npm ci
+        working-directory: encore
+
+      - name: Lint frontend
         run: npm run lint
 
-      - name: Test
+      - name: Run frontend unit and UI tests
         run: npm run test
 
-      - name: Build
+      - name: Run mocked end-to-end tests
+        run: npm run test:e2e
+
+      - name: Typecheck Encore backend
+        run: npx tsc --noEmit
+        working-directory: encore
+
+      - name: Build frontend
         run: npm run build
 
       - name: Seed shared staging smoke users
