@@ -6,30 +6,30 @@ function isTruthy(value) {
   return ["1", "true", "yes", "on"].includes(`${value || ""}`.trim().toLowerCase());
 }
 
-function validateUrl(name, options = {}) {
+function parseUrl(name, options = {}) {
   const value = readEnv(name);
   const { allowLocalhost = false } = options;
 
   if (!value) {
-    return `${name} is required.`;
+    return { error: `${name} is required.`, parsed: null };
   }
 
   let parsed;
   try {
     parsed = new URL(value);
   } catch {
-    return `${name} must be a valid absolute URL.`;
+    return { error: `${name} must be a valid absolute URL.`, parsed: null };
   }
 
   if (!allowLocalhost && ["localhost", "127.0.0.1"].includes(parsed.hostname)) {
-    return `${name} cannot point at localhost in GitHub Actions.`;
+    return { error: `${name} cannot point at localhost in GitHub Actions.`, parsed: null };
   }
 
   if (!["http:", "https:"].includes(parsed.protocol)) {
-    return `${name} must use http or https.`;
+    return { error: `${name} must use http or https.`, parsed: null };
   }
 
-  return null;
+  return { error: null, parsed };
 }
 
 const requiredValues = [
@@ -48,17 +48,22 @@ for (const name of requiredValues) {
   }
 }
 
-for (const name of ["ENCORE_API_URL", "IDEAL_STAY_API_URL", "IDEAL_STAY_SMOKE_BASE_URL"]) {
-  const error = validateUrl(name);
-  if (error) {
-    errors.push(error);
+const encoreApiUrl = parseUrl("ENCORE_API_URL");
+const seedApiUrl = parseUrl("IDEAL_STAY_API_URL");
+const smokeBaseUrl = parseUrl("IDEAL_STAY_SMOKE_BASE_URL");
+
+for (const result of [encoreApiUrl, seedApiUrl, smokeBaseUrl]) {
+  if (result.error) {
+    errors.push(result.error);
   }
 }
 
-const encoreApiUrl = readEnv("ENCORE_API_URL");
-const seedApiUrl = readEnv("IDEAL_STAY_API_URL");
-if (encoreApiUrl && seedApiUrl && encoreApiUrl !== seedApiUrl) {
+if (!encoreApiUrl.error && !seedApiUrl.error && encoreApiUrl.parsed.toString() !== seedApiUrl.parsed.toString()) {
   errors.push("ENCORE_API_URL and IDEAL_STAY_API_URL must match for the staging workflow.");
+}
+
+if (!encoreApiUrl.error && !smokeBaseUrl.error && encoreApiUrl.parsed.origin === smokeBaseUrl.parsed.origin) {
+  errors.push("IDEAL_STAY_SMOKE_BASE_URL must point at the deployed frontend host, not the raw Encore API host.");
 }
 
 if (!isTruthy(readEnv("IDEAL_STAY_ALLOW_REMOTE_SEED"))) {
