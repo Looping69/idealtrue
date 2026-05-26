@@ -13,6 +13,7 @@ import {
 } from "../catalog/api";
 import { identityDB } from "../identity/db";
 import type {
+  BookingOpsSummaryRecord,
   BookingRecord,
   InquiryDeclineReason,
   InquiryLedgerEventRecord,
@@ -274,6 +275,39 @@ function getOpenPaymentDispute(disputes: PaymentDisputeRecord[]) {
     }
   }
   return null;
+}
+
+function buildBookingOpsSummary(booking: BookingRow, ledgerRows: InquiryLedgerRow[], disputes: PaymentDisputeRecord[]) {
+  const latestLedgerRow = ledgerRows[ledgerRows.length - 1] ?? null;
+
+  let activeDeadlineKind: BookingOpsSummaryRecord["activeDeadlineKind"] = "NONE";
+  if (["PENDING", "VIEWED", "RESPONDED"].includes(booking.inquiry_state) && booking.expires_at) {
+    activeDeadlineKind = "HOST_RESPONSE";
+  } else if (booking.inquiry_state === "APPROVED" && booking.payment_state !== "COMPLETED" && booking.expires_at) {
+    activeDeadlineKind = "GUEST_PAYMENT";
+  }
+
+  return {
+    inquiryId: booking.id,
+    lastActor: latestLedgerRow?.actor ?? "guest",
+    lastEvent: latestLedgerRow?.event ?? "INQUIRY_CREATED",
+    lastEventAt: latestLedgerRow?.created_at ?? booking.created_at,
+    activeDeadlineKind,
+    activeDeadlineAt: activeDeadlineKind === "NONE" ? null : booking.expires_at,
+    openDisputeCount: disputes.filter((dispute) => dispute.status === "OPEN").length,
+  };
+}
+
+async function listInquiryLedgerRows(inquiryId: string) {
+  return bookingDB.rawQueryAll<InquiryLedgerRow>(
+    `
+      SELECT id, inquiry_id, event, from_state, to_state, actor, metadata::text AS metadata, created_at
+      FROM inquiry_ledger
+      WHERE inquiry_id = $1
+      ORDER BY created_at ASC
+    `,
+    inquiryId,
+  );
 }
 
 async function listPaymentDisputeRows(inquiryId: string) {
@@ -936,17 +970,29 @@ export const listInquiryLedger = api<{ id: string }, { events: InquiryLedgerEven
     }
     assertBookingLedgerReadable(existing, auth);
 
-    const rows = await bookingDB.rawQueryAll<InquiryLedgerRow>(
-      `
-      SELECT id, inquiry_id, event, from_state, to_state, actor, metadata::text AS metadata, created_at
-      FROM inquiry_ledger
-      WHERE inquiry_id = $1
-      ORDER BY created_at ASC
-      `,
-      id,
-    );
-
+    const rows = await listInquiryLedgerRows(id);
     return { events: rows.map(mapLedgerEvent) };
+  },
+);
+
+export const getBookingOpsSummary = api<{ id: string }, { summary: BookingOpsSummaryRecord }>(
+  { expose: true, method: "GET", path: "/bookings/:id/ops-summary", auth: true },
+  async ({ id }) => {
+    const auth = requireAuth();
+    const existing = await fetchBookingRowFresh(id);
+    if (!existing) {
+      throw APIError.notFound("Inquiry not found.");
+    }
+    assertBookingLedgerReadable(existing, auth);
+
+    const [ledgerRows, disputes] = await Promise.all([
+      listInquiryLedgerRows(id),
+      listPaymentDisputesForInquiry(id),
+    ]);
+
+    return {
+      summary: buildBookingOpsSummary(existing, ledgerRows, disputes),
+    };
   },
 );
 
