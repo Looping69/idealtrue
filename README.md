@@ -67,6 +67,7 @@ This is now an Encore-first repo, not a Firebase bridge with new paint.
 - booking ops summary data now comes from Encore for the latest actor, latest workflow movement, active deadline, and open dispute count
 - the host dashboard watchlist now prefers those same backend booking ops summaries when ordering urgent approved holds and surfacing open disputes
 - the frontend now has typed booking dispute and booking ops summary clients instead of ad hoc route calls
+- payment confirmation is now visibly blocked in the host enquiries UI while an open dispute is still attached to the inquiry
 - the host availability calendar now supports bulk range actions, notes on manual block intervals, selected-day inspection, and backend summary tracking instead of only single-day toggles
 
 See [`docs/booking-and-enquiry-workflow.md`](/C:/Git%20Repos/IdealTrue/docs/booking-and-enquiry-workflow.md) for the full workflow and operational expectations.
