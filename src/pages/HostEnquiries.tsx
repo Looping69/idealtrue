@@ -146,6 +146,7 @@ export default function HostEnquiries({
   ) => {
     const listing = listings.find((l) => l.id === booking.listingId);
     const opsSummary = bookingOpsSummaries[booking.id];
+    const hasOpenPaymentDispute = (opsSummary?.openDisputeCount ?? 0) > 0;
     const statusLabel = getInquiryBadgeLabel(booking);
     const deadlineCopy = getOpsDeadlineCopy(opsSummary) ?? getHostInquiryDeadlineText(booking);
     const totalExposure = booking.totalPrice + (booking.breakageDeposit ?? 0);
@@ -232,6 +233,9 @@ export default function HostEnquiries({
                   <span className="font-medium text-on-surface">{opsSummary.openDisputeCount}</span>
                 </p>
               )}
+              {options?.showPaymentConfirm && hasOpenPaymentDispute && (
+                <p className="text-red-600">Confirmation is paused until the open payment dispute is resolved.</p>
+              )}
               {booking.inquiryState === 'DECLINED' && getInquiryDeclineReasonDetail(booking) && (
                 <p>
                   Decline reason:{' '}
@@ -298,7 +302,7 @@ export default function HostEnquiries({
               <Button
                 className="w-full lg:w-auto bg-green-600 hover:bg-green-700 text-white"
                 onClick={() => void confirmBookingPayment(booking)}
-                disabled={isProcessingBookingId === booking.id || !booking.paymentProofAccessible || !booking.paymentProofAccessUrl}
+                disabled={isProcessingBookingId === booking.id || !booking.paymentProofAccessible || !booking.paymentProofAccessUrl || hasOpenPaymentDispute}
               >
                 <CheckCircle2 className="w-4 h-4 mr-2" /> Confirm Payment
               </Button>
