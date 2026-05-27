@@ -1,0 +1,107 @@
+name: Staging Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_seed:
+        description: "Seed disposable smoke users before live verification"
+        required: false
+        default: true
+        type: boolean
+  schedule:
+    - cron: "17 3 * * *"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/staging-smoke.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "server.ts"
+      - "scripts/**"
+      - "src/**"
+      - "tests/**"
+      - "encore/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      ENCORE_API_URL: ${{ secrets.ENCORE_API_URL }}
+      IDEAL_STAY_API_URL: ${{ secrets.ENCORE_API_URL }}
+      IDEAL_STAY_ALLOW_REMOTE_SEED: "true"
+      IDEAL_STAY_SEED_ADMIN_EMAIL: ${{ secrets.IDEAL_STAY_SEED_ADMIN_EMAIL }}
+      IDEAL_STAY_SEED_ADMIN_PASSWORD: ${{ secrets.IDEAL_STAY_SEED_ADMIN_PASSWORD }}
+      IDEAL_STAY_DEMO_PASSWORD: ${{ secrets.IDEAL_STAY_DEMO_PASSWORD }}
+      IDEAL_STAY_SMOKE_BASE_URL: ${{ secrets.IDEAL_STAY_SMOKE_BASE_URL }}
+      IDEAL_STAY_SMOKE_REQUIRE_ROLE_CREDENTIALS: "true"
+      IDEAL_STAY_SMOKE_EXPECT_LISTINGS_MIN: "1"
+      IDEAL_STAY_SMOKE_GUEST_EMAIL: guest.nomusa@idealstay.demo
+      IDEAL_STAY_SMOKE_GUEST_PASSWORD: ${{ secrets.IDEAL_STAY_DEMO_PASSWORD }}
+      IDEAL_STAY_SMOKE_HOST_EMAIL: thandi.mokoena@idealstay.demo
+      IDEAL_STAY_SMOKE_HOST_PASSWORD: ${{ secrets.IDEAL_STAY_DEMO_PASSWORD }}
+      IDEAL_STAY_SMOKE_ADMIN_EMAIL: ${{ secrets.IDEAL_STAY_SMOKE_ADMIN_EMAIL }}
+      IDEAL_STAY_SMOKE_ADMIN_PASSWORD: ${{ secrets.IDEAL_STAY_SMOKE_ADMIN_PASSWORD }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            encore/package-lock.json
+
+      - name: Validate staging smoke environment
+        run: npm run check:staging-smoke-env
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Encore backend dependencies
+        run: npm ci
+        working-directory: encore
+
+      - name: Lint frontend
+        run: npm run lint
+
+      - name: Run frontend unit and UI tests
+        run: npm run test
+
+      - name: Run mocked end-to-end tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            playwright-report
+            test-results/playwright
+          if-no-files-found: ignore
+
+      - name: Typecheck Encore backend
+        run: npx tsc --noEmit
+        working-directory: encore
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Seed shared staging smoke users
+        if: github.event_name != 'workflow_dispatch' || inputs.run_seed
+        run: npm run seed:demo
+
+      - name: Run live staging smoke
+        run: npm run smoke:live

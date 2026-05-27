@@ -53,6 +53,51 @@ Expiry enforcement:
 - expiry is enforced server-side when bookings are read or mutated, and an hourly booking cron sweeps stale rows so inventory does not depend on someone opening a screen
 - when an approved enquiry expires, the booking moves to `EXPIRED` and its `APPROVED_HOLD` inventory is released on the next availability sync
 
+## Payment dispute trail
+
+Ideal Stay now has a lightweight payment dispute escalation path built on the booking inquiry ledger.
+
+Current dispute flow:
+
+1. Guest, host, admin, or support opens a payment dispute after payment activity starts.
+2. The dispute is recorded as a durable ledger event on the inquiry.
+3. Host, admin, or support resolves the dispute with a typed resolution.
+4. If an approved enquiry is resolved as `PAYMENT_REJECTED`, the payment state is pushed back to `FAILED` and the approved hold is re-synced.
+
+Current resolution types:
+
+- `PAYMENT_CONFIRMED`
+- `PAYMENT_REJECTED`
+- `REFUND_OUTSIDE_PLATFORM`
+- `OTHER`
+
+Important limitation:
+
+- this is an operational trace and escalation rail, not a full refund or chargeback engine
+
+## Backend ops summary
+
+The booking backend now exposes `GET /bookings/:id/ops-summary` so the UI and operations workflows can read a consistent server-side summary instead of inferring queue state only in the browser.
+
+The summary currently includes:
+
+- the last actor on the inquiry ledger
+- the last workflow event type
+- the timestamp of that last movement
+- the currently active deadline kind
+- the active deadline timestamp when one exists
+- the count of open payment disputes on the inquiry
+
+Current deadline kinds:
+
+- `HOST_RESPONSE`
+- `GUEST_PAYMENT`
+- `NONE`
+
+Important behavior rule:
+
+- the active deadline is derived from the booking state already persisted on the backend, so expiry-sensitive workflows do not depend on a frontend-only timer model
+
 ## Host enquiries screen
 
 The host enquiries page is intended to be an operational queue, not a passive list.
@@ -74,7 +119,23 @@ Key host-screen expectations:
 - show stay value, breakage deposit, and total guest exposure
 - show payment reference and private proof access state during payment review
 - never enable payment confirmation if proof is inaccessible
+- pause payment confirmation in the host enquiries UI while any open payment dispute remains on the inquiry
 - retain closed enquiries for audit context instead of dropping them from view
+- prefer backend-derived ops summary data for last actor, last movement, deadlines, and open dispute count when that summary is available
+
+## Host dashboard watchlist
+
+The host dashboard is also expected to use backend queue metadata when it highlights urgent approved holds.
+
+`src/pages/HostDashboard.tsx` now prefers booking ops summary data when it:
+
+- orders the approved-hold watchlist
+- shows the nearest deadline copy
+- surfaces open dispute count inside the watchlist
+
+Important behavior rule:
+
+- the host dashboard and host enquiries views should no longer disagree on urgency just because one of them relied on local-only date heuristics
 
 ## Host availability calendar
 
@@ -113,8 +174,8 @@ Implementation note:
 The workflow is stronger than before, but still incomplete in a few places:
 
 - structured decline reasons now exist and are required when a host declines an enquiry
-- no explicit dispute workflow yet
-- no backend-side SLA timestamps or last-actor metadata yet
+- payment disputes now have a durable trail, but there is still no full case-management workflow with assignees, SLAs, refunds, or payout reconciliation
+- backend booking ops summary now exposes deadline and last-movement metadata, but there is still no SLA-breach escalation or workload assignment model
 - off-platform payment still depends on host discipline, but proof storage/access is now bucket-backed and confirmation must fail closed when the stored asset cannot be opened
 - host availability still lacks recurring rules and import/export style controls
 

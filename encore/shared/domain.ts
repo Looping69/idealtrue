@@ -21,6 +21,8 @@ export type InquiryState =
   | "EXPIRED"
   | "BOOKED";
 export type PaymentState = "UNPAID" | "INITIATED" | "COMPLETED" | "FAILED";
+export type PaymentDisputeResolution = "PAYMENT_CONFIRMED" | "PAYMENT_REJECTED" | "REFUND_OUTSIDE_PLATFORM" | "OTHER";
+export type BookingOpsDeadlineKind = "HOST_RESPONSE" | "GUEST_PAYMENT" | "NONE";
 export type ReviewStatus = "pending" | "approved" | "rejected";
 export type ReferralProgram = "guest" | "host";
 export type ReferralRewardStatus = "pending" | "earned" | "paid" | "rejected";
@@ -156,13 +158,44 @@ export interface BookingRecord {
   updatedAt: string;
 }
 
+export interface BookingOpsSummaryRecord {
+  inquiryId: string;
+  lastActor: "host" | "system" | "guest" | "admin" | "support";
+  lastEvent: InquiryLedgerEventRecord["event"];
+  lastEventAt: string;
+  activeDeadlineKind: BookingOpsDeadlineKind;
+  activeDeadlineAt?: string | null;
+  openDisputeCount: number;
+}
+
+export interface PaymentDisputeRecord {
+  id: string;
+  inquiryId: string;
+  status: "OPEN" | "RESOLVED";
+  openedBy: "guest" | "host" | "admin" | "support";
+  openedByUserId: string;
+  reason: string;
+  details?: string | null;
+  resolution?: PaymentDisputeResolution | null;
+  resolutionNote?: string | null;
+  resolvedBy?: "host" | "admin" | "support" | null;
+  resolvedByUserId?: string | null;
+  createdAt: string;
+  resolvedAt?: string | null;
+}
+
 export interface InquiryLedgerEventRecord {
   id: string;
   inquiryId: string;
-  event: "INQUIRY_CREATED" | "STATUS_CHANGED" | "PAYMENT_CHANGED";
+  event:
+    | "INQUIRY_CREATED"
+    | "STATUS_CHANGED"
+    | "PAYMENT_CHANGED"
+    | "DISPUTE_OPENED"
+    | "DISPUTE_RESOLVED";
   fromState?: string | null;
   toState?: string | null;
-  actor: "host" | "system" | "guest";
+  actor: "host" | "system" | "guest" | "admin" | "support";
   metadata?: string | null;
   timestamp: string;
 }

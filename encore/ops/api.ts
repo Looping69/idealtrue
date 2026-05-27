@@ -103,6 +103,17 @@ interface KycSubmissionAssets {
   selfieImageUrl: string;
 }
 
+interface KycHistoryEntry {
+  id: string;
+  submissionId: string;
+  userId: string;
+  action: "submitted" | "resubmitted" | "reviewed";
+  actorId: string;
+  status: "pending" | "verified" | "rejected";
+  rejectionReason?: string | null;
+  createdAt: string;
+}
+
 interface RequestKycUploadParams {
   filename: string;
   contentType: string;
@@ -120,6 +131,15 @@ type KycSubmissionRow = {
   submitted_at: string;
   reviewed_at: string | null;
   reviewer_id: string | null;
+};
+
+type AuditLogRow = {
+  id: string;
+  actor_id: string;
+  action: string;
+  target_id: string | null;
+  payload: string;
+  created_at: string;
 };
 
 type NotificationRow = {
@@ -154,6 +174,12 @@ const ALLOWED_KYC_CONTENT_TYPES = new Set([
   "image/webp",
   "image/heic",
 ]);
+
+const KYC_HISTORY_ACTIONS = {
+  created: "kyc.submission.created",
+  resubmitted: "kyc.submission.resubmitted",
+  reviewed: "kyc.submission.reviewed",
+} as const;
 
 const backendStartedAt = new Date();
 export const observabilityChecks = new Counter("admin_observability_checks_total");
@@ -207,6 +233,57 @@ function mapPlatformSettings(row: PlatformSettingsRow): PlatformSettingsRecord {
     enableReferrals: row.enable_referrals,
     maintenanceMode: row.maintenance_mode,
     updatedAt: row.updated_at,
+  };
+}
+
+function mapAuditLogEntry(row: AuditLogRow): AuditLogEntry {
+  return {
+    id: row.id,
+    actorId: row.actor_id,
+    action: row.action,
+    targetId: row.target_id,
+    payload: row.payload,
+    createdAt: row.created_at,
+  };
+}
+
+function parseAuditPayload(payload: string) {
+  try {
+    return JSON.parse(payload) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+function mapKycHistoryEntry(row: AuditLogRow): KycHistoryEntry | null {
+  const payload = parseAuditPayload(row.payload);
+  const submissionId = typeof payload.submissionId === "string" ? payload.submissionId : null;
+  const userId = typeof payload.userId === "string" ? payload.userId : row.target_id;
+  const statusValue = payload.status;
+  const status = statusValue === "pending" || statusValue === "verified" || statusValue === "rejected" ? statusValue : null;
+
+  let action: KycHistoryEntry["action"] | null = null;
+  if (row.action === KYC_HISTORY_ACTIONS.created) {
+    action = "submitted";
+  } else if (row.action === KYC_HISTORY_ACTIONS.resubmitted) {
+    action = "resubmitted";
+  } else if (row.action === KYC_HISTORY_ACTIONS.reviewed) {
+    action = "reviewed";
+  }
+
+  if (!submissionId || !userId || !status || !action) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    submissionId,
+    userId,
+    action,
+    actorId: row.actor_id,
+    status,
+    rejectionReason: typeof payload.rejectionReason === "string" ? payload.rejectionReason : null,
+    createdAt: row.created_at,
   };
 }
 
@@ -307,6 +384,45 @@ async function measureDatabase(
   }
 }
 
+async function appendAuditLog(params: {
+  actorId: string;
+  action: string;
+  targetId?: string | null;
+  payload?: Record<string, unknown>;
+  createdAt: string;
+}) {
+  const id = randomUUID();
+  await opsDB.exec`
+    INSERT INTO audit_log (id, actor_id, action, target_id, payload, created_at)
+    VALUES (
+      ${id},
+      ${params.actorId},
+      ${params.action},
+      ${params.targetId ?? null},
+      ${JSON.stringify(params.payload ?? {})}::jsonb,
+      ${params.createdAt}
+    )
+  `;
+  return id;
+}
+
+async function listKycHistoryEntries(userId: string) {
+  const rows = await opsDB.rawQueryAll<AuditLogRow>(
+    `
+      SELECT id, actor_id, action, target_id, payload::text AS payload, created_at
+      FROM audit_log
+      WHERE target_id = $1
+        AND action IN ('kyc.submission.created', 'kyc.submission.resubmitted', 'kyc.submission.reviewed')
+      ORDER BY created_at ASC
+    `,
+    userId,
+  );
+
+  return rows
+    .map((row) => mapKycHistoryEntry(row))
+    .filter((entry): entry is KycHistoryEntry => entry !== null);
+}
+
 export const requestKycUpload = api<RequestKycUploadParams, { objectKey: string; uploadUrl: string }>(
   { expose: true, method: "POST", path: "/ops/kyc/upload-url", auth: true },
   async ({ filename, contentType }) => {
@@ -389,21 +505,34 @@ export const submitKyc = api<{
         WHERE user_id = ${auth.userID}
       `;
 
-      return {
-        submission: {
-          ...mapKycSubmission(existing, { includeSensitiveIdNumber: true }),
-          idType: params.idType,
-          idNumber: params.idNumber,
-          idNumberMasked: maskSensitiveString(params.idNumber.trim()),
-          idImageKey,
-          selfieImageKey,
-          status: "pending",
-          rejectionReason: null,
-          submittedAt: now,
-          reviewedAt: null,
-          reviewerId: null,
-        },
+      const submission: KycSubmission = {
+        ...mapKycSubmission(existing, { includeSensitiveIdNumber: true }),
+        idType: params.idType,
+        idNumber: params.idNumber,
+        idNumberMasked: maskSensitiveString(params.idNumber.trim()),
+        idImageKey,
+        selfieImageKey,
+        status: "pending",
+        rejectionReason: null,
+        submittedAt: now,
+        reviewedAt: null,
+        reviewerId: null,
       };
+
+      await appendAuditLog({
+        actorId: auth.userID,
+        action: KYC_HISTORY_ACTIONS.resubmitted,
+        targetId: auth.userID,
+        payload: {
+          submissionId: existing.id,
+          userId: auth.userID,
+          status: submission.status,
+          idType: submission.idType,
+        },
+        createdAt: now,
+      });
+
+      return { submission };
     }
 
     const id = randomUUID();
@@ -416,22 +545,35 @@ export const submitKyc = api<{
       )
     `;
 
-    return {
-      submission: {
-        id,
-        userId: auth.userID,
-        idType: params.idType,
-        idNumber: params.idNumber,
-        idNumberMasked: maskSensitiveString(params.idNumber.trim()),
-        idImageKey,
-        selfieImageKey,
-        status: "pending",
-        rejectionReason: null,
-        submittedAt: now,
-        reviewedAt: null,
-        reviewerId: null,
-      },
+    const submission: KycSubmission = {
+      id,
+      userId: auth.userID,
+      idType: params.idType,
+      idNumber: params.idNumber,
+      idNumberMasked: maskSensitiveString(params.idNumber.trim()),
+      idImageKey,
+      selfieImageKey,
+      status: "pending",
+      rejectionReason: null,
+      submittedAt: now,
+      reviewedAt: null,
+      reviewerId: null,
     };
+
+    await appendAuditLog({
+      actorId: auth.userID,
+      action: KYC_HISTORY_ACTIONS.created,
+      targetId: auth.userID,
+      payload: {
+        submissionId: id,
+        userId: auth.userID,
+        status: submission.status,
+        idType: submission.idType,
+      },
+      createdAt: now,
+    });
+
+    return { submission };
   },
 );
 
@@ -446,6 +588,14 @@ export const getMyKycSubmission = api<void, { submission: KycSubmission | null }
   },
 );
 
+export const getMyKycSubmissionHistory = api<void, { history: KycHistoryEntry[] }>(
+  { expose: true, method: "GET", path: "/ops/kyc/submissions/me/history", auth: true },
+  async () => {
+    const auth = requireAuth();
+    return { history: await listKycHistoryEntries(auth.userID) };
+  },
+);
+
 export const listKycSubmissions = api<void, { submissions: KycSubmission[] }>(
   { expose: true, method: "GET", path: "/ops/kyc/submissions", auth: true },
   async () => {
@@ -454,6 +604,14 @@ export const listKycSubmissions = api<void, { submissions: KycSubmission[] }>(
       `SELECT * FROM kyc_submissions ORDER BY submitted_at DESC`,
     );
     return { submissions: submissions.map((submission) => mapKycSubmission(submission)) };
+  },
+);
+
+export const getKycSubmissionHistory = api<{ userId: string }, { history: KycHistoryEntry[] }>(
+  { expose: true, method: "GET", path: "/ops/kyc/submissions/:userId/history", auth: true },
+  async ({ userId }) => {
+    requireRole("admin", "support");
+    return { history: await listKycHistoryEntries(userId) };
   },
 );
 
@@ -472,19 +630,34 @@ export const reviewKycSubmission = api<{
       throw new Error("KYC submission not found.");
     }
     const now = new Date().toISOString();
+    const rejectionReason = params.status === "rejected" ? params.rejectionReason ?? "Rejected during review." : null;
     await opsDB.exec`
       UPDATE kyc_submissions
       SET status = ${params.status},
-          rejection_reason = ${params.status === "rejected" ? params.rejectionReason ?? "Rejected during review." : null},
+          rejection_reason = ${rejectionReason},
           reviewed_at = ${now},
           reviewer_id = ${auth.userID}
       WHERE user_id = ${params.userId}
     `;
+
+    await appendAuditLog({
+      actorId: auth.userID,
+      action: KYC_HISTORY_ACTIONS.reviewed,
+      targetId: params.userId,
+      payload: {
+        submissionId: existing.id,
+        userId: params.userId,
+        status: params.status,
+        rejectionReason,
+      },
+      createdAt: now,
+    });
+
     try {
       await notifyKycReviewed({
         userId: params.userId,
         status: params.status,
-        rejectionReason: params.status === "rejected" ? params.rejectionReason ?? "Rejected during review." : null,
+        rejectionReason,
       });
     } catch (error) {
       console.error("Failed to notify KYC review outcome:", error);
@@ -493,7 +666,7 @@ export const reviewKycSubmission = api<{
       submission: {
         ...mapKycSubmission(existing),
         status: params.status,
-        rejectionReason: params.status === "rejected" ? params.rejectionReason ?? "Rejected during review." : null,
+        rejectionReason,
         reviewedAt: now,
         reviewerId: auth.userID,
       },
@@ -543,24 +716,12 @@ export const listAuditLogs = api<void, { logs: AuditLogEntry[] }>(
   { expose: true, method: "GET", path: "/ops/audit", auth: true },
   async () => {
     requireRole("admin", "support");
-    const logs = await opsDB.rawQueryAll<{
-      id: string;
-      actor_id: string;
-      action: string;
-      target_id: string | null;
-      payload: string;
-      created_at: string;
-    }>(`SELECT id, actor_id, action, target_id, payload::text AS payload, created_at FROM audit_log ORDER BY created_at DESC LIMIT 100`);
+    const logs = await opsDB.rawQueryAll<AuditLogRow>(
+      `SELECT id, actor_id, action, target_id, payload::text AS payload, created_at FROM audit_log ORDER BY created_at DESC LIMIT 100`,
+    );
 
     return {
-      logs: logs.map((log) => ({
-        id: log.id,
-        actorId: log.actor_id,
-        action: log.action,
-        targetId: log.target_id,
-        payload: log.payload,
-        createdAt: log.created_at,
-      })),
+      logs: logs.map((log) => mapAuditLogEntry(log)),
     };
   },
 );

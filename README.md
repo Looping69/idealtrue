@@ -51,7 +51,8 @@ This is now an Encore-first repo, not a Firebase bridge with new paint.
 - admin reads and writes for users, bookings, listings, reviews, referrals, subscriptions, notifications, and platform settings
 - listing media uploads through Encore bucket URLs
 - profile photo uploads through Encore bucket URLs
-- KYC submission review and secure asset previews through Encore ops APIs
+- KYC submission review, audit-backed submission/review history, and secure asset previews through Encore ops APIs
+- booking payment dispute escalation history and booking ops summaries through Encore booking APIs
 - subscription upgrades and downgrades through Encore billing APIs
 - content studio entitlements, monthly included usage, credit top-ups, and saved drafts through Encore billing APIs
 
@@ -63,6 +64,10 @@ This is now an Encore-first repo, not a Firebase bridge with new paint.
 - stay dates are end-exclusive for occupancy logic, so checkout day is not treated as a blocked overnight
 - the frontend uses shared availability logic in [`src/lib/listing-availability.ts`](/C:/Git%20Repos/IdealTrue/src/lib/listing-availability.ts) so explore filtering and booking validation stay consistent
 - the host enquiries screen is now treated as a workflow board with `Needs Response`, `Awaiting Guest Payment`, `Awaiting Payment Confirmation`, `Confirmed Stays`, and `Closed Loop` buckets
+- booking ops summary data now comes from Encore for the latest actor, latest workflow movement, active deadline, and open dispute count
+- the host dashboard watchlist now prefers those same backend booking ops summaries when ordering urgent approved holds and surfacing open disputes
+- the frontend now has typed booking dispute and booking ops summary clients instead of ad hoc route calls
+- payment confirmation is now visibly blocked in the host enquiries UI while an open dispute is still attached to the inquiry
 - the host availability calendar now supports bulk range actions, notes on manual block intervals, selected-day inspection, and backend summary tracking instead of only single-day toggles
 
 See [`docs/booking-and-enquiry-workflow.md`](/C:/Git%20Repos/IdealTrue/docs/booking-and-enquiry-workflow.md) for the full workflow and operational expectations.
@@ -71,8 +76,8 @@ See [`docs/workflow-validation-matrix.md`](/C:/Git%20Repos/IdealTrue/docs/workfl
 
 ## What does not fully route through Encore yet
 
-- KYC document submission still needs a more complete ops workflow around review history and disputes
-- stay-payment coordination now uses private stored payment-proof assets, but off-platform payment operations still depend on host discipline and would benefit from a fuller dispute/escalation path
+- KYC document submission now records audit-backed submission/review history, but richer ops case management is still missing
+- stay-payment coordination now has a lightweight dispute escalation trail and backend ops summary metadata, but off-platform payment operations still need fuller case handling, refund automation, assignee workflow, and SLA tooling
 - billing/subscriptions are scaffolded on the backend but not commercially complete
 - AI content engine still needs real social publishing integrations beyond draft scheduling and publish tracking
 - generated Encore frontend clients are still blocked, so the frontend uses a manual request client
@@ -125,11 +130,24 @@ Dev login is now opt-in only and should never be enabled in a shared environment
 IDEAL_STAY_ENABLE_DEV_LOGIN=true
 ```
 
-The demo seed script also defaults to local and refuses to hit a non-local API target unless you opt in:
+The demo seed script defaults to local and refuses to hit a non-local API target unless you opt in:
 
 ```bash
 IDEAL_STAY_ALLOW_REMOTE_SEED=true
 ```
+
+For shared preview or staging environments, the same script can now create disposable guest and host smoke accounts through the real auth flow, then use an existing admin account to normalize passwords, host plans, KYC state, and demo listings:
+
+```bash
+IDEAL_STAY_API_URL=https://your-encore-host \
+IDEAL_STAY_ALLOW_REMOTE_SEED=true \
+IDEAL_STAY_SEED_ADMIN_EMAIL=admin@example.com \
+IDEAL_STAY_SEED_ADMIN_PASSWORD=admin-password \
+IDEAL_STAY_DEMO_PASSWORD='IdealStayDemo123!' \
+npm run seed:demo
+```
+
+That shared-environment path does not mint a new admin. It expects one existing admin login, then provisions disposable smoke users and listing data around it.
 
 Backend auth email delivery is optional in local/dev but should be configured in any serious environment:
 
@@ -168,7 +186,12 @@ These are the important runtime expectations now:
 
 ## Verification
 
-The following pass in the current repo state:
+The repo currently has two separate verification layers:
+
+- `npm run test` and `npm run test:e2e` prove local rules, client contracts, and UI workflows.
+- the Playwright specs under `tests/e2e` currently mock `/api/encore/**`, so they should be treated as frontend workflow coverage, not proof that a live Encore environment is healthy.
+
+The baseline local verification commands are:
 
 ```bash
 npm run lint
@@ -179,19 +202,64 @@ cd encore
 npx tsc --noEmit
 ```
 
+Before calling a preview or production deployment launch-ready, run the shared-environment seed if you need disposable smoke users, then run the live smoke check against the deployed frontend host so the same-origin proxy, session cookie flow, public listing reads, and real role-based access are verified in a real environment:
+
+```bash
+IDEAL_STAY_API_URL=https://your-encore-host \
+IDEAL_STAY_ALLOW_REMOTE_SEED=true \
+IDEAL_STAY_SEED_ADMIN_EMAIL=admin@example.com \
+IDEAL_STAY_SEED_ADMIN_PASSWORD=admin-password \
+npm run seed:demo
+
+IDEAL_STAY_SMOKE_BASE_URL=https://your-preview-or-production-host \
+IDEAL_STAY_SMOKE_REQUIRE_ROLE_CREDENTIALS=true \
+IDEAL_STAY_SMOKE_EXPECT_LISTINGS_MIN=1 \
+IDEAL_STAY_SMOKE_GUEST_EMAIL=guest.nomusa@idealstay.demo \
+IDEAL_STAY_SMOKE_GUEST_PASSWORD='IdealStayDemo123!' \
+IDEAL_STAY_SMOKE_HOST_EMAIL=thandi.mokoena@idealstay.demo \
+IDEAL_STAY_SMOKE_HOST_PASSWORD='IdealStayDemo123!' \
+IDEAL_STAY_SMOKE_ADMIN_EMAIL=admin@example.com \
+IDEAL_STAY_SMOKE_ADMIN_PASSWORD=admin-password \
+npm run smoke:live
+```
+
+The smoke runner also supports an optional throwaway signup probe through `IDEAL_STAY_SMOKE_SIGNUP_*` environment variables when you want to validate account creation in a shared test environment.
+
+If you want the main test command to include the live environment gate in CI or a release checklist, set:
+
+```bash
+IDEAL_STAY_RUN_LIVE_SMOKE=true
+```
+
+### GitHub Actions staging workflow
+
+The repo now includes `.github/workflows/staging-smoke.yml`.
+
+It runs on pushes to `main` that touch app, test, script, or Encore files, on a nightly schedule at `03:17 UTC`, and through `workflow_dispatch` with an optional `run_seed` toggle.
+
+Set these repository secrets before relying on it:
+
+- `ENCORE_API_URL`
+- `IDEAL_STAY_SEED_ADMIN_EMAIL`
+- `IDEAL_STAY_SEED_ADMIN_PASSWORD`
+- `IDEAL_STAY_DEMO_PASSWORD`
+- `IDEAL_STAY_SMOKE_BASE_URL`
+- `IDEAL_STAY_SMOKE_ADMIN_EMAIL`
+- `IDEAL_STAY_SMOKE_ADMIN_PASSWORD`
+
+The workflow now does four important things before it ever touches the live smoke path:
+
+- runs `npm run check:staging-smoke-env` so missing secrets and bad URLs fail early
+- runs frontend unit/UI tests plus the mocked Playwright pack
+- installs Encore backend dependencies and typechecks the backend separately
+- uploads Playwright artifacts from CI so browser failures are inspectable instead of opaque
+
+After that it optionally runs `seed:demo`, then runs `smoke:live` against the deployed frontend host.
+
 ## Immediate next engineering work
 
-1. Finish the host/guest payment-coordination flow around proof-of-payment and dispute handling.
-2. Tighten KYC ops workflows beyond simple approve/reject.
+1. Extend stay-payment operations beyond the current dispute trail and ops summary with assignee workflow, SLA handling, and refund orchestration.
+2. Tighten KYC ops workflows beyond audit-backed history and simple approve/reject.
 3. Add real payment provider integration for subscriptions and content-credit purchases.
 4. Ship actual social platform publishing integrations on top of the new content draft workflow.
 5. Solve the Encore auth metadata shape so generated frontend clients can replace the manual fetch bridge.
-
-## Already cleaned up
-
-- Gemini client usage removed
-- AI Studio/template residue removed
-- deterministic content and trip-planning helpers added
-- root app identity rewritten toward Ideal Stay
-- mock listing fallback removed from the marketplace shell
-- Firebase auth/storage/firestore app dependencies removed from the frontend code path

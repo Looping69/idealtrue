@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx --eval \"import { join } from 'node:path'; import { pathToFileURL } from 'node:url'; import(pathToFileURL(join(process.cwd().replace(/^\\\\\\\\\\?\\\\/, ''), 'server.ts')).href);\"",
     "check:config": "node scripts/check-production-config.mjs",
+    "check:staging-smoke-env": "node scripts/check-staging-smoke-env.mjs",
     "build": "node scripts/build.mjs",
     "preview": "vite preview",
     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
@@ -13,7 +14,9 @@
     "test": "node scripts/run-tests.mjs",
     "test:unit": "tsx --test tests/*.test.ts",
     "test:ui": "vitest run",
-    "test:e2e": "playwright test",
+    "test:e2e": "npm run test:e2e:mocked",
+    "test:e2e:mocked": "playwright test",
+    "smoke:live": "node scripts/live-smoke.mjs",
     "seed:demo": "node scripts/seed-demo-data.mjs"
   },
   "dependencies": {

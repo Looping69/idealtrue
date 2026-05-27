@@ -13,10 +13,13 @@ import {
 } from "../catalog/api";
 import { identityDB } from "../identity/db";
 import type {
+  BookingOpsSummaryRecord,
   BookingRecord,
   InquiryDeclineReason,
   InquiryLedgerEventRecord,
   InquiryState,
+  PaymentDisputeRecord,
+  PaymentDisputeResolution,
   PaymentState,
 } from "../shared/domain";
 import {
@@ -122,6 +125,25 @@ interface ConfirmPaymentParams {
   id: string;
 }
 
+interface OpenPaymentDisputeParams {
+  id: string;
+  reason: string;
+  details?: string | null;
+}
+
+interface ResolvePaymentDisputeParams {
+  id: string;
+  resolution: PaymentDisputeResolution;
+  resolutionNote?: string | null;
+}
+
+const PAYMENT_DISPUTE_RESOLUTIONS = new Set<PaymentDisputeResolution>([
+  "PAYMENT_CONFIRMED",
+  "PAYMENT_REJECTED",
+  "REFUND_OUTSIDE_PLATFORM",
+  "OTHER",
+]);
+
 function mapBooking(row: BookingRow): BookingRecord {
   return {
     id: row.id,
@@ -166,6 +188,168 @@ function mapLedgerEvent(row: InquiryLedgerRow): InquiryLedgerEventRecord {
     metadata: row.metadata,
     timestamp: row.created_at,
   };
+}
+
+function parseLedgerMetadata(metadata: string | null | undefined) {
+  if (!metadata) {
+    return {} as Record<string, unknown>;
+  }
+
+  try {
+    return JSON.parse(metadata) as Record<string, unknown>;
+  } catch {
+    return {} as Record<string, unknown>;
+  }
+}
+
+function buildDisputeRecordIndex(rows: InquiryLedgerRow[]) {
+  const disputes: PaymentDisputeRecord[] = [];
+  const byId = new Map<string, PaymentDisputeRecord>();
+
+  for (const row of rows) {
+    const metadata = parseLedgerMetadata(row.metadata);
+
+    if (row.event === "DISPUTE_OPENED") {
+      const reason = typeof metadata.reason === "string" ? metadata.reason : "Payment dispute raised.";
+      const openedByUserId = typeof metadata.openedByUserId === "string" ? metadata.openedByUserId : "";
+      if (!openedByUserId) {
+        continue;
+      }
+      const openedBy =
+        row.actor === "guest" || row.actor === "host" || row.actor === "admin" || row.actor === "support"
+          ? row.actor
+          : "guest";
+
+      const dispute: PaymentDisputeRecord = {
+        id: row.id,
+        inquiryId: row.inquiry_id,
+        status: "OPEN",
+        openedBy,
+        openedByUserId,
+        reason,
+        details: typeof metadata.details === "string" ? metadata.details : null,
+        resolution: null,
+        resolutionNote: null,
+        resolvedBy: null,
+        resolvedByUserId: null,
+        createdAt: row.created_at,
+        resolvedAt: null,
+      };
+
+      disputes.push(dispute);
+      byId.set(dispute.id, dispute);
+      continue;
+    }
+
+    if (row.event === "DISPUTE_RESOLVED") {
+      const openedDisputeId = typeof metadata.openedDisputeId === "string" ? metadata.openedDisputeId : null;
+      const target = openedDisputeId ? byId.get(openedDisputeId) : null;
+      if (!target) {
+        continue;
+      }
+      const resolution = metadata.resolution;
+      if (
+        resolution !== "PAYMENT_CONFIRMED"
+        && resolution !== "PAYMENT_REJECTED"
+        && resolution !== "REFUND_OUTSIDE_PLATFORM"
+        && resolution !== "OTHER"
+      ) {
+        continue;
+      }
+      target.status = "RESOLVED";
+      target.resolution = resolution;
+      target.resolutionNote = typeof metadata.resolutionNote === "string" ? metadata.resolutionNote : null;
+      target.resolvedBy = row.actor === "host" || row.actor === "admin" || row.actor === "support" ? row.actor : null;
+      target.resolvedByUserId = typeof metadata.resolvedByUserId === "string" ? metadata.resolvedByUserId : null;
+      target.resolvedAt = row.created_at;
+    }
+  }
+
+  return disputes;
+}
+
+function getOpenPaymentDispute(disputes: PaymentDisputeRecord[]) {
+  for (let index = disputes.length - 1; index >= 0; index -= 1) {
+    if (disputes[index].status === "OPEN") {
+      return disputes[index];
+    }
+  }
+  return null;
+}
+
+function buildBookingOpsSummary(booking: BookingRow, ledgerRows: InquiryLedgerRow[], disputes: PaymentDisputeRecord[]) {
+  const latestLedgerRow = ledgerRows[ledgerRows.length - 1] ?? null;
+
+  let activeDeadlineKind: BookingOpsSummaryRecord["activeDeadlineKind"] = "NONE";
+  if (["PENDING", "VIEWED", "RESPONDED"].includes(booking.inquiry_state) && booking.expires_at) {
+    activeDeadlineKind = "HOST_RESPONSE";
+  } else if (booking.inquiry_state === "APPROVED" && booking.payment_state !== "COMPLETED" && booking.expires_at) {
+    activeDeadlineKind = "GUEST_PAYMENT";
+  }
+
+  return {
+    inquiryId: booking.id,
+    lastActor: latestLedgerRow?.actor ?? "guest",
+    lastEvent: latestLedgerRow?.event ?? "INQUIRY_CREATED",
+    lastEventAt: latestLedgerRow?.created_at ?? booking.created_at,
+    activeDeadlineKind,
+    activeDeadlineAt: activeDeadlineKind === "NONE" ? null : booking.expires_at,
+    openDisputeCount: disputes.filter((dispute) => dispute.status === "OPEN").length,
+  };
+}
+
+async function listInquiryLedgerRows(inquiryId: string) {
+  return bookingDB.rawQueryAll<InquiryLedgerRow>(
+    `
+      SELECT id, inquiry_id, event, from_state, to_state, actor, metadata::text AS metadata, created_at
+      FROM inquiry_ledger
+      WHERE inquiry_id = $1
+      ORDER BY created_at ASC
+    `,
+    inquiryId,
+  );
+}
+
+async function listPaymentDisputeRows(inquiryId: string) {
+  return bookingDB.rawQueryAll<InquiryLedgerRow>(
+    `
+      SELECT id, inquiry_id, event, from_state, to_state, actor, metadata::text AS metadata, created_at
+      FROM inquiry_ledger
+      WHERE inquiry_id = $1
+        AND event IN ('DISPUTE_OPENED', 'DISPUTE_RESOLVED')
+      ORDER BY created_at ASC
+    `,
+    inquiryId,
+  );
+}
+
+async function listPaymentDisputesForInquiry(inquiryId: string) {
+  const rows = await listPaymentDisputeRows(inquiryId);
+  return buildDisputeRecordIndex(rows);
+}
+
+function assertBookingLedgerReadable(booking: BookingRow, auth: { userID: string; role: string }) {
+  if (![booking.guest_id, booking.host_id].includes(auth.userID) && !["admin", "support"].includes(auth.role)) {
+    throw APIError.permissionDenied("You cannot read this inquiry.");
+  }
+}
+
+async function assertBookingDisputeWritable(booking: BookingRow, auth: { userID: string; role: string }) {
+  assertBookingLedgerReadable(booking, auth);
+
+  if (auth.role === "host") {
+    if (booking.host_id !== auth.userID) {
+      throw APIError.permissionDenied("You cannot update this inquiry.");
+    }
+    await assertHostBillingOperationalAccess(auth.userID, "bookings");
+  }
+}
+
+function resolveLedgerActor(role: string): InquiryLedgerEventRecord["actor"] {
+  if (role === "guest" || role === "host" || role === "admin" || role === "support") {
+    return role;
+  }
+  return "system";
 }
 
 const ALLOWED_PAYMENT_PROOF_CONTENT_TYPES = new Set([
@@ -393,7 +577,7 @@ async function persistInquiryStateChange(params: {
   inquiry: BookingRow;
   nextInquiryState: InquiryState;
   actorId: string;
-  actor: "host" | "system" | "guest";
+  actor: "host" | "system" | "guest" | "admin" | "support";
   now: string;
   viewedAt?: string | null;
   respondedAt?: string | null;
@@ -459,7 +643,7 @@ async function persistInquiryStateChange(params: {
     inquiry: nextRow,
     listingTitle: await resolveListingTitle(nextRow.listing_id),
     actorId: params.actorId,
-    actor: params.actor,
+    actor: params.actor === "admin" || params.actor === "support" ? "host" : params.actor,
     occurredAt: params.now,
   });
 
@@ -470,7 +654,7 @@ async function persistPaymentStateChange(params: {
   inquiry: BookingRow;
   nextPaymentState: PaymentState;
   actorId: string;
-  actor: "host" | "system" | "guest";
+  actor: "host" | "system" | "guest" | "admin" | "support";
   now: string;
   paymentReference?: string | null;
   paymentProofKey?: string | null;
@@ -519,7 +703,7 @@ async function persistPaymentStateChange(params: {
     inquiry: nextRow,
     listingTitle: await resolveListingTitle(nextRow.listing_id),
     actorId: params.actorId,
-    actor: params.actor,
+    actor: params.actor === "admin" || params.actor === "support" ? "host" : params.actor,
     occurredAt: params.now,
   });
 
@@ -784,21 +968,181 @@ export const listInquiryLedger = api<{ id: string }, { events: InquiryLedgerEven
     if (!existing) {
       throw APIError.notFound("Inquiry not found.");
     }
-    if (![existing.guest_id, existing.host_id].includes(auth.userID) && !["admin", "support"].includes(auth.role)) {
-      throw APIError.permissionDenied("You cannot read this inquiry ledger.");
+    assertBookingLedgerReadable(existing, auth);
+
+    const rows = await listInquiryLedgerRows(id);
+    return { events: rows.map(mapLedgerEvent) };
+  },
+);
+
+export const getBookingOpsSummary = api<{ id: string }, { summary: BookingOpsSummaryRecord }>(
+  { expose: true, method: "GET", path: "/bookings/:id/ops-summary", auth: true },
+  async ({ id }) => {
+    const auth = requireAuth();
+    const existing = await fetchBookingRowFresh(id);
+    if (!existing) {
+      throw APIError.notFound("Inquiry not found.");
+    }
+    assertBookingLedgerReadable(existing, auth);
+
+    const [ledgerRows, disputes] = await Promise.all([
+      listInquiryLedgerRows(id),
+      listPaymentDisputesForInquiry(id),
+    ]);
+
+    return {
+      summary: buildBookingOpsSummary(existing, ledgerRows, disputes),
+    };
+  },
+);
+
+export const listPaymentDisputes = api<{ id: string }, { disputes: PaymentDisputeRecord[] }>(
+  { expose: true, method: "GET", path: "/bookings/:id/disputes", auth: true },
+  async ({ id }) => {
+    const auth = requireAuth();
+    const existing = await fetchBookingRowFresh(id);
+    if (!existing) {
+      throw APIError.notFound("Inquiry not found.");
+    }
+    assertBookingLedgerReadable(existing, auth);
+
+    return { disputes: await listPaymentDisputesForInquiry(id) };
+  },
+);
+
+export const openPaymentDispute = api<OpenPaymentDisputeParams, { dispute: PaymentDisputeRecord }>(
+  { expose: true, method: "POST", path: "/bookings/:id/disputes", auth: true },
+  async ({ id, reason, details }) => {
+    const auth = requireAuth();
+    const now = new Date().toISOString();
+    const existing = await fetchBookingRowFresh(id, now);
+    if (!existing) {
+      throw APIError.notFound("Inquiry not found.");
     }
 
-    const rows = await bookingDB.rawQueryAll<InquiryLedgerRow>(
-      `
-      SELECT id, inquiry_id, event, from_state, to_state, actor, metadata::text AS metadata, created_at
-      FROM inquiry_ledger
-      WHERE inquiry_id = $1
-      ORDER BY created_at ASC
-      `,
-      id,
-    );
+    await assertBookingDisputeWritable(existing, auth);
 
-    return { events: rows.map(mapLedgerEvent) };
+    const trimmedReason = reason.trim();
+    const trimmedDetails = details?.trim() ?? "";
+    if (trimmedReason.length < 8 || trimmedReason.length > 280) {
+      throw APIError.invalidArgument("Payment dispute reason must be between 8 and 280 characters.");
+    }
+    if (trimmedDetails.length > 1000) {
+      throw APIError.invalidArgument("Payment dispute details must stay under 1000 characters.");
+    }
+    if (!existing.payment_submitted_at && !existing.payment_confirmed_at && existing.payment_state !== "FAILED") {
+      throw APIError.failedPrecondition("Payment dispute can only be opened after payment activity starts.");
+    }
+
+    const disputes = await listPaymentDisputesForInquiry(id);
+    if (getOpenPaymentDispute(disputes)) {
+      throw APIError.failedPrecondition("A payment dispute is already open for this inquiry.");
+    }
+
+    const openedBy = resolveLedgerActor(auth.role);
+    const disputeId = await appendLedgerEvent({
+      inquiryId: id,
+      event: "DISPUTE_OPENED",
+      fromState: existing.payment_state,
+      toState: "OPEN",
+      actor: openedBy,
+      metadata: {
+        reason: trimmedReason,
+        details: trimmedDetails || null,
+        openedByUserId: auth.userID,
+        paymentState: existing.payment_state,
+      },
+      timestamp: now,
+    });
+
+    return {
+      dispute: {
+        id: disputeId,
+        inquiryId: id,
+        status: "OPEN",
+        openedBy: openedBy === "guest" || openedBy === "host" || openedBy === "admin" || openedBy === "support" ? openedBy : "guest",
+        openedByUserId: auth.userID,
+        reason: trimmedReason,
+        details: trimmedDetails || null,
+        resolution: null,
+        resolutionNote: null,
+        resolvedBy: null,
+        resolvedByUserId: null,
+        createdAt: now,
+        resolvedAt: null,
+      },
+    };
+  },
+);
+
+export const resolvePaymentDispute = api<ResolvePaymentDisputeParams, { dispute: PaymentDisputeRecord; booking: BookingRecord }>(
+  { expose: true, method: "POST", path: "/bookings/:id/disputes/resolve", auth: true },
+  async ({ id, resolution, resolutionNote }) => {
+    const auth = requireRole("host", "admin", "support");
+    const now = new Date().toISOString();
+    const existing = await fetchBookingRowFresh(id, now);
+    if (!existing) {
+      throw APIError.notFound("Inquiry not found.");
+    }
+
+    await assertBookingDisputeWritable(existing, auth);
+
+    if (!PAYMENT_DISPUTE_RESOLUTIONS.has(resolution)) {
+      throw APIError.invalidArgument("Invalid payment dispute resolution.");
+    }
+
+    const trimmedNote = resolutionNote?.trim() ?? "";
+    if (trimmedNote.length > 1000) {
+      throw APIError.invalidArgument("Payment dispute resolution notes must stay under 1000 characters.");
+    }
+    if (resolution === "OTHER" && !trimmedNote) {
+      throw APIError.invalidArgument("Add a short resolution note when selecting Other.");
+    }
+
+    const disputes = await listPaymentDisputesForInquiry(id);
+    const openDispute = getOpenPaymentDispute(disputes);
+    if (!openDispute) {
+      throw APIError.failedPrecondition("No open payment dispute exists for this inquiry.");
+    }
+
+    const resolvedBy = resolveLedgerActor(auth.role);
+    await appendLedgerEvent({
+      inquiryId: id,
+      event: "DISPUTE_RESOLVED",
+      fromState: "OPEN",
+      toState: "RESOLVED",
+      actor: resolvedBy,
+      metadata: {
+        openedDisputeId: openDispute.id,
+        resolution,
+        resolutionNote: trimmedNote || null,
+        resolvedByUserId: auth.userID,
+        paymentState: existing.payment_state,
+      },
+      timestamp: now,
+    });
+
+    let updatedBooking = existing;
+    if (resolution === "PAYMENT_REJECTED" && existing.inquiry_state === "APPROVED" && existing.payment_state !== "FAILED") {
+      updatedBooking = await persistPaymentStateChange({
+        inquiry: existing,
+        nextPaymentState: "FAILED",
+        actorId: auth.userID,
+        actor: resolvedBy,
+        now,
+      });
+      await syncListingAvailabilityForBookings(existing.listing_id);
+    }
+
+    const updatedDispute = (await listPaymentDisputesForInquiry(id)).find((dispute) => dispute.id === openDispute.id);
+    if (!updatedDispute) {
+      throw APIError.internal("Failed to resolve payment dispute state.");
+    }
+
+    return {
+      dispute: updatedDispute,
+      booking: await mapBookingAccessRecord(updatedBooking),
+    };
   },
 );
 
@@ -824,7 +1168,7 @@ export const markInquiryViewed = api<{ id: string }, { booking: BookingRecord }>
       inquiry: existing,
       nextInquiryState: "VIEWED",
       actorId: auth.userID,
-      actor: "host",
+      actor: auth.role === "admin" || auth.role === "support" ? auth.role : "host",
       now,
       viewedAt: now,
       expiresAt: computeInquiryExpiresAt("VIEWED", now),
@@ -885,7 +1229,7 @@ export const updateBookingStatus = api<UpdateBookingStatusParams, { booking: Boo
       inquiry: existing,
       nextInquiryState: nextStatus,
       actorId: auth.userID,
-      actor: "host",
+      actor: auth.role === "admin" || auth.role === "support" ? auth.role : "host",
       now,
       viewedAt: existing.viewed_at ?? (nextStatus === "VIEWED" || nextStatus === "RESPONDED" || nextStatus === "APPROVED" || nextStatus === "DECLINED" ? now : existing.viewed_at),
       respondedAt: nextStatus === "RESPONDED" ? now : existing.responded_at,
@@ -906,7 +1250,7 @@ export const updateBookingStatus = api<UpdateBookingStatusParams, { booking: Boo
         inquiry: updated,
         nextPaymentState: "INITIATED",
         actorId: auth.userID,
-        actor: "system",
+        actor: auth.role === "admin" || auth.role === "support" ? auth.role : "system",
         now,
         paymentReference,
       });

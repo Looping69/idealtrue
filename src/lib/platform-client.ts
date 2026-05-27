@@ -2,10 +2,13 @@ import { encoreRequest } from './encore-client';
 import type { SerializedImageAsset } from './media-client';
 import type {
   Booking,
+  BookingOpsSummary,
   InquiryDeclineReason,
   Listing,
   ListingAvailabilityManualBlockInput,
   ListingAvailabilitySummary,
+  PaymentDispute,
+  PaymentDisputeResolution,
   Referral,
   Review,
 } from '@/types';
@@ -134,6 +137,66 @@ export async function deleteListing(id: string) {
 export async function listMyBookings() {
   const response = await encoreRequest<{ bookings: EncoreBooking[] }>('/bookings/me', {}, { auth: true });
   return response.bookings.map(mapEncoreBooking);
+}
+
+export async function getBookingOpsSummary(id: string): Promise<BookingOpsSummary> {
+  const response = await encoreRequest<{ summary: BookingOpsSummary }>(
+    `/bookings/${id}/ops-summary`,
+    {},
+    { auth: true },
+  );
+  return response.summary;
+}
+
+export async function listPaymentDisputes(id: string): Promise<PaymentDispute[]> {
+  const response = await encoreRequest<{ disputes: PaymentDispute[] }>(
+    `/bookings/${id}/disputes`,
+    {},
+    { auth: true },
+  );
+  return response.disputes;
+}
+
+export async function openPaymentDispute(params: {
+  id: string;
+  reason: string;
+  details?: string | null;
+}): Promise<PaymentDispute> {
+  const response = await encoreRequest<{ dispute: PaymentDispute }>(
+    `/bookings/${params.id}/disputes`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        reason: params.reason,
+        details: params.details ?? null,
+      }),
+    },
+    { auth: true },
+  );
+  return response.dispute;
+}
+
+export async function resolvePaymentDispute(params: {
+  id: string;
+  resolution: PaymentDisputeResolution;
+  resolutionNote?: string | null;
+}): Promise<{ dispute: PaymentDispute; booking: Booking }> {
+  const response = await encoreRequest<{ dispute: PaymentDispute; booking: EncoreBooking }>(
+    `/bookings/${params.id}/disputes/resolve`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        resolution: params.resolution,
+        resolutionNote: params.resolutionNote ?? null,
+      }),
+    },
+    { auth: true },
+  );
+
+  return {
+    dispute: response.dispute,
+    booking: mapEncoreBooking(response.booking),
+  };
 }
 
 export async function createBooking(params: {
