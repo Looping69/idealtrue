@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 import type { Booking } from '@/types';
+import { extractPlatformErrorMessage } from '@/lib/platform-errors';
 import { getInquiryDeclineReasonDetail } from '@/lib/inquiry-state';
 import { confirmPayment, markInquiryViewed, updateBookingStatus } from '@/lib/platform-client';
 
@@ -32,7 +33,7 @@ export function useHostBookingActions({
       toast.success('Inquiry approved. Payment is now unlocked for the guest.');
     } catch (error) {
       console.error('Failed to approve inquiry:', error);
-      toast.error('Failed to approve inquiry.');
+      toast.error(extractPlatformErrorMessage(error, 'Failed to approve inquiry.'));
     } finally {
       setIsProcessingBookingId(null);
     }
@@ -59,7 +60,7 @@ export function useHostBookingActions({
       setDecliningBooking(null);
     } catch (error) {
       console.error('Failed to decline inquiry:', error);
-      toast.error('Failed to decline inquiry.');
+      toast.error(extractPlatformErrorMessage(error, 'Failed to decline inquiry.'));
     } finally {
       setIsProcessingBookingId(null);
     }
@@ -74,7 +75,7 @@ export function useHostBookingActions({
       toast.success('Payment confirmed. The stay is now booked.');
     } catch (error) {
       console.error('Failed to confirm payment:', error);
-      toast.error('Failed to confirm payment.');
+      toast.error(extractPlatformErrorMessage(error, 'Failed to confirm payment.'));
     } finally {
       setIsProcessingBookingId(null);
     }
@@ -94,7 +95,7 @@ export function useHostBookingActions({
       onChat(nextBooking);
     } catch (error) {
       console.error('Failed to open inquiry chat:', error);
-      toast.error('Failed to open the guest conversation.');
+      toast.error(extractPlatformErrorMessage(error, 'Failed to open the guest conversation.'));
     } finally {
       setIsProcessingBookingId((current) => (current === booking.id ? null : current));
     }
