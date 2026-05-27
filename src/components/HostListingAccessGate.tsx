@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, CreditCard, Loader2, Lock, RefreshCw, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getMyHostBillingAccount } from '@/lib/billing-client';
@@ -54,6 +54,7 @@ function InlineWarning({ title, description }: { title: string; description: str
 }
 
 export default function HostListingAccessGate({ children, listings, profile }: HostListingAccessGateProps) {
+  const navigate = useNavigate();
   const { effectiveKycStatus } = useEffectiveKycStatus(profile);
   const [quota, setQuota] = useState<ListingQuota | null>(null);
   const [billingAccount, setBillingAccount] = useState<HostBillingAccount | null>(null);
@@ -117,8 +118,8 @@ export default function HostListingAccessGate({ children, listings, profile }: H
         title="Sign in required"
         description="You need to be signed in as a host before creating a listing."
       >
-        <Button asChild className="h-12 rounded-xl px-8 text-base font-bold">
-          <Link to="/signup?role=host">Sign in as host</Link>
+        <Button onClick={() => navigate('/signup?role=host')} className="h-12 rounded-xl px-8 text-base font-bold">
+          Sign in as host
         </Button>
       </GateShell>
     );
@@ -138,11 +139,11 @@ export default function HostListingAccessGate({ children, listings, profile }: H
         title="Verification required"
         description={description}
       >
-        <Button asChild className="h-12 rounded-xl px-8 text-base font-bold">
-          <Link to="/account">Open account verification</Link>
+        <Button onClick={() => navigate('/account')} className="h-12 rounded-xl px-8 text-base font-bold">
+          Open account verification
         </Button>
-        <Button asChild variant="ghost" className="h-12 rounded-xl px-8 text-base font-bold">
-          <Link to="/host">Return to dashboard</Link>
+        <Button onClick={() => navigate('/host')} variant="ghost" className="h-12 rounded-xl px-8 text-base font-bold">
+          Return to dashboard
         </Button>
       </GateShell>
     );
@@ -159,8 +160,8 @@ export default function HostListingAccessGate({ children, listings, profile }: H
           <RefreshCw className="mr-2 h-4 w-4" />
           Retry access check
         </Button>
-        <Button asChild variant="ghost" className="h-12 rounded-xl px-8 text-base font-bold">
-          <Link to="/host/listings">Go to listings</Link>
+        <Button onClick={() => navigate('/host/listings')} variant="ghost" className="h-12 rounded-xl px-8 text-base font-bold">
+          Go to listings
         </Button>
       </GateShell>
     );
@@ -173,11 +174,11 @@ export default function HostListingAccessGate({ children, listings, profile }: H
         title="Billing action required"
         description={billingAccount.greylistReason || 'Your host account is currently greylisted. Resolve billing before creating another listing.'}
       >
-        <Button asChild className="h-12 rounded-xl px-8 text-base font-bold">
-          <Link to="/pricing?audience=host">Resolve billing</Link>
+        <Button onClick={() => navigate('/pricing?audience=host')} className="h-12 rounded-xl px-8 text-base font-bold">
+          Resolve billing
         </Button>
-        <Button asChild variant="ghost" className="h-12 rounded-xl px-8 text-base font-bold">
-          <Link to="/host">Return to dashboard</Link>
+        <Button onClick={() => navigate('/host')} variant="ghost" className="h-12 rounded-xl px-8 text-base font-bold">
+          Return to dashboard
         </Button>
       </GateShell>
     );
@@ -191,11 +192,11 @@ export default function HostListingAccessGate({ children, listings, profile }: H
         title="Listing limit reached"
         description={`Your ${quota.plan} plan currently allows ${maxListings} non-archived listing${maxListings === 1 ? '' : 's'}. You are using ${quota.usedListings}.`}
       >
-        <Button asChild className="h-12 rounded-xl px-8 text-base font-bold">
-          <Link to="/pricing?audience=host">Upgrade my plan</Link>
+        <Button onClick={() => navigate('/pricing?audience=host')} className="h-12 rounded-xl px-8 text-base font-bold">
+          Upgrade my plan
         </Button>
-        <Button asChild variant="ghost" className="h-12 rounded-xl px-8 text-base font-bold">
-          <Link to="/host/listings">Manage listings</Link>
+        <Button onClick={() => navigate('/host/listings')} variant="ghost" className="h-12 rounded-xl px-8 text-base font-bold">
+          Manage listings
         </Button>
       </GateShell>
     );

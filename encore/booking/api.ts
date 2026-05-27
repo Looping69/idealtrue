@@ -11,6 +11,7 @@ import {
   getListing,
   syncBookingAvailabilityWithCompatibility,
 } from "../catalog/api";
+import { catalogDB } from "../catalog/db";
 import { identityDB } from "../identity/db";
 import type {
   BookingOpsSummaryRecord,

@@ -587,6 +587,7 @@ export const signup = api<SignupParams, SignupSessionResponse>(
       tier: "bronze",
       referralCode,
       referredByCode: params.referredByCode ?? null,
+      managementMode: "self_service",
       createdAt: now,
       updatedAt: now,
     };
@@ -761,6 +762,7 @@ export const googleAuth = api<GoogleAuthParams, SessionResponse>(
       tier: "bronze",
       referralCode,
       referredByCode: params.referredByCode ?? null,
+      managementMode: "self_service",
       createdAt: now,
       updatedAt: now,
     };
@@ -862,6 +864,7 @@ export const devLogin = api<DevLoginParams, DevLoginResponse>(
         tier: "bronze",
         referralCode,
         referredByCode: params.referredByCode ?? null,
+        managementMode: "self_service",
         createdAt: now,
         updatedAt: now,
       };

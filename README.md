@@ -76,7 +76,7 @@ See [`docs/workflow-validation-matrix.md`](/C:/Git%20Repos/IdealTrue/docs/workfl
 
 ## What does not fully route through Encore yet
 
-- KYC document submission now records audit-backed submission/review history, but richer ops case management is still missing
+- KYC document submission now records audit-backed submission/review history, but disputes and richer ops case management are still missing
 - stay-payment coordination now has a lightweight dispute escalation trail and backend ops summary metadata, but off-platform payment operations still need fuller case handling, refund automation, assignee workflow, and SLA tooling
 - billing/subscriptions are scaffolded on the backend but not commercially complete
 - AI content engine still needs real social publishing integrations beyond draft scheduling and publish tracking
