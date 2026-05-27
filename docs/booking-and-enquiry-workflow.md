@@ -119,6 +119,7 @@ Key host-screen expectations:
 - show stay value, breakage deposit, and total guest exposure
 - show payment reference and private proof access state during payment review
 - never enable payment confirmation if proof is inaccessible
+- pause payment confirmation in the host enquiries UI while any open payment dispute remains on the inquiry
 - retain closed enquiries for audit context instead of dropping them from view
 - prefer backend-derived ops summary data for last actor, last movement, deadlines, and open dispute count when that summary is available
 
