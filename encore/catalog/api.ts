@@ -1165,12 +1165,14 @@ export async function syncBookingAvailabilityWithCompatibility(
   try {
     await replaceBookingAvailabilityBlocks(listingId, entries);
   } catch (error) {
-    if (error instanceof APIError) {
+    if (error instanceof APIError && error.code === "not_found") {
       throw error;
     }
     const fallbackReason = isAvailabilityLedgerSchemaError(error)
       ? "Availability ledger schema is unavailable"
-      : "Availability ledger sync failed unexpectedly";
+      : error instanceof APIError
+        ? `Availability ledger sync failed with ${error.code}`
+        : "Availability ledger sync failed unexpectedly";
     console.warn(
       `${fallbackReason} for listing ${listingId}. Falling back to legacy blocked_dates sync.`,
       error,
