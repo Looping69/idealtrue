@@ -99,11 +99,12 @@ test('message and referral notification builders stay audience-specific', () => 
   assert.deepEqual(
     buildReferralRewardEarnedNotification({
       referrerId: 'user-3',
-      amount: 175,
+      amount: 40,
+      program: 'host',
     }),
     {
       title: 'Referral reward earned',
-      message: 'You earned a referral reward of R175.',
+      message: 'You earned 40 ad credits + promotion benefits.',
       type: 'success',
       target: 'user-3',
       actionPath: '/referral',

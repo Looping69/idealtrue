@@ -144,6 +144,7 @@ export async function notifyMessageReceived(params: {
 export async function notifyReferralRewardEarned(params: {
   referrerId: string;
   amount: number;
+  program?: "host" | "guest";
 }) {
   return createNotification(buildReferralRewardEarnedNotification(params));
 }

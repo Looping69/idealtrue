@@ -170,10 +170,15 @@ export function buildMessageReceivedNotification(params: {
 export function buildReferralRewardEarnedNotification(params: {
   referrerId: string;
   amount: number;
+  program?: "host" | "guest";
 }): NotificationInput {
+  const rewardLabel =
+    params.program === "guest"
+      ? `${params.amount} holiday draw entr${params.amount === 1 ? "y" : "ies"}`
+      : `${params.amount} ad credit${params.amount === 1 ? "" : "s"} + promotion benefits`;
   return {
     title: "Referral reward earned",
-    message: `You earned a referral reward of R${params.amount}.`,
+    message: `You earned ${rewardLabel}.`,
     type: "success",
     target: params.referrerId,
     actionPath: "/referral",

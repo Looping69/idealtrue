@@ -17,7 +17,6 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { formatRand } from '@/lib/currency';
 import { listReferralLeaderboard, type LeaderboardUser } from '@/lib/identity-client';
 import { cn } from '@/lib/utils';
 import type { Referral, UserProfile } from '@/types';
@@ -44,7 +43,7 @@ const HOST_TIERS: TierDefinition[] = [
     accent: 'text-amber-700',
     ring: 'border-amber-200',
     surface: 'bg-amber-50',
-    note: 'Earn cashback when a referred host activates a paid subscription.',
+    note: 'Earn ad credits and platform/group promotion benefits when a referred host activates a paid subscription.',
   },
   {
     name: 'Silver',
@@ -55,7 +54,7 @@ const HOST_TIERS: TierDefinition[] = [
     accent: 'text-slate-700',
     ring: 'border-slate-200',
     surface: 'bg-slate-100',
-    note: 'Higher cashback once your referral engine starts compounding.',
+    note: 'Higher ad-credit and promotion benefits once your referral engine starts compounding.',
   },
   {
     name: 'Gold',
@@ -66,7 +65,7 @@ const HOST_TIERS: TierDefinition[] = [
     accent: 'text-yellow-700',
     ring: 'border-yellow-200',
     surface: 'bg-yellow-50',
-    note: 'Highest cashback for hosts who consistently bring in converting supply.',
+    note: 'Highest ad-credit and promotion benefits for hosts who consistently bring in converting supply.',
   },
 ];
 
@@ -80,7 +79,7 @@ const GUEST_TIERS: TierDefinition[] = [
     accent: 'text-amber-700',
     ring: 'border-amber-200',
     surface: 'bg-amber-50',
-    note: 'Cashback when a referred guest becomes a paying platform customer.',
+    note: 'Holiday draw entries when a referred guest becomes a paying platform customer.',
   },
   {
     name: 'Silver',
@@ -102,7 +101,7 @@ const GUEST_TIERS: TierDefinition[] = [
     accent: 'text-yellow-700',
     ring: 'border-yellow-200',
     surface: 'bg-yellow-50',
-    note: 'Top cashback for consistently sending high-value demand.',
+    note: 'Top holiday draw entries for consistently sending high-value demand.',
   },
 ];
 
@@ -153,6 +152,13 @@ function getReferralTriggerLabel(referral: Referral, isHost: boolean) {
   return 'New signup';
 }
 
+function formatReferralRewardValue(referral: Referral) {
+  if (referral.program === 'guest') {
+    return `${referral.amount} holiday entr${referral.amount === 1 ? 'y' : 'ies'}`;
+  }
+  return `${referral.amount} ad credit${referral.amount === 1 ? '' : 's'}`;
+}
+
 export default function ReferralView({
   profile,
   referrals,
@@ -174,6 +180,7 @@ export default function ReferralView({
     .filter((referral) => referral.status === 'pending')
     .reduce((sum, referral) => sum + referral.amount, 0);
   const rewardedCount = referrals.filter((referral) => referral.status === 'rewarded' || referral.status === 'confirmed').length;
+  const rewardUnitLabel = isHost ? 'ad credits' : 'holiday entries';
   const currentTier = tiers.find((tier) => tier.name.toLowerCase() === profile?.tier) || tiers[0];
   const nextTier = tiers.find((tier) => tier.minReferrals > (profile?.referralCount || 0)) || null;
   const progressBase = nextTier?.nextThreshold ? nextTier.nextThreshold - currentTier.minReferrals : 1;
@@ -223,12 +230,12 @@ export default function ReferralView({
 
             <div className="space-y-3">
               <h1 className="max-w-2xl text-4xl font-bold tracking-tight text-slate-950 md:text-5xl">
-                {isHost ? 'Turn host introductions into recurring cashback.' : 'Turn your network into rewarded demand.'}
+                {isHost ? 'Turn host introductions into recurring ad benefits.' : 'Turn your network into holiday draw opportunities.'}
               </h1>
               <p className="max-w-2xl text-base leading-7 text-slate-600 md:text-lg">
                 {isHost
-                  ? 'Share your link with serious hosts. When one activates a paid subscription, you collect cashback and climb the partner ladder.'
-                  : 'Share your link with guests. When they become paying customers, you earn cashback and move up the rewards tiers.'}
+                  ? 'Share your link with serious hosts. When one activates a paid subscription, you unlock ad credits and promotion benefits.'
+                  : 'Share your link with guests. When they become paying customers, you unlock holiday draw entries and move up the rewards tiers.'}
               </p>
             </div>
 
@@ -254,9 +261,9 @@ export default function ReferralView({
 
               <div className="rounded-2xl border border-white/80 bg-slate-950 p-4 text-white shadow-lg shadow-slate-950/15">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">Earned So Far</p>
-                <p className="mt-3 text-3xl font-bold">{formatRand(totalEarned)}</p>
+                <p className="mt-3 text-3xl font-bold">{totalEarned} {rewardUnitLabel}</p>
                 <p className="mt-1 text-sm text-slate-300">
-                  {pendingValue > 0 ? `${formatRand(pendingValue)} still pending approval` : 'No pending cashback right now'}
+                  {pendingValue > 0 ? 'Pending referral rewards awaiting confirmation' : 'No pending referral rewards right now'}
                 </p>
               </div>
             </div>
@@ -298,7 +305,7 @@ export default function ReferralView({
               <div className="rounded-2xl border border-slate-200 p-4">
                 <p className="text-sm font-semibold text-slate-950">Reward trigger</p>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  {isHost ? 'Their first paid host subscription activates your cashback.' : 'Their first paid platform conversion activates your cashback.'}
+                  {isHost ? 'Their first paid host subscription activates ad credits and promotion benefits.' : 'Their first paid platform conversion activates holiday draw entries.'}
                 </p>
               </div>
             </div>
@@ -361,8 +368,8 @@ export default function ReferralView({
                       <p className={cn('mt-2 text-sm leading-6', active ? 'text-slate-300' : 'text-slate-600')}>{tier.note}</p>
                       <div className="mt-6 flex items-end justify-between">
                         <div>
-                          <p className={cn('text-xs font-semibold uppercase tracking-[0.18em]', active ? 'text-slate-400' : 'text-slate-500')}>Cashback</p>
-                          <p className="mt-1 text-3xl font-bold">{formatRand(tier.bonus)}</p>
+                          <p className={cn('text-xs font-semibold uppercase tracking-[0.18em]', active ? 'text-slate-400' : 'text-slate-500')}>{isHost ? 'Ad Credits' : 'Holiday Entries'}</p>
+                          <p className="mt-1 text-3xl font-bold">{tier.bonus}</p>
                         </div>
                         {active ? (
                           <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold">
@@ -417,7 +424,7 @@ export default function ReferralView({
                     <div className="text-left md:text-right">
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Reward Value</p>
                       <p className={cn('mt-1 text-2xl font-bold', referral.status === 'rejected' ? 'text-rose-600' : 'text-emerald-600')}>
-                        {referral.status === 'rejected' ? `-${formatRand(referral.amount)}` : `+${formatRand(referral.amount)}`}
+                        {referral.status === 'rejected' ? `-${formatReferralRewardValue(referral)}` : `+${formatReferralRewardValue(referral)}`}
                       </p>
                     </div>
                   </div>
@@ -520,7 +527,7 @@ export default function ReferralView({
               <div className="flex gap-4">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-950 text-sm font-bold text-white">3</div>
                 <div>
-                  <p className="font-semibold text-slate-950">Cashback lands when value lands</p>
+                  <p className="font-semibold text-slate-950">Rewards land when value lands</p>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
                     {isHost
                       ? 'You only get paid when the referred host activates a paid subscription. That keeps the program tied to real revenue.'

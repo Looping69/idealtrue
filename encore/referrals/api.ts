@@ -42,15 +42,15 @@ type IdentityUserRow = {
 type IdentityExecutor = Pick<typeof identityDB, "queryRow" | "exec">;
 
 const HOST_SUBSCRIPTION_REWARD: Record<ReferralTier, number> = {
-  bronze: 75,
-  silver: 125,
-  gold: 175,
+  bronze: 25,
+  silver: 40,
+  gold: 60,
 };
 
 const GUEST_SUBSCRIPTION_REWARD: Record<ReferralTier, number> = {
-  bronze: 40,
-  silver: 65,
-  gold: 90,
+  bronze: 1,
+  silver: 2,
+  gold: 3,
 };
 
 function mapReward(row: RewardRow): ReferralRewardRecord {
@@ -96,15 +96,14 @@ async function getUserById(userId: string) {
   `;
 }
 
-async function creditReferrer(db: IdentityExecutor, referrer: IdentityUserRow, rewardAmount: number) {
+async function creditReferrer(db: IdentityExecutor, referrer: IdentityUserRow) {
   const now = new Date().toISOString();
   const nextCount = referrer.referral_count + 1;
   const nextTier = getTierFromCount(nextCount);
 
   await db.exec`
     UPDATE users
-    SET balance = balance + ${rewardAmount},
-        referral_count = ${nextCount},
+    SET referral_count = ${nextCount},
         tier = ${nextTier},
         updated_at = ${now}
     WHERE id = ${referrer.id}
@@ -171,19 +170,18 @@ export async function rewardSubscriptionReferralConversion(params: {
       )
       VALUES (
         ${rewardId}, ${lockedReferrer.id}, ${referredUser.id}, ${"subscription"}, ${program}, ${rewardAmount},
-        ${"earned"}, ${params.sourceSubscriptionId}, ${"First paid subscription conversion"}, ${now}
+        ${"earned"}, ${params.sourceSubscriptionId}, ${program === "host" ? "Ad credits + promo benefits unlocked from paid host conversion" : "Holiday draw entries unlocked from paid guest conversion"}, ${now}
       )
     `;
 
-    await creditReferrer(identityTx, lockedReferrer, rewardAmount);
+    await creditReferrer(identityTx, lockedReferrer);
     await identityTx.commit();
     try {
       await referralsTx.commit();
     } catch (error) {
       await identityDB.exec`
         UPDATE users
-        SET balance = ${lockedReferrer.balance},
-            referral_count = ${lockedReferrer.referral_count},
+        SET referral_count = ${lockedReferrer.referral_count},
             tier = ${lockedReferrer.tier},
             updated_at = ${now}
         WHERE id = ${lockedReferrer.id}
@@ -203,6 +201,7 @@ export async function rewardSubscriptionReferralConversion(params: {
       await notifyReferralRewardEarned({
         referrerId: lockedReferrer.id,
         amount: rewardAmount,
+        program,
       });
     } catch (error) {
       console.error("Failed to create referral notification:", error);
