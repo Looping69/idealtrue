@@ -131,6 +131,7 @@ export default function HostDashboard({
   const [searchParams] = useSearchParams();
   const [billingAccount, setBillingAccount] = useState<HostBillingAccount | null>(null);
   const [startingBillingSetup, setStartingBillingSetup] = useState(false);
+  const [showVoucherBillingDetails, setShowVoucherBillingDetails] = useState(false);
   const bookingOpsSummaries = useBookingOpsSummaries(bookings);
 
   const {
@@ -660,36 +661,52 @@ export default function HostDashboard({
           </div>
 
           {isVoucherHost ? (
-            <div className="mt-6 rounded-3xl border border-outline-variant bg-surface-container-low p-5">
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="mt-6 rounded-2xl border border-outline-variant bg-surface-container-low p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">Voucher Billing Timeline</p>
-                  <h4 className="mt-2 text-xl font-bold">{billingTimeline.countdownLabel}</h4>
-                  <p className="mt-1 text-sm text-on-surface-variant">{billingTimeline.periodLabel}</p>
-                </div>
-                <Badge variant={billingTimelineBadgeVariant} className="w-fit">
-                  {billingTimeline.urgencyLabel}
-                </Badge>
-              </div>
-              <div className="mt-4 grid gap-4 md:grid-cols-3">
-                <div className="rounded-2xl border border-outline-variant bg-background/70 p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">Countdown</p>
-                  <p className="mt-2 text-base font-bold">{billingTimeline.countdownLabel}</p>
-                  <p className="mt-1 text-xs text-on-surface-variant">This is the next billing enforcement checkpoint for voucher hosting.</p>
-                </div>
-                <div className="rounded-2xl border border-outline-variant bg-background/70 p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">Urgency</p>
-                  <p className="mt-2 text-base font-bold">{billingTimeline.urgencyLabel}</p>
+                  <p className="mt-1 text-sm font-semibold">{billingTimeline.countdownLabel}</p>
                   <p className="mt-1 text-xs text-on-surface-variant">{billingTimeline.reminderLabel}</p>
-                </div>
-                <div className="rounded-2xl border border-outline-variant bg-background/70 p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">Required Action</p>
-                  <p className="mt-2 text-base font-bold">{billingTimeline.actionLabel}</p>
                   <p className="mt-1 text-xs text-on-surface-variant">
-                    {billingAccount?.cardOnFile ? 'No extra billing capture is needed right now.' : 'Finish the Yoco billing setup checkout before the voucher window expires.'}
+                    Yoco billing setup checkout controls provider-backed card readiness for voucher hosting.
                   </p>
                 </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant={billingTimelineBadgeVariant} className="w-fit">
+                    {billingTimeline.urgencyLabel}
+                  </Badge>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-3 text-xs"
+                    onClick={() => setShowVoucherBillingDetails((value) => !value)}
+                  >
+                    {showVoucherBillingDetails ? 'Hide Details' : 'Show Details'}
+                  </Button>
+                </div>
               </div>
+              {showVoucherBillingDetails ? (
+                <div className="mt-4 grid gap-4 md:grid-cols-3">
+                  <div className="rounded-2xl border border-outline-variant bg-background/70 p-4">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">Countdown</p>
+                    <p className="mt-2 text-base font-bold">{billingTimeline.countdownLabel}</p>
+                    <p className="mt-1 text-xs text-on-surface-variant">This is the next billing enforcement checkpoint for voucher hosting.</p>
+                  </div>
+                  <div className="rounded-2xl border border-outline-variant bg-background/70 p-4">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">Urgency</p>
+                    <p className="mt-2 text-base font-bold">{billingTimeline.urgencyLabel}</p>
+                    <p className="mt-1 text-xs text-on-surface-variant">{billingTimeline.reminderLabel}</p>
+                  </div>
+                  <div className="rounded-2xl border border-outline-variant bg-background/70 p-4">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">Required Action</p>
+                    <p className="mt-2 text-base font-bold">{billingTimeline.actionLabel}</p>
+                    <p className="mt-1 text-xs text-on-surface-variant">
+                      {billingAccount?.cardOnFile ? 'No extra billing capture is needed right now.' : 'Finish the Yoco billing setup checkout before the voucher window expires.'}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
