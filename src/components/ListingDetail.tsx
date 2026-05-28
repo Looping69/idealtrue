@@ -163,10 +163,6 @@ export default function ListingDetail({
     ? listing.images
     : [`https://picsum.photos/seed/${listing.id}/1200/900`];
   const selectedImage = galleryImages[Math.min(selectedImageIndex, galleryImages.length - 1)];
-  const blockedDates = (listing.blockedDates ?? [])
-    .map((blockedDate) => new Date(`${blockedDate}T00:00:00`))
-    .filter((date) => !Number.isNaN(date.getTime()));
-
   useEffect(() => {
     setDateRange((currentRange) => {
       if (
@@ -179,7 +175,7 @@ export default function ListingDetail({
 
       return undefined;
     });
-  }, [listing.id, listing.blockedDates]);
+  }, [listing]);
 
   const handleDateRangeSelect = (nextRange: DateRange | undefined) => {
     if (nextRange?.from && nextRange?.to && differenceInDays(nextRange.to, nextRange.from) <= 0) {
@@ -405,10 +401,10 @@ export default function ListingDetail({
                       numberOfMonths={2}
                       disabled={(date) =>
                         isBefore(date, startOfToday()) ||
-                        blockedDates.some((blockedDate) => blockedDate.toDateString() === date.toDateString())
+                        isDateBlocked(date)
                       }
                       modifiers={{
-                        booked: blockedDates,
+                        booked: (date) => isDateBlocked(date),
                       }}
                       modifiersClassNames={{
                         booked: "bg-slate-200 text-slate-500 line-through opacity-100 cursor-not-allowed hover:bg-slate-200 hover:text-slate-500",
