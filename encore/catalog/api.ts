@@ -1019,16 +1019,27 @@ export async function replaceBookingAvailabilityBlocks(listingId: string, entrie
     throw APIError.notFound("Listing not found.");
   }
 
-  const normalizedEntries = entries.map((entry) => {
-    const nights = enumerateAvailabilityNights(entry.checkIn.slice(0, 10), entry.checkOut.slice(0, 10));
-    return {
+  const normalizedEntries = entries.flatMap((entry) => {
+    const checkIn = normalizeAvailabilityDateKey(entry.checkIn.slice(0, 10));
+    const checkOut = normalizeAvailabilityDateKey(entry.checkOut.slice(0, 10));
+    const nights = enumerateAvailabilityNights(checkIn, checkOut);
+
+    // (|/) Klaasvaakie - tolerate malformed zero-night rows during sync so host approval does not crash with a 500.
+    if (nights.length === 0) {
+      console.warn(
+        `Skipping malformed booking availability row for listing ${listingId}: booking ${entry.bookingId} has non-positive stay window (${checkIn} -> ${checkOut}).`,
+      );
+      return [];
+    }
+
+    return [{
       bookingId: entry.bookingId,
       sourceType: entry.sourceType,
       sourceId: entry.bookingId,
-      startsOn: nights[0]!,
-      endsOn: normalizeAvailabilityDateKey(entry.checkOut.slice(0, 10)),
+      startsOn: nights[0],
+      endsOn: checkOut,
       nights,
-    };
+    }];
   });
 
   const manualBlocks = (await listAvailabilityBlockInputs(listingId)).filter((block) => block.sourceType === "MANUAL");
