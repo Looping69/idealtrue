@@ -33,6 +33,8 @@ const EMPTY_LOADING_STATE: PlatformDataLoading = {
   referrals: false,
 };
 
+const BOOKING_SYNC_INTERVAL_MS = 12000;
+
 function toDataError(error: unknown, fallback: string) {
   return getEncoreErrorMessage(error, fallback);
 }
@@ -46,6 +48,7 @@ export function usePlatformData(user: AuthSessionUser | null, profile: UserProfi
   const [dataErrors, setDataErrors] = useState<PlatformDataErrors>({});
   const [dataLoading, setDataLoading] = useState<PlatformDataLoading>(EMPTY_LOADING_STATE);
   const [reloadKey, setReloadKey] = useState(0);
+  const [bookingSyncTick, setBookingSyncTick] = useState(0);
 
   const userId = user?.id ?? null;
   const profileRole = profile?.role ?? null;
@@ -182,7 +185,30 @@ export function usePlatformData(user: AuthSessionUser | null, profile: UserProfi
     return () => {
       cancelled = true;
     };
-  }, [canLoadHostData, isAdminProfile, profileRole, reloadKey, setDataError, setLoadingFlag, userId]);
+  }, [bookingSyncTick, canLoadHostData, isAdminProfile, profileRole, reloadKey, setDataError, setLoadingFlag, userId]);
+
+  useEffect(() => {
+    if (!userId) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setBookingSyncTick((current) => current + 1);
+    }, BOOKING_SYNC_INTERVAL_MS);
+
+    const onVisibilityOrFocus = () => {
+      setBookingSyncTick((current) => current + 1);
+    };
+
+    window.addEventListener('focus', onVisibilityOrFocus);
+    document.addEventListener('visibilitychange', onVisibilityOrFocus);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', onVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', onVisibilityOrFocus);
+    };
+  }, [userId]);
 
   const reloadPlatformData = useCallback(() => {
     setReloadKey((current) => current + 1);
