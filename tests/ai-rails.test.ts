@@ -23,6 +23,48 @@ test("validateTripPlannerMessages trims and caps the visible chat history", () =
   assert.equal(messages.at(-1)?.content, "message 13");
 });
 
+test("validateTripPlannerMessages truncates oversized turns instead of failing", () => {
+  const oversized = "x".repeat(700);
+  const messages = validateTripPlannerMessages([
+    { role: "user", content: oversized },
+    { role: "assistant", content: oversized },
+  ]);
+
+  assert.equal(messages.length, 2);
+  assert.equal(messages[0]?.content.length, 600);
+  assert.equal(messages[1]?.content.length, 600);
+});
+
+test("validateTripPlannerMessages can accept truncated turns when total history stays under the guard", () => {
+  const oversized = "x".repeat(700);
+  const messages = validateTripPlannerMessages(
+    Array.from({ length: 6 }, (_, index) => ({
+      role: index % 2 === 0 ? "user" : "assistant",
+      content: oversized,
+    })),
+  );
+
+  assert.equal(messages.length, 6);
+  assert.equal(messages[0]?.content.length, 600);
+  assert.equal(messages[5]?.content.length, 600);
+});
+
+test("validateTripPlannerMessages still rejects total history above 4000 characters", () => {
+  assert.throws(
+    () =>
+      validateTripPlannerMessages(
+        Array.from({ length: 8 }, (_, index) => ({
+          role: index % 2 === 0 ? "user" : "assistant",
+          content: "x".repeat(550),
+        })),
+      ),
+    (error: unknown) =>
+      error instanceof AiRequestError &&
+      error.statusCode === 400 &&
+      /context is too large/i.test(error.message),
+  );
+});
+
 test("validateReviewSummaryInput rejects invalid score ranges", () => {
   assert.throws(
     () =>
