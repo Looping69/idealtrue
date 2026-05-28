@@ -478,6 +478,21 @@ async function syncListingAvailabilityForBookings(listingId: string) {
   );
 }
 
+// (|/) Klaasvaakie - avoid opaque 500s in host workflows when availability sync throws non-API errors.
+async function syncListingAvailabilityOrThrowActionable(listingId: string) {
+  try {
+    await syncListingAvailabilityForBookings(listingId);
+  } catch (error) {
+    if (error instanceof APIError) {
+      throw error;
+    }
+    console.error(`Failed to sync listing availability for listing ${listingId}.`, error);
+    throw APIError.failedPrecondition(
+      "Could not sync listing availability after this booking update. Refresh and retry.",
+    );
+  }
+}
+
 async function getHostPaymentDetails(listingId: string, hostId: string): Promise<HostPaymentDetailsRow> {
   try {
     const settlement = await catalogDB.queryRow<ListingSettlementProfileRow>`
@@ -1132,7 +1147,7 @@ export const resolvePaymentDispute = api<ResolvePaymentDisputeParams, { dispute:
         actor: resolvedBy,
         now,
       });
-      await syncListingAvailabilityForBookings(existing.listing_id);
+      await syncListingAvailabilityOrThrowActionable(existing.listing_id);
     }
 
     const updatedDispute = (await listPaymentDisputesForInquiry(id)).find((dispute) => dispute.id === openDispute.id);
@@ -1258,7 +1273,7 @@ export const updateBookingStatus = api<UpdateBookingStatusParams, { booking: Boo
     }
 
     if (existing.inquiry_state === "APPROVED" || nextStatus === "APPROVED" || nextStatus === "BOOKED") {
-      await syncListingAvailabilityForBookings(existing.listing_id);
+      await syncListingAvailabilityOrThrowActionable(existing.listing_id);
     }
 
     return {
@@ -1379,7 +1394,7 @@ export const confirmPayment = api<ConfirmPaymentParams, { booking: BookingRecord
       expiresAt: null,
     });
 
-    await syncListingAvailabilityForBookings(existing.listing_id);
+    await syncListingAvailabilityOrThrowActionable(existing.listing_id);
 
     return {
       booking: await mapBookingAccessRecord(updated),
