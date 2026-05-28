@@ -9,15 +9,13 @@ function normalizeDateOnly(value: Date | string) {
 }
 
 function collectBlockedNights(listing: Pick<Listing, 'blockedDates' | 'availabilityBlocks'>) {
-  if ((listing.availabilityBlocks?.length ?? 0) > 0) {
-    return new Set(
-      listing.availabilityBlocks!.flatMap((block: ListingAvailabilityBlock) =>
-        (block.nights ?? []).map((night) => normalizeDateOnly(night)),
-      ),
-    );
+  const blockedNights = new Set((listing.blockedDates ?? []).map((night) => normalizeDateOnly(night)));
+  for (const block of listing.availabilityBlocks ?? []) {
+    for (const night of block.nights ?? []) {
+      blockedNights.add(normalizeDateOnly(night));
+    }
   }
-
-  return new Set((listing.blockedDates ?? []).map((night) => normalizeDateOnly(night)));
+  return blockedNights;
 }
 
 export function isListingNightBlocked(listing: Pick<Listing, 'blockedDates' | 'availabilityBlocks'>, date: Date) {
