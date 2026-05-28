@@ -8,6 +8,8 @@ import {
   buildInquiryStatusChangedNotification,
   buildKycReviewedNotification,
   buildListingReviewedNotification,
+  buildManagedHostAdminAlertNotification,
+  buildManagedHostOnboardingRequestedNotification,
   buildMessageReceivedNotification,
   buildPaymentProofSubmittedNotification,
   buildReferralRewardEarnedNotification,
@@ -182,6 +184,34 @@ test('review and billing notification builders produce actionable messages', () 
       type: 'error',
       target: 'host-1',
       actionPath: '/pricing',
+    },
+  );
+
+  assert.deepEqual(
+    buildManagedHostOnboardingRequestedNotification({
+      userId: 'host-1',
+    }),
+    {
+      title: 'Managed hosting onboarding started',
+      message: 'Your host account is flagged for managed onboarding. The Ideal Stay team will contact you to complete setup.',
+      type: 'info',
+      target: 'host-1',
+      actionPath: '/host',
+    },
+  );
+
+  assert.deepEqual(
+    buildManagedHostAdminAlertNotification({
+      userId: 'host-1',
+      displayName: 'Managed Host',
+      email: 'managed@example.com',
+    }),
+    {
+      title: 'Managed host signup needs onboarding',
+      message: 'Managed Host (managed@example.com) signed up for managed hosting. Assign onboarding and listing setup.',
+      type: 'warning',
+      target: 'admins',
+      actionPath: '/admin?managedHost=host-1',
     },
   );
 });

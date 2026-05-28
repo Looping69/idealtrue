@@ -16,7 +16,7 @@ import { assignFoundingHostVoucher, markFoundingHostVoucherEmailSent } from "../
 import { bookingDB } from "../booking/db";
 import { catalogDB } from "../catalog/db";
 import { opsDB } from "../ops/db";
-import { notifyAccountStatusChanged, type StoredNotification } from "../ops/notifications";
+import { notifyAccountStatusChanged, notifyManagedHostSignupOnboarding, type StoredNotification } from "../ops/notifications";
 import { kycDocumentsBucket } from "../ops/storage";
 import { referralsDB } from "../referrals/db";
 import { reviewsDB } from "../reviews/db";
@@ -32,6 +32,7 @@ interface SignupParams {
   displayName: string;
   password: string;
   role?: UserRole;
+  managementMode?: HostManagementMode;
   photoUrl?: string | null;
   referredByCode?: string | null;
 }
@@ -44,6 +45,7 @@ interface LoginParams {
 interface GoogleAuthParams {
   credential: string;
   role?: UserRole;
+  managementMode?: HostManagementMode;
   referredByCode?: string | null;
 }
 
@@ -302,6 +304,19 @@ function resolveGoogleSignupRole(requestedRole?: UserRole) {
   throw APIError.invalidArgument("Choose guest or host before continuing with Google.");
 }
 
+function resolvePublicSignupManagementMode(role: UserRole, requestedManagementMode?: HostManagementMode) {
+  if (requestedManagementMode === undefined || requestedManagementMode === "self_service") {
+    return "self_service" as const;
+  }
+
+  if (requestedManagementMode === "managed" && role === "host") {
+    return "managed" as const;
+  }
+
+  // (|/) Klaasvaakie
+  throw APIError.invalidArgument("Managed hosting onboarding is only available for host signups.");
+}
+
 function mapUser(row: UserRow): UserProfile {
   return {
     id: row.id,
@@ -556,15 +571,16 @@ export const signup = api<SignupParams, SignupSessionResponse>(
     if (!["guest", "host"].includes(role)) {
       throw APIError.invalidArgument("Public signup can only create guest or host accounts.");
     }
+    const managementMode = resolvePublicSignupManagementMode(role, params.managementMode);
     const referralCode = `${makeReferralCode(email)}${Math.floor(Math.random() * 900 + 100)}`;
     const passwordHash = await hashPassword(params.password);
 
     await identityDB.exec`
       INSERT INTO users (
-        id, email, email_verified, display_name, password_hash, photo_url, role, is_admin, host_plan, kyc_status, account_status, balance, referral_count, tier, referral_code, referred_by_code, last_login_at, created_at, updated_at
+        id, email, email_verified, display_name, password_hash, photo_url, role, is_admin, host_plan, management_mode, kyc_status, account_status, balance, referral_count, tier, referral_code, referred_by_code, last_login_at, created_at, updated_at
       )
       VALUES (
-        ${id}, ${email}, ${false}, ${params.displayName}, ${passwordHash}, ${params.photoUrl ?? null}, ${role}, ${false}, ${"standard"}, ${"none"}, ${"active"}, ${0}, ${0}, ${"bronze"}, ${referralCode}, ${params.referredByCode ?? null}, ${now}, ${now}, ${now}
+        ${id}, ${email}, ${false}, ${params.displayName}, ${passwordHash}, ${params.photoUrl ?? null}, ${role}, ${false}, ${"standard"}, ${managementMode}, ${"none"}, ${"active"}, ${0}, ${0}, ${"bronze"}, ${referralCode}, ${params.referredByCode ?? null}, ${now}, ${now}, ${now}
       )
     `;
 
@@ -587,7 +603,7 @@ export const signup = api<SignupParams, SignupSessionResponse>(
       tier: "bronze",
       referralCode,
       referredByCode: params.referredByCode ?? null,
-      managementMode: "self_service",
+      managementMode,
       createdAt: now,
       updatedAt: now,
     };
@@ -599,6 +615,21 @@ export const signup = api<SignupParams, SignupSessionResponse>(
       occurredAt: now,
       payload: JSON.stringify({ role: user.role, email: user.email }),
     });
+
+    if (user.role === "host" && user.managementMode === "managed") {
+      try {
+        await notifyManagedHostSignupOnboarding({
+          userId: user.id,
+          displayName: user.displayName,
+          email: user.email,
+        });
+      } catch (error) {
+        console.error(
+          `Managed-host onboarding notifications failed for ${user.email}:`,
+          error instanceof Error ? error.message : error,
+        );
+      }
+    }
 
     return finalizeSignupSession({
       user,
@@ -729,6 +760,7 @@ export const googleAuth = api<GoogleAuthParams, SessionResponse>(
     }
 
     const role = resolveGoogleSignupRole(params.role);
+    const managementMode = resolvePublicSignupManagementMode(role, params.managementMode);
     const email = normalizeEmail(googleUser.email);
     const id = randomUUID();
     const referralCode = `${makeReferralCode(email)}${Math.floor(Math.random() * 900 + 100)}`;
@@ -736,10 +768,10 @@ export const googleAuth = api<GoogleAuthParams, SessionResponse>(
 
     await identityDB.exec`
       INSERT INTO users (
-        id, email, email_verified, display_name, password_hash, photo_url, role, is_admin, host_plan, kyc_status, account_status, balance, referral_count, tier, referral_code, referred_by_code, google_sub, last_login_at, created_at, updated_at
+        id, email, email_verified, display_name, password_hash, photo_url, role, is_admin, host_plan, management_mode, kyc_status, account_status, balance, referral_count, tier, referral_code, referred_by_code, google_sub, last_login_at, created_at, updated_at
       )
       VALUES (
-        ${id}, ${email}, ${true}, ${displayName}, ${null}, ${googleUser.picture}, ${role}, ${false}, ${"standard"}, ${"none"}, ${"active"}, ${0}, ${0}, ${"bronze"}, ${referralCode}, ${params.referredByCode ?? null}, ${googleUser.sub}, ${now}, ${now}, ${now}
+        ${id}, ${email}, ${true}, ${displayName}, ${null}, ${googleUser.picture}, ${role}, ${false}, ${"standard"}, ${managementMode}, ${"none"}, ${"active"}, ${0}, ${0}, ${"bronze"}, ${referralCode}, ${params.referredByCode ?? null}, ${googleUser.sub}, ${now}, ${now}, ${now}
       )
     `;
 
@@ -762,7 +794,7 @@ export const googleAuth = api<GoogleAuthParams, SessionResponse>(
       tier: "bronze",
       referralCode,
       referredByCode: params.referredByCode ?? null,
-      managementMode: "self_service",
+      managementMode,
       createdAt: now,
       updatedAt: now,
     };
@@ -774,6 +806,21 @@ export const googleAuth = api<GoogleAuthParams, SessionResponse>(
       occurredAt: now,
       payload: JSON.stringify({ role: user.role, email: user.email }),
     });
+
+    if (user.role === "host" && user.managementMode === "managed") {
+      try {
+        await notifyManagedHostSignupOnboarding({
+          userId: user.id,
+          displayName: user.displayName,
+          email: user.email,
+        });
+      } catch (error) {
+        console.error(
+          `Managed-host onboarding notifications failed for ${user.email}:`,
+          error instanceof Error ? error.message : error,
+        );
+      }
+    }
 
     return issueSession(user);
   },

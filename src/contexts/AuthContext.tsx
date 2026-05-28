@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { clearEncoreSession, isEncoreRequestError } from '@/lib/encore-client';
 import { getEncoreSessionProfile, signInWithGoogle, signInWithPassword, signUpWithPassword, type VerificationEmailStatus } from '@/lib/identity-client';
-import { UserProfile, UserRole } from '@/types';
+import { HostManagementMode, UserProfile, UserRole } from '@/types';
 
 export interface AuthSessionUser {
   id: string;
@@ -20,6 +20,7 @@ interface SignupParams {
   displayName: string;
   password: string;
   role?: UserRole;
+  managementMode?: HostManagementMode;
   photoUrl?: string | null;
   referredByCode?: string | null;
 }
@@ -27,6 +28,7 @@ interface SignupParams {
 interface GoogleSigninParams {
   credential: string;
   role?: UserRole;
+  managementMode?: HostManagementMode;
   referredByCode?: string | null;
 }
 
@@ -124,13 +126,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const signUp = async ({ email, displayName, password, role = 'guest', photoUrl = null, referredByCode }: SignupParams) => {
+  const signUp = async ({ email, displayName, password, role = 'guest', managementMode, photoUrl = null, referredByCode }: SignupParams) => {
     const signupResult = await signUpWithPassword({
       email,
       displayName,
       password,
       photoUrl,
       role,
+      managementMode,
       referredByCode,
     });
     setProfile(signupResult.profile);
@@ -147,8 +150,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return nextProfile;
   };
 
-  const signInGoogle = async ({ credential, role, referredByCode }: GoogleSigninParams) => {
-    const nextProfile = await signInWithGoogle({ credential, role, referredByCode });
+  const signInGoogle = async ({ credential, role, managementMode, referredByCode }: GoogleSigninParams) => {
+    const nextProfile = await signInWithGoogle({ credential, role, managementMode, referredByCode });
     setProfile(nextProfile);
     setUser(toSessionUser(nextProfile));
     setAuthError(null);

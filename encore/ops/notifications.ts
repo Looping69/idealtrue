@@ -9,6 +9,8 @@ import {
   buildInquiryStatusChangedNotification,
   buildKycReviewedNotification,
   buildListingReviewedNotification,
+  buildManagedHostAdminAlertNotification,
+  buildManagedHostOnboardingRequestedNotification,
   buildMessageReceivedNotification,
   buildPaymentCompletedNotification,
   buildPaymentFailedNotification,
@@ -194,4 +196,20 @@ export async function notifyAccountStatusChanged(params: {
   reason?: string | null;
 }) {
   return createNotification(buildAccountStatusChangedNotification(params));
+}
+
+export async function notifyManagedHostSignupOnboarding(params: {
+  userId: string;
+  displayName: string;
+  email: string;
+}) {
+  const [hostNotification, adminNotification] = await Promise.all([
+    createNotification(buildManagedHostOnboardingRequestedNotification({ userId: params.userId })),
+    createNotification(buildManagedHostAdminAlertNotification(params)),
+  ]);
+
+  return {
+    hostNotification,
+    adminNotification,
+  };
 }

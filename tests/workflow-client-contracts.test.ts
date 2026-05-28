@@ -120,6 +120,8 @@ test('auth and account lifecycle clients call the canonical identity endpoints',
     email: workflowUsers.guest.email,
     displayName: workflowUsers.guest.displayName,
     password: 'password123',
+    role: 'host',
+    managementMode: 'managed',
     referredByCode: workflowUsers.host.referralCode,
   });
   const signedIn = await signInWithPassword({ email: workflowUsers.guest.email, password: 'password123' });
@@ -148,6 +150,7 @@ test('auth and account lifecycle clients call the canonical identity endpoints',
     ],
   );
   assert.equal(requestBody(0).referredByCode, workflowUsers.host.referralCode);
+  assert.equal(requestBody(0).managementMode, 'managed');
   assert.equal(requestBody(3).token, 'verify-token-1');
   assert.equal(requestBody(5).token, 'reset-token-1');
 });
@@ -163,6 +166,7 @@ test('google auth client posts the credential plus first-time signup role throug
   const profile = await signInWithGoogle({
     credential: 'google-id-token',
     role: 'host',
+    managementMode: 'managed',
     referredByCode: workflowUsers.host.referralCode,
   });
 
@@ -175,6 +179,7 @@ test('google auth client posts the credential plus first-time signup role throug
   assert.deepEqual(requestBody(0), {
     credential: 'google-id-token',
     role: 'host',
+    managementMode: 'managed',
     referredByCode: workflowUsers.host.referralCode,
   });
 });

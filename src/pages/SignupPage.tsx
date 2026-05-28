@@ -43,6 +43,7 @@ export default function SignupPage() {
   const isResetPasswordMode = urlMode === 'reset-password' && !!actionToken;
   const isVerifyEmailMode = urlMode === 'verify-email' && !!actionToken;
   const isManagedOnboarding = isSignupMode && requestedManagement === 'managed' && selectedRole === 'host';
+  const selectedManagementMode = isManagedOnboarding ? 'managed' : undefined;
 
   const passwordActionTitle = useMemo(() => {
     if (isVerifyEmailMode) return 'Verify your email';
@@ -78,6 +79,7 @@ export default function SignupPage() {
       const profile = await signInWithGoogle({
         credential,
         role: isSignupMode ? selectedRole ?? undefined : undefined,
+        managementMode: isSignupMode ? selectedManagementMode : undefined,
         referredByCode: isSignupMode ? searchParams.get('ref') : undefined,
       });
 
@@ -89,7 +91,7 @@ export default function SignupPage() {
     } finally {
       setIsGoogleSubmitting(false);
     }
-  }, [isSignupMode, navigate, safeReturnPath, searchParams, selectedRole, signInWithGoogle]);
+  }, [isSignupMode, navigate, safeReturnPath, searchParams, selectedManagementMode, selectedRole, signInWithGoogle]);
 
   useEffect(() => {
     if (!isVerifyEmailMode || verificationState !== 'idle') return;
@@ -230,6 +232,7 @@ export default function SignupPage() {
           displayName: displayName.trim(),
           password,
           role: selectedRole!,
+          managementMode: selectedManagementMode,
           referredByCode: refCode,
         });
         if (verificationEmailStatus === 'failed') {

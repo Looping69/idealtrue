@@ -8,6 +8,7 @@ export type { LeaderboardUser } from './domain-mappers';
 type EncoreUserRole = EncoreUser['role'];
 type EncoreHostPlan = EncoreUser['hostPlan'];
 type EncoreKycStatus = EncoreUser['kycStatus'];
+type EncoreHostManagementMode = EncoreUser['managementMode'];
 export type VerificationEmailStatus = 'sent' | 'failed';
 export type VoucherEmailStatus = 'not_applicable' | 'sent' | 'failed';
 
@@ -17,6 +18,7 @@ interface SignupParams {
   password: string;
   photoUrl?: string | null;
   role?: EncoreUserRole;
+  managementMode?: EncoreHostManagementMode;
   referredByCode?: string | null;
 }
 
@@ -33,6 +35,7 @@ interface LoginParams {
 interface GoogleAuthParams {
   credential: string;
   role?: EncoreUserRole;
+  managementMode?: EncoreHostManagementMode;
   referredByCode?: string | null;
 }
 
@@ -63,6 +66,7 @@ export async function signUpWithPassword(params: SignupParams) {
         password: params.password,
         photoUrl: params.photoUrl,
         role: params.role || 'guest',
+        managementMode: params.managementMode,
         referredByCode: params.referredByCode,
       }),
     },

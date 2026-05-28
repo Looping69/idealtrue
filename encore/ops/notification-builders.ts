@@ -308,3 +308,30 @@ export function buildAccountStatusChangedNotification(params: {
     actionPath: "/account",
   };
 }
+
+export function buildManagedHostOnboardingRequestedNotification(params: {
+  userId: string;
+}): NotificationInput {
+  return {
+    title: "Managed hosting onboarding started",
+    message: "Your host account is flagged for managed onboarding. The Ideal Stay team will contact you to complete setup.",
+    type: "info",
+    target: params.userId,
+    actionPath: "/host",
+  };
+}
+
+export function buildManagedHostAdminAlertNotification(params: {
+  userId: string;
+  displayName: string;
+  email: string;
+}): NotificationInput {
+  // (|/) Klaasvaakie
+  return {
+    title: "Managed host signup needs onboarding",
+    message: `${params.displayName} (${params.email}) signed up for managed hosting. Assign onboarding and listing setup.`,
+    type: "warning",
+    target: "admins",
+    actionPath: `/admin?managedHost=${encodeURIComponent(params.userId)}`,
+  };
+}
