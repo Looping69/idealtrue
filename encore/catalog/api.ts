@@ -845,15 +845,41 @@ function mapListing(
 
 export async function assertListingDateRangeAvailable(
   listingId: string,
-  checkIn: string,
-  checkOut: string,
+  checkIn: string | Date | number,
+  checkOut: string | Date | number,
   options?: {
     excludeSourceType?: AvailabilityBlockSource;
     excludeSourceId?: string;
   },
 ) {
+  const normalizeDateInput = (value: string | Date | number, label: "check-in" | "check-out") => {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        throw APIError.invalidArgument(`Invalid ${label} date.`);
+      }
+      return normalizeAvailabilityDateKey(trimmed.slice(0, 10));
+    }
+    if (value instanceof Date) {
+      if (Number.isNaN(value.getTime())) {
+        throw APIError.invalidArgument(`Invalid ${label} date.`);
+      }
+      return value.toISOString().slice(0, 10);
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) {
+        throw APIError.invalidArgument(`Invalid ${label} date.`);
+      }
+      return parsed.toISOString().slice(0, 10);
+    }
+    throw APIError.invalidArgument(`Invalid ${label} date.`);
+  };
+
+  const normalizedCheckIn = normalizeDateInput(checkIn, "check-in");
+  const normalizedCheckOut = normalizeDateInput(checkOut, "check-out");
   const blocks = await listAvailabilityBlockInputs(listingId);
-  const requestedNights = enumerateAvailabilityNights(checkIn.slice(0, 10), checkOut.slice(0, 10));
+  const requestedNights = enumerateAvailabilityNights(normalizedCheckIn, normalizedCheckOut);
   const conflict = findAvailabilityConflict(requestedNights, blocks, options);
 
   if (!conflict) {
