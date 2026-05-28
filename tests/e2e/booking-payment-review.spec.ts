@@ -309,9 +309,9 @@ test('guest request -> host approve -> guest proof -> host confirm -> guest revi
   await signIn(page, guestUser.email);
   await page.getByText(listing.title).first().click();
   await page.getByRole('button', { name: /Check-in Add date Checkout Add date/ }).click();
-  await page.locator(`button[data-day="${calendarDataDay(checkInDate)}"]`).click();
+  await page.locator(`button[data-day="${calendarDataDay(checkInDate)}"]`).first().click();
   await expect(page.getByText('Now choose your check-out date.')).toBeVisible();
-  await page.locator(`button[data-day="${calendarDataDay(checkOutDate)}"]`).click({ force: true });
+  await page.locator(`button[data-day="${calendarDataDay(checkOutDate)}"]`).first().click({ force: true });
   await page.getByRole('button', { name: 'Request to Book' }).click();
   await expect(page.getByText('Booking request sent! The host will contact you shortly.')).toBeVisible();
 
