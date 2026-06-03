@@ -6,10 +6,11 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
-import { createSubscriptionCheckout, getCheckoutStatus, getMyHostBillingAccount } from "@/lib/billing-client";
+import { getCheckoutStatus, getMyHostBillingAccount } from "@/lib/billing-client";
 import type { HostBillingAccount } from "@/types";
 
 type PlanTier = "standard" | "professional" | "premium";
+type PaymentLinkTier = PlanTier | "managed";
 
 interface PlanFeature {
   text: string;
@@ -38,6 +39,13 @@ interface ManagedOffer {
   tone: string;
   features: PlanFeature[];
 }
+
+const YOCO_PAYMENT_LINKS: Record<PaymentLinkTier, string> = {
+  standard: "https://pay.yoco.com/r/mdOO6x",
+  professional: "https://pay.yoco.com/r/4nJJ1B",
+  premium: "https://pay.yoco.com/r/2DzzAw",
+  managed: "https://pay.yoco.com/r/2BGGAB",
+};
 
 const subscriptionPlans: Plan[] = [
   {
@@ -282,8 +290,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
       setLoadingPlan(planId);
 
       try {
-        const checkout = await createSubscriptionCheckout(planId, "monthly");
-        window.location.assign(checkout.redirectUrl);
+        window.location.assign(YOCO_PAYMENT_LINKS[planId]);
       } catch (error: any) {
         console.error("Plan upgrade error:", error);
         toast.error(`Upgrade failed: ${error.message}`);
@@ -300,9 +307,8 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
       return;
     }
 
-    toast.message("Managed Hosting is onboarded directly by the Ideal Stay team. Your account can now be routed for manual setup.");
-    navigate(profile?.role === "host" ? "/host" : "/account");
-  }, [navigate, profile?.role, user]);
+    window.location.assign(YOCO_PAYMENT_LINKS.managed);
+  }, [user]);
 
   if (fetchingPlan) {
     return (
