@@ -13,6 +13,7 @@ import {
   ContentDraft,
   ContentEntitlements,
   generateContentDraft,
+  getBillingPaymentStatus,
   getCheckoutStatus,
   getContentEntitlements,
   listContentDrafts,
@@ -228,11 +229,16 @@ export default function SocialDashboard({ listings }: { listings: Listing[] }) {
   useEffect(() => {
     const billingStatus = searchParams.get('billing_status');
     const checkoutId = searchParams.get('checkout_id');
-    if (!profile || !billingStatus || !checkoutId) return;
+    const paymentId = searchParams.get('payment_id');
+    if (!profile || !billingStatus || (!paymentId && !checkoutId)) return;
 
-    void getCheckoutStatus(checkoutId)
+    // (|/) Klaasvaakie - standard payments return payment_id; checkout_id is kept for older return URLs.
+    const statusRequest = paymentId ? getBillingPaymentStatus(paymentId) : getCheckoutStatus(checkoutId!);
+
+    void statusRequest
       .then(async (result) => {
-        if (result.checkoutType !== 'content_credits') return;
+        const paymentKind = 'purpose' in result ? result.purpose : result.checkoutType;
+        if (paymentKind !== 'content_credits') return;
         if (result.status === 'paid') {
           setEntitlements(await getContentEntitlements());
           toast.success('Credit top-up confirmed. Your content wallet has been updated.');

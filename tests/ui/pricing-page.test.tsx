@@ -21,11 +21,12 @@ vi.mock('@/lib/billing-client', () => ({
   startBillingPayment: vi.fn(async () => ({
     paymentId: 'payment-intent-1',
     provider: 'yoco',
-    providerOrderId: 'order-1',
+    providerReference: 'checkout-1',
     redirectUrl: 'https://pay.yoco.com/r/generated-professional',
     providerMode: 'test',
     status: 'pending',
   })),
+  getBillingPaymentStatus: vi.fn(),
   getCheckoutStatus: vi.fn(),
   getMyHostBillingAccount: vi.fn(),
 }));

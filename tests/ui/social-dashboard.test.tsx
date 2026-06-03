@@ -25,6 +25,7 @@ const mockedHostProfile = vi.hoisted(() => ({
 
 const startBillingPaymentMock = vi.fn();
 const generateContentDraftMock = vi.fn();
+const getBillingPaymentStatusMock = vi.fn();
 const getCheckoutStatusMock = vi.fn();
 const getContentEntitlementsMock = vi.fn();
 const listContentDraftsMock = vi.fn();
@@ -39,6 +40,7 @@ vi.mock('@/contexts/AuthContext', () => ({
 
 vi.mock('@/lib/billing-client', () => ({
   generateContentDraft: (...args: unknown[]) => generateContentDraftMock(...args),
+  getBillingPaymentStatus: (...args: unknown[]) => getBillingPaymentStatusMock(...args),
   getCheckoutStatus: (...args: unknown[]) => getCheckoutStatusMock(...args),
   getContentEntitlements: (...args: unknown[]) => getContentEntitlementsMock(...args),
   listContentDrafts: (...args: unknown[]) => listContentDraftsMock(...args),
@@ -287,7 +289,7 @@ describe('SocialDashboard', () => {
     startBillingPaymentMock.mockResolvedValue({
       paymentId: 'payment-intent-10',
       provider: 'yoco',
-      providerOrderId: 'order-10',
+      providerReference: 'checkout-10',
       redirectUrl: 'https://pay.example.com/credits-10',
       providerMode: 'test',
       status: 'pending',

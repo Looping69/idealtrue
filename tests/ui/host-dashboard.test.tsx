@@ -16,6 +16,7 @@ vi.mock('@/hooks/use-booking-ops-summaries', () => ({
 }));
 
 vi.mock('@/lib/billing-client', () => ({
+  getBillingPaymentStatus: vi.fn(),
   getCheckoutStatus: vi.fn(),
   getMyHostBillingAccount: (...args: unknown[]) => getMyHostBillingAccountMock(...args),
   startBillingPayment: (...args: unknown[]) => startBillingPaymentMock(...args),
@@ -248,7 +249,7 @@ describe('HostDashboard', () => {
     startBillingPaymentMock.mockResolvedValue({
       paymentId: 'payment-intent-host-card-setup',
       provider: 'yoco',
-      providerOrderId: 'order-host-card-setup',
+      providerReference: 'checkout-host-card-setup',
       redirectUrl: 'https://pay.example.com/host-card-setup',
       providerMode: 'test',
       status: 'pending',

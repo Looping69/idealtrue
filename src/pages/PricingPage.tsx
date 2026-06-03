@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
-import { getCheckoutStatus, getMyHostBillingAccount, startBillingPayment } from "@/lib/billing-client";
+import { getBillingPaymentStatus, getCheckoutStatus, getMyHostBillingAccount, startBillingPayment } from "@/lib/billing-client";
 import type { HostBillingAccount } from "@/types";
 
 type PlanTier = "standard" | "professional" | "premium";
@@ -189,6 +189,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
   const sourceLabel = searchParams.get("source_label") || searchParams.get("region");
   const billingStatus = searchParams.get("billing_status");
   const checkoutId = searchParams.get("checkout_id");
+  const paymentId = searchParams.get("payment_id");
 
   const fetchPlan = useCallback(async () => {
     if (!profile) {
@@ -219,7 +220,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
   }, [fetchPlan]);
 
   useEffect(() => {
-    if (!user || !billingStatus || !checkoutId) {
+    if (!user || !billingStatus || (!paymentId && !checkoutId)) {
       return;
     }
 
@@ -229,8 +230,16 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
     async function resolveCheckout() {
       try {
         for (let attempt = 0; attempt < 8; attempt += 1) {
-          const result = await getCheckoutStatus(checkoutId);
+          // (|/) Klaasvaakie - standard payments return payment_id; checkout_id is kept for older return URLs.
+          const result = paymentId
+            ? await getBillingPaymentStatus(paymentId)
+            : await getCheckoutStatus(checkoutId!);
           if (cancelled) {
+            return;
+          }
+
+          if ("purpose" in result && result.purpose !== "subscription") {
+            navigate("/pricing", { replace: true });
             return;
           }
 
@@ -272,7 +281,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, [billingStatus, checkoutId, currentPlan, navigate, refreshProfile, user]);
+  }, [billingStatus, checkoutId, currentPlan, navigate, paymentId, refreshProfile, user]);
 
   const handleUpgrade = useCallback(
     async (planId: PlanTier) => {

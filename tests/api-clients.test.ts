@@ -779,7 +779,7 @@ test('host billing helpers use the voucher-backed billing endpoints via the prox
         providerMode: 'test',
         status: 'pending',
         redirectUrl: 'https://pay.example.com/r/standard-host-card-setup',
-        providerOrderId: 'order-standard-host-card-setup',
+        providerReference: 'checkout-standard-host-card-setup',
       });
     }
 

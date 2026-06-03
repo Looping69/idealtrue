@@ -50,7 +50,7 @@ export interface BillingPayment {
   providerMode: 'live' | 'test';
   status: 'pending' | 'paid' | 'failed' | 'cancelled';
   redirectUrl: string;
-  providerOrderId: string;
+  providerReference: string;
 }
 
 export async function startBillingPayment(params:

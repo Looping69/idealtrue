@@ -464,7 +464,7 @@ test('standard billing payment client creates all new Yoco payments through one 
         providerMode: 'test',
         status: 'pending',
         redirectUrl: `https://pay.example/${body.purpose}`,
-        providerOrderId: `order-${body.purpose}`,
+        providerReference: `checkout-${body.purpose}`,
       });
     }
     throw new Error(`Unhandled standard billing payment endpoint: ${url}`);

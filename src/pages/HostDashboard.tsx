@@ -23,6 +23,7 @@ import InquiryDeclineDialog from '@/components/InquiryDeclineDialog';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { toast } from 'sonner';
 import {
+  getBillingPaymentStatus,
   getCheckoutStatus,
   getMyHostBillingAccount,
   startBillingPayment,
@@ -187,9 +188,10 @@ export default function HostDashboard({
 
     const billingStatus = searchParams.get('billing_status');
     const checkoutId = searchParams.get('checkout_id');
+    const paymentId = searchParams.get('payment_id');
     const billingContext = searchParams.get('billing_context');
 
-    if (!billingStatus || !checkoutId || billingContext !== 'host_card_setup') {
+    if (!billingStatus || (!paymentId && !checkoutId) || billingContext !== 'host_card_setup') {
       return;
     }
 
@@ -199,12 +201,16 @@ export default function HostDashboard({
     async function resolveBillingSetup() {
       try {
         for (let attempt = 0; attempt < 8; attempt += 1) {
-          const result = await getCheckoutStatus(checkoutId);
+          // (|/) Klaasvaakie - standard payments return payment_id; checkout_id is kept for older return URLs.
+          const result = paymentId
+            ? await getBillingPaymentStatus(paymentId)
+            : await getCheckoutStatus(checkoutId!);
           if (cancelled) {
             return;
           }
 
-          if (result.checkoutType !== 'host_billing_setup') {
+          const paymentKind = 'purpose' in result ? result.purpose : result.checkoutType;
+          if (paymentKind !== 'host_billing_setup') {
             navigate('/host', { replace: true });
             return;
           }

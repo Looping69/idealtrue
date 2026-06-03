@@ -17,7 +17,6 @@ import { HOST_PLANS, HostPlan, SubscriptionPlan } from "../shared/domain";
 import { platformEvents } from "../analytics/events";
 import {
   createYocoCheckout,
-  createYocoPaymentLink,
   fetchYocoOrder,
   getAppUrl,
   verifyYocoWebhookSignature,
@@ -247,6 +246,7 @@ type PaymentIntentRow = {
   billing_interval: BillingInterval | null;
   credit_quantity: number | null;
   provider_payment_link_id: string | null;
+  provider_checkout_id: string | null;
   provider_order_id: string | null;
   provider_payment_id: string | null;
   redirect_url: string | null;
@@ -682,8 +682,7 @@ async function createPaymentIntentRow(params: {
 
 async function storeProviderPaymentIntent(params: {
   intentId: string;
-  paymentLinkId: string;
-  orderId: string;
+  providerCheckoutId: string;
   redirectUrl: string;
   status: CheckoutStatus;
   providerMode: "live" | "test";
@@ -691,8 +690,7 @@ async function storeProviderPaymentIntent(params: {
   const now = new Date().toISOString();
   await billingDB.exec`
     UPDATE billing_payment_intents
-    SET provider_payment_link_id = ${params.paymentLinkId},
-        provider_order_id = ${params.orderId},
+    SET provider_checkout_id = ${params.providerCheckoutId},
         provider_mode = ${params.providerMode},
         redirect_url = ${params.redirectUrl},
         status = ${params.status},
@@ -701,115 +699,11 @@ async function storeProviderPaymentIntent(params: {
   `;
 }
 
-async function createPaymentLinkSessionRow(params: {
-  userId: string;
-  sessionType: CheckoutType;
-  amount: number;
-  hostPlan?: HostPlan | null;
-  billingInterval?: BillingInterval | null;
-  creditQuantity?: number | null;
-}) {
-  const now = new Date().toISOString();
-  const sessionId = randomUUID();
-  const copy = buildPaymentLinkCopy({
-    sessionId,
-    type: params.sessionType,
-    userId: params.userId,
-    plan: params.hostPlan,
-    billingInterval: params.billingInterval,
-    credits: params.creditQuantity,
-  });
-
-  await billingDB.exec`
-    INSERT INTO billing_payment_link_sessions (
-      id, user_id, session_type, status, currency, amount, host_plan, billing_interval,
-      credit_quantity, customer_reference, customer_description, metadata, created_at, updated_at
-    )
-    VALUES (
-      ${sessionId}, ${params.userId}, ${params.sessionType}, ${"pending"}, ${"ZAR"}, ${params.amount},
-      ${params.hostPlan ?? null}, ${params.billingInterval ?? null}, ${params.creditQuantity ?? null},
-      ${copy.customerReference}, ${copy.customerDescription},
-      ${JSON.stringify({ sessionId, sessionType: params.sessionType })}, ${now}, ${now}
-    )
-  `;
-
-  return {
-    sessionId,
-    customerReference: copy.customerReference,
-    customerDescription: copy.customerDescription,
-  };
-}
-
-async function storeProviderPaymentLink(params: {
-  sessionId: string;
-  paymentLinkId: string;
-  orderId: string;
-  redirectUrl: string;
-  status: CheckoutStatus;
-  providerMode: "live" | "test";
-}) {
-  const now = new Date().toISOString();
-  await billingDB.exec`
-    UPDATE billing_payment_link_sessions
-    SET payment_link_id = ${params.paymentLinkId},
-        provider_order_id = ${params.orderId},
-        provider_mode = ${params.providerMode},
-        redirect_url = ${params.redirectUrl},
-        status = ${params.status},
-        updated_at = ${now}
-    WHERE id = ${params.sessionId}
-  `;
-}
-
-function mapYocoPaymentLinkStatus(status?: string | null): CheckoutStatus {
-  const normalized = status?.trim().toLowerCase();
-  if (normalized === "paid") return "paid";
-  if (normalized === "cancelled") return "cancelled";
-  return "pending";
-}
-
 function mapYocoOrderStatus(status?: string | null): CheckoutStatus {
   const normalized = status?.trim().toLowerCase();
   if (normalized === "completed") return "paid";
   if (normalized === "cancelled") return "cancelled";
   return "pending";
-}
-
-async function createPaymentLinkForSession(params: {
-  userId: string;
-  sessionType: CheckoutType;
-  amount: number;
-  hostPlan?: HostPlan | null;
-  billingInterval?: BillingInterval | null;
-  creditQuantity?: number | null;
-}) {
-  // (|/) Klaasvaakie - keep Yoco payment links server-owned so provider order ids stay reconcilable.
-  const session = await createPaymentLinkSessionRow(params);
-  const yoco = await createYocoPaymentLink({
-    amount: {
-      amount: toMinorUnits(params.amount),
-      currency: "ZAR",
-    },
-    customer_reference: session.customerReference,
-    customer_description: session.customerDescription,
-  });
-
-  await storeProviderPaymentLink({
-    sessionId: session.sessionId,
-    paymentLinkId: yoco.id,
-    orderId: yoco.order_id,
-    redirectUrl: yoco.url,
-    status: mapYocoPaymentLinkStatus(yoco.status),
-    providerMode: yoco.provider_mode ?? "live",
-  });
-
-  return {
-    sessionId: session.sessionId,
-    paymentLinkId: yoco.id,
-    orderId: yoco.order_id,
-    redirectUrl: yoco.url,
-    providerMode: yoco.provider_mode ?? "live",
-  };
 }
 
 async function createBillingPaymentIntent(params: {
@@ -822,31 +716,39 @@ async function createBillingPaymentIntent(params: {
 }) {
   // (|/) Klaasvaakie - all new Yoco payments enter through this one standard intent path.
   const intent = await createPaymentIntentRow(params);
-  const yoco = await createYocoPaymentLink({
-    amount: {
-      amount: toMinorUnits(params.amount),
-      currency: "ZAR",
+  const urls = buildBillingUrls(params.purpose, intent.intentId);
+  const yoco = await createYocoCheckout({
+    amount: toMinorUnits(params.amount),
+    currency: "ZAR",
+    successUrl: urls.successUrl.replace(/checkout_id=[^&]*/, `payment_id=${encodeURIComponent(intent.intentId)}`),
+    cancelUrl: urls.cancelUrl.replace(/checkout_id=[^&]*/, `payment_id=${encodeURIComponent(intent.intentId)}`),
+    failureUrl: urls.failureUrl.replace(/checkout_id=[^&]*/, `payment_id=${encodeURIComponent(intent.intentId)}`),
+    idempotencyKey: intent.intentId,
+    metadata: {
+      paymentIntentId: intent.intentId,
+      purpose: params.purpose,
+      userId: params.userId,
+      ...(params.hostPlan ? { plan: params.hostPlan } : {}),
+      ...(params.billingInterval ? { billingInterval: params.billingInterval } : {}),
+      ...(params.creditQuantity ? { credits: String(params.creditQuantity) } : {}),
     },
-    customer_reference: intent.customerReference,
-    customer_description: intent.customerDescription,
   });
 
   await storeProviderPaymentIntent({
     intentId: intent.intentId,
-    paymentLinkId: yoco.id,
-    orderId: yoco.order_id,
-    redirectUrl: yoco.url,
-    status: mapYocoPaymentLinkStatus(yoco.status),
-    providerMode: yoco.provider_mode ?? "live",
+    providerCheckoutId: yoco.id,
+    redirectUrl: yoco.redirectUrl,
+    status: "pending",
+    providerMode: yoco.processingMode ?? (yoco.mode === "test" ? "test" : "live"),
   });
 
   return {
     paymentId: intent.intentId,
     provider: "yoco" as const,
-    providerMode: yoco.provider_mode ?? "live",
-    status: mapYocoPaymentLinkStatus(yoco.status),
-    redirectUrl: yoco.url,
-    providerOrderId: yoco.order_id,
+    providerMode: yoco.processingMode ?? (yoco.mode === "test" ? "test" : "live"),
+    status: "pending" as const,
+    redirectUrl: yoco.redirectUrl,
+    providerReference: yoco.id,
   };
 }
 
@@ -1326,8 +1228,33 @@ async function getPaymentIntentById(paymentId: string) {
 }
 
 async function findPaymentIntentForWebhook(event: YocoWebhookEvent) {
+  const metadata = resolveProviderMetadata(event);
+  const paymentIntentId = typeof metadata.paymentIntentId === "string" ? metadata.paymentIntentId : null;
+  const providerCheckoutId = resolveProviderCheckoutId(event);
   const orderId = resolveProviderOrderId(event);
   const paymentLinkId = resolveProviderPaymentLinkId(event);
+
+  if (paymentIntentId) {
+    const byId = await billingDB.queryRow<PaymentIntentRow>`
+      SELECT *
+      FROM billing_payment_intents
+      WHERE id = ${paymentIntentId}
+    `;
+    if (byId) {
+      return byId;
+    }
+  }
+
+  if (providerCheckoutId) {
+    const byCheckoutId = await billingDB.queryRow<PaymentIntentRow>`
+      SELECT *
+      FROM billing_payment_intents
+      WHERE provider_checkout_id = ${providerCheckoutId}
+    `;
+    if (byCheckoutId) {
+      return byCheckoutId;
+    }
+  }
 
   if (orderId) {
     const byOrderId = await billingDB.queryRow<PaymentIntentRow>`
@@ -1384,7 +1311,17 @@ async function findPaymentLinkForWebhook(event: YocoWebhookEvent) {
 }
 
 async function reconcilePendingPaymentIntent(intent: PaymentIntentRow) {
-  if (intent.status !== "pending" || !intent.provider_order_id) {
+  if (intent.status !== "pending") {
+    return intent;
+  }
+
+  const successfulWebhook = await findSuccessfulWebhookForPaymentIntent(intent);
+  if (successfulWebhook) {
+    await fulfilSuccessfulPaymentIntent(intent, successfulWebhook.payload?.paymentId ?? successfulWebhook.payload?.id ?? null);
+    return (await getPaymentIntentById(intent.id)) ?? intent;
+  }
+
+  if (!intent.provider_order_id) {
     return intent;
   }
 
@@ -1404,6 +1341,30 @@ async function reconcilePendingPaymentIntent(intent: PaymentIntentRow) {
   }
 
   return intent;
+}
+
+async function findSuccessfulWebhookForPaymentIntent(intent: PaymentIntentRow): Promise<YocoWebhookEvent | null> {
+  const matchingEvents = await billingDB.queryAll<StoredWebhookEventRow>`
+    SELECT event_type, payload::text AS payload_json
+    FROM billing_webhook_events
+    WHERE provider = ${"yoco"}
+      AND (
+        payload #>> '{payload,metadata,paymentIntentId}' = ${intent.id}
+        OR (${intent.provider_checkout_id ?? null} IS NOT NULL AND payload #>> '{payload,id}' = ${intent.provider_checkout_id ?? null})
+      )
+    ORDER BY received_at DESC
+    LIMIT 20
+  `;
+
+  for (const row of matchingEvents) {
+    const payload = JSON.parse(row.payload_json) as YocoWebhookEvent;
+    const eventType = row.event_type || payload.type;
+    if (classifyYocoWebhookOutcome(eventType, payload.payload?.status) === "paid") {
+      return payload;
+    }
+  }
+
+  return null;
 }
 
 async function reconcilePendingPaymentLink(session: PaymentLinkSessionRow) {
@@ -1519,7 +1480,7 @@ export const createSubscriptionCheckout = api<SubscriptionCheckoutParams, { chec
 
 export const upgradePlan = createSubscriptionCheckout;
 
-export const createBillingPayment = api<CreateBillingPaymentParams, { paymentId: string; provider: "yoco"; providerMode: "live" | "test"; status: CheckoutStatus; redirectUrl: string; providerOrderId: string }>(
+export const createBillingPayment = api<CreateBillingPaymentParams, { paymentId: string; provider: "yoco"; providerMode: "live" | "test"; status: CheckoutStatus; redirectUrl: string; providerReference: string }>(
   { expose: true, method: "POST", path: "/billing/payments", auth: true },
   async ({ purpose, plan, billingInterval, credits }) => {
     const auth = requireRole("host", "admin");
@@ -1573,13 +1534,21 @@ export const createSubscriptionPaymentLink = api<SubscriptionCheckoutParams, { s
   async ({ plan, billingInterval }) => {
     const auth = requireRole("host", "admin");
     const amount = getPlanAmount(plan, billingInterval);
-    return createPaymentLinkForSession({
+    // (|/) Klaasvaakie - legacy payment-link callers are shims over standard Yoco Checkout intents.
+    const payment = await createBillingPaymentIntent({
       userId: auth.userID,
-      sessionType: "subscription",
+      purpose: "subscription",
       amount,
       hostPlan: plan,
       billingInterval,
     });
+    return {
+      sessionId: payment.paymentId,
+      paymentLinkId: payment.providerReference,
+      orderId: payment.providerReference,
+      redirectUrl: payment.redirectUrl,
+      providerMode: payment.providerMode,
+    };
   },
 );
 
@@ -1696,12 +1665,20 @@ export const createHostBillingSetupPaymentLink = api<void, { sessionId: string; 
       throw APIError.failedPrecondition("A provider-backed billing card is already on file.");
     }
 
-    return createPaymentLinkForSession({
+    // (|/) Klaasvaakie - legacy payment-link callers are shims over standard Yoco Checkout intents.
+    const payment = await createBillingPaymentIntent({
       userId: auth.userID,
-      sessionType: "host_billing_setup",
+      purpose: "host_billing_setup",
       amount: HOST_BILLING_SETUP_AMOUNT,
       hostPlan: account.plan,
     });
+    return {
+      sessionId: payment.paymentId,
+      paymentLinkId: payment.providerReference,
+      orderId: payment.providerReference,
+      redirectUrl: payment.redirectUrl,
+      providerMode: payment.providerMode,
+    };
   },
 );
 
@@ -1791,12 +1768,20 @@ export const createContentCreditsPaymentLink = api<PurchaseCreditsParams, { sess
     }
 
     const amount = getCreditPrice(credits);
-    return createPaymentLinkForSession({
+    // (|/) Klaasvaakie - legacy payment-link callers are shims over standard Yoco Checkout intents.
+    const payment = await createBillingPaymentIntent({
       userId: auth.userID,
-      sessionType: "content_credits",
+      purpose: "content_credits",
       amount,
       creditQuantity: credits,
     });
+    return {
+      sessionId: payment.paymentId,
+      paymentLinkId: payment.providerReference,
+      orderId: payment.providerReference,
+      redirectUrl: payment.redirectUrl,
+      providerMode: payment.providerMode,
+    };
   },
 );
 
@@ -1825,6 +1810,15 @@ export const getPaymentLinkStatus = api<{ sessionId: string }, { status: Checkou
     const session = await getPaymentLinkSessionById(sessionId);
 
     if (!session) {
+      const intent = await getPaymentIntentById(sessionId);
+      if (intent) {
+        if (intent.user_id !== auth.userID && auth.role !== "admin" && auth.role !== "support") {
+          throw APIError.permissionDenied("You do not have access to this payment link session.");
+        }
+        // (|/) Klaasvaakie - legacy status URLs can now resolve standard payment intents.
+        const resolvedIntent = await reconcilePendingPaymentIntent(intent);
+        return { status: resolvedIntent.status, sessionType: resolvedIntent.purpose };
+      }
       throw APIError.notFound("Payment link session not found.");
     }
     if (session.user_id !== auth.userID && auth.role !== "admin" && auth.role !== "support") {
