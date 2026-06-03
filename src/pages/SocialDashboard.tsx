@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popove
 import { useAuth } from '../contexts/AuthContext';
 import { Listing } from '../types';
 import {
-  createContentCreditsCheckout,
+  createContentCreditsPaymentLink,
   ContentDraft,
   ContentEntitlements,
   generateContentDraft,
@@ -277,8 +277,8 @@ export default function SocialDashboard({ listings }: { listings: Listing[] }) {
   async function handleTopUpCredits(credits: number) {
     setPurchasingCredits(credits);
     try {
-      const checkout = await createContentCreditsCheckout(credits);
-      window.location.assign(checkout.redirectUrl);
+      const paymentLink = await createContentCreditsPaymentLink(credits);
+      window.location.assign(paymentLink.redirectUrl);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Credit purchase failed.');
     } finally {

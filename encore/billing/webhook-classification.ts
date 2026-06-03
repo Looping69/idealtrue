@@ -15,6 +15,7 @@ export function classifyYocoWebhookOutcome(eventType?: string | null, payloadSta
     normalizedEventType.includes("success") ||
     normalizedPayloadStatus === "succeeded" ||
     normalizedPayloadStatus === "successful" ||
+    normalizedPayloadStatus === "approved" ||
     normalizedPayloadStatus === "paid" ||
     normalizedPayloadStatus === "completed"
   ) {

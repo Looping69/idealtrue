@@ -6,11 +6,10 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
-import { getCheckoutStatus, getMyHostBillingAccount } from "@/lib/billing-client";
+import { createSubscriptionPaymentLink, getCheckoutStatus, getMyHostBillingAccount } from "@/lib/billing-client";
 import type { HostBillingAccount } from "@/types";
 
 type PlanTier = "standard" | "professional" | "premium";
-type PaymentLinkTier = PlanTier | "managed";
 
 interface PlanFeature {
   text: string;
@@ -40,12 +39,7 @@ interface ManagedOffer {
   features: PlanFeature[];
 }
 
-const YOCO_PAYMENT_LINKS: Record<PaymentLinkTier, string> = {
-  standard: "https://pay.yoco.com/r/mdOO6x",
-  professional: "https://pay.yoco.com/r/4nJJ1B",
-  premium: "https://pay.yoco.com/r/2DzzAw",
-  managed: "https://pay.yoco.com/r/2BGGAB",
-};
+const MANAGED_HOSTING_PAYMENT_LINK = "https://pay.yoco.com/r/2BGGAB";
 
 const subscriptionPlans: Plan[] = [
   {
@@ -290,7 +284,8 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
       setLoadingPlan(planId);
 
       try {
-        window.location.assign(YOCO_PAYMENT_LINKS[planId]);
+        const paymentLink = await createSubscriptionPaymentLink(planId, "monthly");
+        window.location.assign(paymentLink.redirectUrl);
       } catch (error: any) {
         console.error("Plan upgrade error:", error);
         toast.error(`Upgrade failed: ${error.message}`);
@@ -307,7 +302,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
       return;
     }
 
-    window.location.assign(YOCO_PAYMENT_LINKS.managed);
+    window.location.assign(MANAGED_HOSTING_PAYMENT_LINK);
   }, [navigate, user]);
 
   if (fetchingPlan) {

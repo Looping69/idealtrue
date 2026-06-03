@@ -23,7 +23,7 @@ import InquiryDeclineDialog from '@/components/InquiryDeclineDialog';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { toast } from 'sonner';
 import {
-  createHostBillingSetupCheckout,
+  createHostBillingSetupPaymentLink,
   getCheckoutStatus,
   getMyHostBillingAccount,
 } from '@/lib/billing-client';
@@ -244,7 +244,7 @@ export default function HostDashboard({
         navigate('/host', { replace: true });
       } catch (error) {
         if (!cancelled) {
-          console.error('Failed to resolve host billing setup checkout', error);
+          console.error('Failed to resolve host billing setup payment', error);
           toast.error('Could not verify billing setup yet. Refresh the dashboard in a moment.');
           navigate('/host', { replace: true });
         }
@@ -309,10 +309,10 @@ export default function HostDashboard({
   async function handleStartBillingSetup() {
     setStartingBillingSetup(true);
     try {
-      const checkout = await createHostBillingSetupCheckout();
-      window.location.assign(checkout.redirectUrl);
+      const paymentLink = await createHostBillingSetupPaymentLink();
+      window.location.assign(paymentLink.redirectUrl);
     } catch (error) {
-      console.error('Failed to start host billing setup checkout:', error);
+      console.error('Failed to start host billing setup payment link:', error);
       toast.error(error instanceof Error ? error.message : 'Could not start billing setup.');
       setStartingBillingSetup(false);
     }
@@ -655,7 +655,7 @@ export default function HostDashboard({
               </div>
               <p className="mt-3 text-sm font-bold">{billingTimeline.actionLabel}</p>
               <p className="mt-1 text-xs text-on-surface-variant">
-                {billingAccount?.cardOnFile ? 'Provider-backed billing setup is confirmed.' : 'A provider-backed billing setup checkout is still required.'}
+                {billingAccount?.cardOnFile ? 'Provider-backed billing setup is confirmed.' : 'A provider-backed billing setup payment is still required.'}
               </p>
             </div>
           </div>
@@ -668,7 +668,7 @@ export default function HostDashboard({
                   <p className="mt-1 text-sm font-semibold">{billingTimeline.countdownLabel}</p>
                   <p className="mt-1 text-xs text-on-surface-variant">{billingTimeline.reminderLabel}</p>
                   <p className="mt-1 text-xs text-on-surface-variant">
-                    Yoco billing setup checkout controls provider-backed card readiness for voucher hosting.
+                    Yoco billing setup payment link controls provider-backed card readiness for voucher hosting.
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -702,7 +702,7 @@ export default function HostDashboard({
                     <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">Required Action</p>
                     <p className="mt-2 text-base font-bold">{billingTimeline.actionLabel}</p>
                     <p className="mt-1 text-xs text-on-surface-variant">
-                      {billingAccount?.cardOnFile ? 'No extra billing capture is needed right now.' : 'Finish the Yoco billing setup checkout before the voucher window expires.'}
+                      {billingAccount?.cardOnFile ? 'No extra billing capture is needed right now.' : 'Finish the Yoco billing setup payment before the voucher window expires.'}
                     </p>
                   </div>
                 </div>
@@ -720,14 +720,14 @@ export default function HostDashboard({
             <div className="mt-6 rounded-2xl border border-outline-variant bg-surface-container-low p-4">
               <p className="text-sm font-semibold text-on-surface">Provider-backed billing card setup is required.</p>
               <p className="mt-2 text-sm text-on-surface-variant">
-                Billing card setup now runs through a real Yoco checkout. We only mark the card as covered after the provider webhook confirms payment, and we do not invent card details we never received.
+                Billing card setup now runs through a Yoco payment link. We only mark the card as covered after the provider webhook confirms payment, and we do not invent card details we never received.
               </p>
               {billingAccount?.cardLabel ? (
                 <p className="mt-2 text-xs text-on-surface-variant">Latest provider state: {billingAccount.cardLabel}.</p>
               ) : null}
               {canStartBillingSetup ? (
                 <p className="mt-2 text-xs text-on-surface-variant">
-                  The checkout charges a small {formatRand(2)} billing setup verification payment so the card state is backed by a real Yoco transaction.
+                  The payment link charges a small {formatRand(2)} billing setup verification payment so the card state is backed by a real Yoco transaction.
                 </p>
               ) : null}
               <div className="mt-4 flex flex-wrap gap-3">

@@ -18,7 +18,12 @@ vi.mock('@/contexts/AuthContext', () => ({
 }));
 
 vi.mock('@/lib/billing-client', () => ({
-  createSubscriptionCheckout: vi.fn(),
+  createSubscriptionPaymentLink: vi.fn(async () => ({
+    sessionId: 'payment-link-session-1',
+    paymentLinkId: 'payment-link-1',
+    orderId: 'order-1',
+    redirectUrl: 'https://pay.yoco.com/r/generated-professional',
+  })),
   getCheckoutStatus: vi.fn(),
   getMyHostBillingAccount: vi.fn(),
 }));
@@ -63,7 +68,7 @@ describe('PricingPage', () => {
 
     await user.click(await screen.findByRole('button', { name: /get more visibility/i }));
 
-    expect(assignMock).toHaveBeenCalledWith('https://pay.yoco.com/r/4nJJ1B');
+    expect(assignMock).toHaveBeenCalledWith('https://pay.yoco.com/r/generated-professional');
   });
 
   it('shows the managed hosting card and routes its CTA into managed host signup', async () => {

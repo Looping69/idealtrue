@@ -8,7 +8,7 @@ import HostDashboard from '@/pages/HostDashboard';
 import type { Booking, HostBillingAccount, Listing, UserProfile } from '@/types';
 
 const getMyHostBillingAccountMock = vi.fn();
-const createHostBillingSetupCheckoutMock = vi.fn();
+const createHostBillingSetupPaymentLinkMock = vi.fn();
 const mockUseBookingOpsSummaries = vi.fn();
 
 vi.mock('@/hooks/use-booking-ops-summaries', () => ({
@@ -16,7 +16,7 @@ vi.mock('@/hooks/use-booking-ops-summaries', () => ({
 }));
 
 vi.mock('@/lib/billing-client', () => ({
-  createHostBillingSetupCheckout: (...args: unknown[]) => createHostBillingSetupCheckoutMock(...args),
+  createHostBillingSetupPaymentLink: (...args: unknown[]) => createHostBillingSetupPaymentLinkMock(...args),
   getCheckoutStatus: vi.fn(),
   getMyHostBillingAccount: (...args: unknown[]) => getMyHostBillingAccountMock(...args),
 }));
@@ -115,7 +115,7 @@ function makeBooking(
 
 describe('HostDashboard', () => {
   beforeEach(() => {
-    createHostBillingSetupCheckoutMock.mockReset();
+    createHostBillingSetupPaymentLinkMock.mockReset();
     mockUseBookingOpsSummaries.mockReset();
     mockUseBookingOpsSummaries.mockReturnValue({});
     const billingAccount: HostBillingAccount = {
@@ -243,11 +243,13 @@ describe('HostDashboard', () => {
     expect(screen.getByText(/guest payment closes/i)).toBeInTheDocument();
   });
 
-  it('starts the Yoco-backed billing setup checkout instead of showing a dead manual card path', async () => {
+  it('starts the Yoco-backed billing setup payment link instead of showing a dead manual card path', async () => {
     const user = userEvent.setup();
-    createHostBillingSetupCheckoutMock.mockResolvedValue({
-      checkoutId: 'checkout-host-card-setup',
-      redirectUrl: 'https://payments.example.com/host-card-setup',
+    createHostBillingSetupPaymentLinkMock.mockResolvedValue({
+      sessionId: 'payment-link-host-card-setup',
+      paymentLinkId: 'payment-link-host-card-setup',
+      orderId: 'order-host-card-setup',
+      redirectUrl: 'https://pay.example.com/host-card-setup',
     });
     getMyHostBillingAccountMock.mockResolvedValue({
       userId: profile.id,
@@ -291,11 +293,11 @@ describe('HostDashboard', () => {
 
     await waitFor(() => expect(getMyHostBillingAccountMock).toHaveBeenCalled());
 
-    expect(screen.getByText(/Yoco billing setup checkout/i)).toBeInTheDocument();
+    expect(screen.getByText(/Yoco billing setup payment link/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Set Up Billing Card' }));
 
-    expect(createHostBillingSetupCheckoutMock).toHaveBeenCalledTimes(1);
-    expect(assignMock).toHaveBeenCalledWith('https://payments.example.com/host-card-setup');
+    expect(createHostBillingSetupPaymentLinkMock).toHaveBeenCalledTimes(1);
+    expect(assignMock).toHaveBeenCalledWith('https://pay.example.com/host-card-setup');
   });
 });

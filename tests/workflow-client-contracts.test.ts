@@ -3,11 +3,15 @@ import test, { afterEach } from 'node:test';
 import { DEFAULT_ENCORE_API_URL } from '../src/lib/encore-client';
 import {
   createContentCreditsCheckout,
+  createContentCreditsPaymentLink,
   createHostBillingSetupCheckout,
+  createHostBillingSetupPaymentLink,
   createSubscriptionCheckout,
+  createSubscriptionPaymentLink,
   generateContentDraft,
   getCheckoutStatus,
   getContentEntitlements,
+  getPaymentLinkStatus,
   listContentDrafts,
   updateContentDraft,
 } from '../src/lib/billing-client';
@@ -202,6 +206,14 @@ test('content studio clients cover entitlements, draft lifecycle, credit checkou
     if (url.endsWith('/billing/content/credits/checkout')) {
       return createJsonResponse({ checkoutId: workflowBilling.checkoutPaid.checkoutId, redirectUrl: 'https://pay.example/credits' });
     }
+    if (url.endsWith('/billing/content/credits/payment-link')) {
+      return createJsonResponse({
+        sessionId: 'payment-link-credits-1',
+        paymentLinkId: 'plink-credits-1',
+        orderId: 'order-credits-1',
+        redirectUrl: 'https://pay.example/payment-link-credits',
+      });
+    }
     if (url.endsWith('/billing/content/drafts/generate')) {
       return createJsonResponse({
         draft: workflowContentDrafts.draft,
@@ -225,11 +237,15 @@ test('content studio clients cover entitlements, draft lifecycle, credit checkou
     if (url.endsWith(`/billing/checkouts/${workflowBilling.checkoutPaid.checkoutId}`)) {
       return createJsonResponse({ status: workflowBilling.checkoutPaid.status, checkoutType: workflowBilling.checkoutPaid.checkoutType });
     }
+    if (url.endsWith('/billing/payment-links/payment-link-credits-1')) {
+      return createJsonResponse({ status: 'pending', sessionType: 'content_credits' });
+    }
     throw new Error(`Unhandled content endpoint: ${url}`);
   });
 
   const entitlements = await getContentEntitlements();
   const creditsCheckout = await createContentCreditsCheckout(10);
+  const creditsPaymentLink = await createContentCreditsPaymentLink(15);
   const generated = await generateContentDraft(workflowListings.active as any, 'instagram' as any, 'friendly' as any, 'stay_carousel' as any, {
     includePrice: true,
     includeSpecialOffer: false,
@@ -242,15 +258,19 @@ test('content studio clients cover entitlements, draft lifecycle, credit checkou
     scheduledFor: workflowContentDrafts.scheduled.scheduledFor,
   });
   const checkoutStatus = await getCheckoutStatus(workflowBilling.checkoutPaid.checkoutId);
+  const paymentLinkStatus = await getPaymentLinkStatus(creditsPaymentLink.sessionId);
 
   assert.equal(entitlements.contentStudioEnabled, true);
   assert.equal(creditsCheckout.checkoutId, workflowBilling.checkoutPaid.checkoutId);
+  assert.equal(creditsPaymentLink.redirectUrl, 'https://pay.example/payment-link-credits');
   assert.equal(generated.draft.id, workflowContentDrafts.draft.id);
   assert.equal(drafts[0]?.id, workflowContentDrafts.draft.id);
   assert.equal(scheduled.status, 'scheduled');
   assert.equal(checkoutStatus.status, 'paid');
+  assert.equal(paymentLinkStatus.sessionType, 'content_credits');
   assert.equal(requestBody(1).credits, 10);
-  assert.deepEqual(requestBody(2), {
+  assert.equal(requestBody(2).credits, 15);
+  assert.deepEqual(requestBody(3), {
     listingId: workflowListings.active.id,
     platform: 'instagram',
     tone: 'friendly',
@@ -259,7 +279,7 @@ test('content studio clients cover entitlements, draft lifecycle, credit checkou
     includeSpecialOffer: false,
     customHeadline: 'Weekend special',
   });
-  assert.deepEqual(requestBody(4), {
+  assert.deepEqual(requestBody(5), {
     draftId: workflowContentDrafts.draft.id,
     status: 'scheduled',
     scheduledFor: workflowContentDrafts.scheduled.scheduledFor,
@@ -404,6 +424,31 @@ test('subscription checkout client posts plan interval and reads checkout status
   assert.deepEqual(requestBody(0), { plan: 'professional', billingInterval: 'monthly' });
 });
 
+test('subscription payment link client creates a server-owned Yoco payment link session', async () => {
+  installFetch((url) => {
+    if (url.endsWith('/billing/subscriptions/payment-link')) {
+      return createJsonResponse({
+        sessionId: 'payment-link-subscription-1',
+        paymentLinkId: 'plink-subscription-1',
+        orderId: 'order-subscription-1',
+        redirectUrl: 'https://pay.example/payment-link-subscription',
+      });
+    }
+    if (url.endsWith('/billing/payment-links/payment-link-subscription-1')) {
+      return createJsonResponse({ status: 'pending', sessionType: 'subscription' });
+    }
+    throw new Error(`Unhandled subscription payment link endpoint: ${url}`);
+  });
+
+  const paymentLink = await createSubscriptionPaymentLink('professional', 'monthly');
+  const status = await getPaymentLinkStatus(paymentLink.sessionId);
+
+  assert.equal(paymentLink.redirectUrl, 'https://pay.example/payment-link-subscription');
+  assert.equal(status.sessionType, 'subscription');
+  assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/billing/subscriptions/payment-link`);
+  assert.deepEqual(requestBody(0), { plan: 'professional', billingInterval: 'monthly' });
+});
+
 test('host billing setup checkout client posts to the dedicated Yoco-backed setup endpoint', async () => {
   installFetch((url) => {
     if (url.endsWith('/billing/host/setup-checkout')) {
@@ -427,5 +472,30 @@ test('host billing setup checkout client posts to the dedicated Yoco-backed setu
   assert.equal(checkout.redirectUrl, 'https://pay.example/host-card-setup');
   assert.equal(status.checkoutType, 'host_billing_setup');
   assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/billing/host/setup-checkout`);
+  assert.equal(fetchCalls[0]?.init?.method, 'POST');
+});
+
+test('host billing setup payment link client posts to the payment-link endpoint', async () => {
+  installFetch((url) => {
+    if (url.endsWith('/billing/host/setup-payment-link')) {
+      return createJsonResponse({
+        sessionId: 'payment-link-host-card-setup',
+        paymentLinkId: 'plink-host-card-setup',
+        orderId: 'order-host-card-setup',
+        redirectUrl: 'https://pay.example/payment-link-host-card-setup',
+      });
+    }
+    if (url.endsWith('/billing/payment-links/payment-link-host-card-setup')) {
+      return createJsonResponse({ status: 'pending', sessionType: 'host_billing_setup' });
+    }
+    throw new Error(`Unhandled host billing payment link endpoint: ${url}`);
+  });
+
+  const paymentLink = await createHostBillingSetupPaymentLink();
+  const status = await getPaymentLinkStatus(paymentLink.sessionId);
+
+  assert.equal(paymentLink.redirectUrl, 'https://pay.example/payment-link-host-card-setup');
+  assert.equal(status.sessionType, 'host_billing_setup');
+  assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/billing/host/setup-payment-link`);
   assert.equal(fetchCalls[0]?.init?.method, 'POST');
 });

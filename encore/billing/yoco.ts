@@ -7,6 +7,7 @@ export const yocoWebhookSecret = secret<"YOCO_WEBHOOK_SECRET">("YOCO_WEBHOOK_SEC
 export const idealStayAppUrl = secret<"IDEAL_STAY_APP_URL">("IDEAL_STAY_APP_URL");
 
 const YOCO_API_BASE = process.env.YOCO_API_BASE || "https://payments.yoco.com/api";
+const YOCO_REST_API_BASE = process.env.YOCO_REST_API_BASE || "https://api.yoco.com/v1";
 const DEFAULT_APP_URL = "https://idealstay.co.za";
 
 export interface YocoCheckoutRequest {
@@ -32,10 +33,43 @@ export interface YocoWebhookEvent {
   type?: string;
   payload?: {
     id?: string;
+    order_id?: string;
+    orderId?: string;
     status?: string;
     metadata?: Record<string, string>;
     paymentId?: string;
   };
+}
+
+export interface YocoPaymentLinkRequest {
+  amount: {
+    amount: number;
+    currency: "ZAR";
+  };
+  customer_reference: string;
+  customer_description?: string | null;
+}
+
+export interface YocoPaymentLinkResponse {
+  id: string;
+  order_id: string;
+  status: "pending" | "paid" | "cancelled";
+  url: string;
+  customer_reference: string;
+  customer_description?: string | null;
+  created_at?: string;
+  updated_at?: string | null;
+}
+
+export interface YocoOrderResponse {
+  id: string;
+  status: "open" | "completed" | "cancelled" | string;
+  payments?: Array<{
+    id?: string;
+    order_id?: string;
+    status?: "approved" | "failed" | "cancelled" | string;
+    payment_source?: string;
+  }>;
 }
 
 export function getAppUrl() {
@@ -72,6 +106,54 @@ export async function createYocoCheckout(input: YocoCheckoutRequest): Promise<Yo
     throw APIError.internal("Yoco checkout creation returned an invalid response.");
   }
   return checkout;
+}
+
+export async function createYocoPaymentLink(input: YocoPaymentLinkRequest): Promise<YocoPaymentLinkResponse> {
+  const apiKey = yocoSecretKey();
+  if (!apiKey) {
+    throw APIError.unavailable("YOCO_SECRET_KEY is not configured.");
+  }
+
+  const response = await fetch(`${YOCO_REST_API_BASE}/payment_links/`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw APIError.internal(`Yoco payment link creation failed: ${body || response.statusText}`);
+  }
+
+  const paymentLink = (await response.json()) as YocoPaymentLinkResponse;
+  if (!paymentLink.id || !paymentLink.order_id || !paymentLink.url) {
+    throw APIError.internal("Yoco payment link creation returned an invalid response.");
+  }
+
+  return paymentLink;
+}
+
+export async function fetchYocoOrder(orderId: string): Promise<YocoOrderResponse> {
+  const apiKey = yocoSecretKey();
+  if (!apiKey) {
+    throw APIError.unavailable("YOCO_SECRET_KEY is not configured.");
+  }
+
+  const response = await fetch(`${YOCO_REST_API_BASE}/orders/${encodeURIComponent(orderId)}`, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw APIError.internal(`Yoco order lookup failed: ${body || response.statusText}`);
+  }
+
+  return response.json() as Promise<YocoOrderResponse>;
 }
 
 function extractPrimarySignature(signatureHeader: string) {

@@ -34,6 +34,13 @@ export interface ContentDraft {
   updatedAt: string;
 }
 
+export interface PaymentLinkSession {
+  sessionId: string;
+  paymentLinkId: string;
+  orderId: string;
+  redirectUrl: string;
+}
+
 export async function createSubscriptionCheckout(plan: HostPlan, billingInterval: BillingInterval) {
   return encoreRequest<{ checkoutId: string; redirectUrl: string }>(
     '/billing/subscriptions/checkout',
@@ -45,9 +52,30 @@ export async function createSubscriptionCheckout(plan: HostPlan, billingInterval
   );
 }
 
+export async function createSubscriptionPaymentLink(plan: HostPlan, billingInterval: BillingInterval) {
+  return encoreRequest<PaymentLinkSession>(
+    '/billing/subscriptions/payment-link',
+    {
+      method: 'POST',
+      body: JSON.stringify({ plan, billingInterval }),
+    },
+    { auth: true },
+  );
+}
+
 export async function createHostBillingSetupCheckout() {
   return encoreRequest<{ checkoutId: string; redirectUrl: string }>(
     '/billing/host/setup-checkout',
+    {
+      method: 'POST',
+    },
+    { auth: true },
+  );
+}
+
+export async function createHostBillingSetupPaymentLink() {
+  return encoreRequest<PaymentLinkSession>(
+    '/billing/host/setup-payment-link',
     {
       method: 'POST',
     },
@@ -67,6 +95,17 @@ export async function getContentEntitlements() {
 export async function createContentCreditsCheckout(credits: number) {
   return encoreRequest<{ checkoutId: string; redirectUrl: string }>(
     '/billing/content/credits/checkout',
+    {
+      method: 'POST',
+      body: JSON.stringify({ credits }),
+    },
+    { auth: true },
+  );
+}
+
+export async function createContentCreditsPaymentLink(credits: number) {
+  return encoreRequest<PaymentLinkSession>(
+    '/billing/content/credits/payment-link',
     {
       method: 'POST',
       body: JSON.stringify({ credits }),
@@ -134,6 +173,14 @@ export async function updateContentDraft(params: {
 export async function getCheckoutStatus(checkoutId: string) {
   return encoreRequest<{ status: 'pending' | 'paid' | 'failed' | 'cancelled'; checkoutType: 'subscription' | 'content_credits' | 'host_billing_setup' }>(
     `/billing/checkouts/${encodeURIComponent(checkoutId)}`,
+    {},
+    { auth: true },
+  );
+}
+
+export async function getPaymentLinkStatus(sessionId: string) {
+  return encoreRequest<{ status: 'pending' | 'paid' | 'failed' | 'cancelled'; sessionType: 'subscription' | 'content_credits' | 'host_billing_setup' }>(
+    `/billing/payment-links/${encodeURIComponent(sessionId)}`,
     {},
     { auth: true },
   );

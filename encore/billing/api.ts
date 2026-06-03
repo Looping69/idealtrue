@@ -15,7 +15,14 @@ import {
 import { requireAuth, requireRole } from "../shared/auth";
 import { HOST_PLANS, HostPlan, SubscriptionPlan } from "../shared/domain";
 import { platformEvents } from "../analytics/events";
-import { createYocoCheckout, getAppUrl, verifyYocoWebhookSignature, type YocoWebhookEvent } from "./yoco";
+import {
+  createYocoCheckout,
+  createYocoPaymentLink,
+  fetchYocoOrder,
+  getAppUrl,
+  verifyYocoWebhookSignature,
+  type YocoWebhookEvent,
+} from "./yoco";
 import { rewardSubscriptionReferralConversion } from "../referrals/api";
 import {
   getHostBillingAccount,
@@ -194,6 +201,41 @@ type CheckoutSessionRow = {
   paid_at: string | null;
   created_at: string;
   updated_at: string;
+};
+
+type PaymentLinkSessionRow = {
+  id: string;
+  user_id: string;
+  session_type: CheckoutType;
+  provider: string;
+  status: CheckoutStatus;
+  currency: string;
+  amount: number;
+  host_plan: HostPlan | null;
+  billing_interval: BillingInterval | null;
+  credit_quantity: number | null;
+  payment_link_id: string | null;
+  provider_order_id: string | null;
+  provider_payment_id: string | null;
+  provider_mode: string | null;
+  redirect_url: string | null;
+  customer_reference: string;
+  customer_description: string | null;
+  metadata: Record<string, unknown> | null;
+  paid_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type FulfillableBillingSession = {
+  id: string;
+  user_id: string;
+  type: CheckoutType;
+  status: CheckoutStatus;
+  amount: number;
+  host_plan: HostPlan | null;
+  billing_interval: BillingInterval | null;
+  credit_quantity: number | null;
 };
 
 type WebhookEventRow = {
@@ -502,7 +544,167 @@ async function storeProviderCheckout(params: {
   `;
 }
 
-async function activatePlanFromCheckout(session: CheckoutSessionRow) {
+function toFulfillableCheckoutSession(session: CheckoutSessionRow): FulfillableBillingSession {
+  return {
+    id: session.id,
+    user_id: session.user_id,
+    type: session.checkout_type,
+    status: session.status,
+    amount: session.amount,
+    host_plan: session.host_plan,
+    billing_interval: session.billing_interval,
+    credit_quantity: session.credit_quantity,
+  };
+}
+
+function toFulfillablePaymentLinkSession(session: PaymentLinkSessionRow): FulfillableBillingSession {
+  return {
+    id: session.id,
+    user_id: session.user_id,
+    type: session.session_type,
+    status: session.status,
+    amount: session.amount,
+    host_plan: session.host_plan,
+    billing_interval: session.billing_interval,
+    credit_quantity: session.credit_quantity,
+  };
+}
+
+function buildPaymentLinkCopy(params: {
+  sessionId: string;
+  type: CheckoutType;
+  userId: string;
+  plan?: HostPlan | null;
+  billingInterval?: BillingInterval | null;
+  credits?: number | null;
+}) {
+  const reference =
+    params.type === "subscription"
+      ? `Ideal Stay ${params.plan} subscription ${params.sessionId}`
+      : params.type === "content_credits"
+        ? `Ideal Stay ${params.credits} content credits ${params.sessionId}`
+        : `Ideal Stay host billing setup ${params.sessionId}`;
+  const description =
+    params.type === "subscription"
+      ? `Ideal Stay ${params.plan} ${params.billingInterval} host plan for user ${params.userId}.`
+      : params.type === "content_credits"
+        ? `Ideal Stay content credit top-up for user ${params.userId}.`
+        : `Ideal Stay host billing setup verification for user ${params.userId}.`;
+
+  return {
+    customerReference: reference.slice(0, 100),
+    customerDescription: description.slice(0, 255),
+  };
+}
+
+async function createPaymentLinkSessionRow(params: {
+  userId: string;
+  sessionType: CheckoutType;
+  amount: number;
+  hostPlan?: HostPlan | null;
+  billingInterval?: BillingInterval | null;
+  creditQuantity?: number | null;
+}) {
+  const now = new Date().toISOString();
+  const sessionId = randomUUID();
+  const copy = buildPaymentLinkCopy({
+    sessionId,
+    type: params.sessionType,
+    userId: params.userId,
+    plan: params.hostPlan,
+    billingInterval: params.billingInterval,
+    credits: params.creditQuantity,
+  });
+
+  await billingDB.exec`
+    INSERT INTO billing_payment_link_sessions (
+      id, user_id, session_type, status, currency, amount, host_plan, billing_interval,
+      credit_quantity, customer_reference, customer_description, metadata, created_at, updated_at
+    )
+    VALUES (
+      ${sessionId}, ${params.userId}, ${params.sessionType}, ${"pending"}, ${"ZAR"}, ${params.amount},
+      ${params.hostPlan ?? null}, ${params.billingInterval ?? null}, ${params.creditQuantity ?? null},
+      ${copy.customerReference}, ${copy.customerDescription},
+      ${JSON.stringify({ sessionId, sessionType: params.sessionType })}, ${now}, ${now}
+    )
+  `;
+
+  return {
+    sessionId,
+    customerReference: copy.customerReference,
+    customerDescription: copy.customerDescription,
+  };
+}
+
+async function storeProviderPaymentLink(params: {
+  sessionId: string;
+  paymentLinkId: string;
+  orderId: string;
+  redirectUrl: string;
+  status: CheckoutStatus;
+}) {
+  const now = new Date().toISOString();
+  await billingDB.exec`
+    UPDATE billing_payment_link_sessions
+    SET payment_link_id = ${params.paymentLinkId},
+        provider_order_id = ${params.orderId},
+        redirect_url = ${params.redirectUrl},
+        status = ${params.status},
+        updated_at = ${now}
+    WHERE id = ${params.sessionId}
+  `;
+}
+
+function mapYocoPaymentLinkStatus(status?: string | null): CheckoutStatus {
+  const normalized = status?.trim().toLowerCase();
+  if (normalized === "paid") return "paid";
+  if (normalized === "cancelled") return "cancelled";
+  return "pending";
+}
+
+function mapYocoOrderStatus(status?: string | null): CheckoutStatus {
+  const normalized = status?.trim().toLowerCase();
+  if (normalized === "completed") return "paid";
+  if (normalized === "cancelled") return "cancelled";
+  return "pending";
+}
+
+async function createPaymentLinkForSession(params: {
+  userId: string;
+  sessionType: CheckoutType;
+  amount: number;
+  hostPlan?: HostPlan | null;
+  billingInterval?: BillingInterval | null;
+  creditQuantity?: number | null;
+}) {
+  // (|/) Klaasvaakie - keep Yoco payment links server-owned so provider order ids stay reconcilable.
+  const session = await createPaymentLinkSessionRow(params);
+  const yoco = await createYocoPaymentLink({
+    amount: {
+      amount: toMinorUnits(params.amount),
+      currency: "ZAR",
+    },
+    customer_reference: session.customerReference,
+    customer_description: session.customerDescription,
+  });
+
+  await storeProviderPaymentLink({
+    sessionId: session.sessionId,
+    paymentLinkId: yoco.id,
+    orderId: yoco.order_id,
+    redirectUrl: yoco.url,
+    status: mapYocoPaymentLinkStatus(yoco.status),
+  });
+
+  return {
+    sessionId: session.sessionId,
+    paymentLinkId: yoco.id,
+    orderId: yoco.order_id,
+    redirectUrl: yoco.url,
+  };
+}
+
+async function activatePlanFromBillingSession(session: FulfillableBillingSession) {
   if (!session.host_plan || !session.billing_interval) {
     throw APIError.internal("Subscription checkout is missing plan metadata.");
   }
@@ -573,7 +775,7 @@ async function activatePlanFromCheckout(session: CheckoutSessionRow) {
   });
 }
 
-async function creditWalletFromCheckout(session: CheckoutSessionRow) {
+async function creditWalletFromBillingSession(session: FulfillableBillingSession) {
   const credits = session.credit_quantity;
   if (!credits || credits <= 0) {
     throw APIError.internal("Credit checkout is missing quantity metadata.");
@@ -648,8 +850,9 @@ async function fulfilSuccessfulCheckout(session: CheckoutSessionRow, providerPay
     return;
   }
 
+  const billingSession = toFulfillableCheckoutSession(session);
   if (session.checkout_type === "subscription") {
-    await activatePlanFromCheckout(session);
+    await activatePlanFromBillingSession(billingSession);
     if (session.host_plan && session.billing_interval) {
       try {
         await notifySubscriptionActivated({
@@ -662,7 +865,7 @@ async function fulfilSuccessfulCheckout(session: CheckoutSessionRow, providerPay
       }
     }
   } else if (session.checkout_type === "content_credits") {
-    await creditWalletFromCheckout(session);
+    await creditWalletFromBillingSession(billingSession);
     if (session.credit_quantity) {
       try {
         await notifyContentCreditsPurchased({
@@ -712,6 +915,89 @@ async function markCheckoutStatus(session: CheckoutSessionRow, status: "failed" 
   }
 }
 
+async function markPaymentLinkPaid(session: PaymentLinkSessionRow, providerPaymentId?: string | null) {
+  const now = new Date().toISOString();
+
+  await billingDB.exec`
+    UPDATE billing_payment_link_sessions
+    SET status = ${"paid"},
+        provider_payment_id = ${providerPaymentId ?? null},
+        paid_at = ${now},
+        updated_at = ${now}
+    WHERE id = ${session.id}
+  `;
+}
+
+async function markPaymentLinkStatus(session: PaymentLinkSessionRow, status: "failed" | "cancelled") {
+  if (session.status !== "pending") {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  await billingDB.exec`
+    UPDATE billing_payment_link_sessions
+    SET status = ${status},
+        updated_at = ${now}
+    WHERE id = ${session.id}
+      AND status = ${"pending"}
+  `;
+
+  try {
+    await notifyCheckoutStatusChanged({
+      userId: session.user_id,
+      checkoutType: session.session_type,
+      status,
+      hostPlan: session.host_plan,
+      creditQuantity: session.credit_quantity,
+    });
+  } catch (error) {
+    console.error("Failed to notify payment link status change:", error);
+  }
+}
+
+async function fulfilSuccessfulPaymentLink(session: PaymentLinkSessionRow, providerPaymentId?: string | null) {
+  if (session.status === "paid") {
+    return;
+  }
+
+  const billingSession = toFulfillablePaymentLinkSession(session);
+  if (session.session_type === "subscription") {
+    await activatePlanFromBillingSession(billingSession);
+    if (session.host_plan && session.billing_interval) {
+      try {
+        await notifySubscriptionActivated({
+          userId: session.user_id,
+          plan: session.host_plan,
+          billingInterval: session.billing_interval,
+        });
+      } catch (error) {
+        console.error("Failed to notify subscription activation:", error);
+      }
+    }
+  } else if (session.session_type === "content_credits") {
+    await creditWalletFromBillingSession(billingSession);
+    if (session.credit_quantity) {
+      try {
+        await notifyContentCreditsPurchased({
+          userId: session.user_id,
+          credits: session.credit_quantity,
+        });
+      } catch (error) {
+        console.error("Failed to notify content credit purchase:", error);
+      }
+    }
+  } else {
+    await markHostBillingSetupComplete({
+      userId: session.user_id,
+      provider: "yoco",
+      checkoutId: session.id,
+      providerPaymentId,
+    });
+  }
+
+  await markPaymentLinkPaid(session, providerPaymentId);
+}
+
 async function readRawBody(req: IncomingMessage) {
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
@@ -730,6 +1016,30 @@ function resolveProviderMetadata(event: YocoWebhookEvent) {
 
 function resolveProviderCheckoutId(event: YocoWebhookEvent) {
   return event.payload?.id ?? event.id ?? null;
+}
+
+function resolveProviderOrderId(event: YocoWebhookEvent) {
+  const payload = event.payload as (YocoWebhookEvent["payload"] & Record<string, unknown>) | undefined;
+  const directOrderId = payload?.order_id ?? payload?.orderId;
+  if (typeof directOrderId === "string") {
+    return directOrderId;
+  }
+
+  const nestedOrder = payload?.order;
+  if (nestedOrder && typeof nestedOrder === "object") {
+    const nestedOrderId = (nestedOrder as Record<string, unknown>).id ?? (nestedOrder as Record<string, unknown>).order_id;
+    if (typeof nestedOrderId === "string") {
+      return nestedOrderId;
+    }
+  }
+
+  return null;
+}
+
+function resolveProviderPaymentLinkId(event: YocoWebhookEvent) {
+  const payload = event.payload as (YocoWebhookEvent["payload"] & Record<string, unknown>) | undefined;
+  const directPaymentLinkId = payload?.payment_link_id ?? payload?.paymentLinkId;
+  return typeof directPaymentLinkId === "string" ? directPaymentLinkId : null;
 }
 
 async function findCheckoutForWebhook(event: YocoWebhookEvent) {
@@ -768,6 +1078,66 @@ async function getCheckoutSessionById(checkoutId: string) {
     FROM billing_checkout_sessions
     WHERE id = ${checkoutId}
   `;
+}
+
+async function getPaymentLinkSessionById(sessionId: string) {
+  return billingDB.queryRow<PaymentLinkSessionRow>`
+    SELECT *
+    FROM billing_payment_link_sessions
+    WHERE id = ${sessionId}
+  `;
+}
+
+async function findPaymentLinkForWebhook(event: YocoWebhookEvent) {
+  const orderId = resolveProviderOrderId(event);
+  const paymentLinkId = resolveProviderPaymentLinkId(event);
+
+  if (orderId) {
+    const byOrderId = await billingDB.queryRow<PaymentLinkSessionRow>`
+      SELECT *
+      FROM billing_payment_link_sessions
+      WHERE provider_order_id = ${orderId}
+    `;
+    if (byOrderId) {
+      return byOrderId;
+    }
+  }
+
+  if (paymentLinkId) {
+    const byPaymentLinkId = await billingDB.queryRow<PaymentLinkSessionRow>`
+      SELECT *
+      FROM billing_payment_link_sessions
+      WHERE payment_link_id = ${paymentLinkId}
+    `;
+    if (byPaymentLinkId) {
+      return byPaymentLinkId;
+    }
+  }
+
+  return null;
+}
+
+async function reconcilePendingPaymentLink(session: PaymentLinkSessionRow) {
+  if (session.status !== "pending" || !session.provider_order_id) {
+    return session;
+  }
+
+  const order = await fetchYocoOrder(session.provider_order_id);
+  const status = mapYocoOrderStatus(order.status);
+  const providerPaymentId =
+    order.payments?.find((payment) => payment.status?.trim().toLowerCase() === "approved")?.id ??
+    order.payments?.[0]?.id ??
+    null;
+  if (status === "paid") {
+    await fulfilSuccessfulPaymentLink(session, providerPaymentId);
+    return (await getPaymentLinkSessionById(session.id)) ?? session;
+  }
+  if (status === "cancelled") {
+    await markPaymentLinkStatus(session, "cancelled");
+    return (await getPaymentLinkSessionById(session.id)) ?? session;
+  }
+
+  return session;
 }
 
 async function findSuccessfulWebhookForCheckout(session: CheckoutSessionRow): Promise<YocoWebhookEvent | null> {
@@ -859,6 +1229,21 @@ export const createSubscriptionCheckout = api<SubscriptionCheckoutParams, { chec
 );
 
 export const upgradePlan = createSubscriptionCheckout;
+
+export const createSubscriptionPaymentLink = api<SubscriptionCheckoutParams, { sessionId: string; paymentLinkId: string; orderId: string; redirectUrl: string }>(
+  { expose: true, method: "POST", path: "/billing/subscriptions/payment-link", auth: true },
+  async ({ plan, billingInterval }) => {
+    const auth = requireRole("host", "admin");
+    const amount = getPlanAmount(plan, billingInterval);
+    return createPaymentLinkForSession({
+      userId: auth.userID,
+      sessionType: "subscription",
+      amount,
+      hostPlan: plan,
+      billingInterval,
+    });
+  },
+);
 
 export const listMySubscriptions = api<void, { subscriptions: SubscriptionRow[] }>(
   { expose: true, method: "GET", path: "/billing/subscriptions", auth: true },
@@ -963,6 +1348,25 @@ export const createHostBillingSetupCheckout = api<void, { checkoutId: string; re
   },
 );
 
+export const createHostBillingSetupPaymentLink = api<void, { sessionId: string; paymentLinkId: string; orderId: string; redirectUrl: string }>(
+  { expose: true, method: "POST", path: "/billing/host/setup-payment-link", auth: true },
+  async () => {
+    const auth = requireRole("host", "admin");
+    const account = await getHostBillingAccount(auth.userID);
+
+    if (account.cardOnFile) {
+      throw APIError.failedPrecondition("A provider-backed billing card is already on file.");
+    }
+
+    return createPaymentLinkForSession({
+      userId: auth.userID,
+      sessionType: "host_billing_setup",
+      amount: HOST_BILLING_SETUP_AMOUNT,
+      hostPlan: account.plan,
+    });
+  },
+);
+
 export const listAdminHostBilling = api<void, { accounts: AdminHostBillingAccount[] }>(
   { expose: true, method: "GET", path: "/admin/billing/host-accounts", auth: true },
   async () => {
@@ -1040,6 +1444,24 @@ export const createContentCreditsCheckout = api<PurchaseCreditsParams, { checkou
   },
 );
 
+export const createContentCreditsPaymentLink = api<PurchaseCreditsParams, { sessionId: string; paymentLinkId: string; orderId: string; redirectUrl: string }>(
+  { expose: true, method: "POST", path: "/billing/content/credits/payment-link", auth: true },
+  async ({ credits }) => {
+    const auth = requireRole("host", "admin");
+    if (!Number.isInteger(credits) || credits <= 0) {
+      throw APIError.invalidArgument("Credits must be a positive integer.");
+    }
+
+    const amount = getCreditPrice(credits);
+    return createPaymentLinkForSession({
+      userId: auth.userID,
+      sessionType: "content_credits",
+      amount,
+      creditQuantity: credits,
+    });
+  },
+);
+
 export const getCheckoutStatus = api<{ checkoutId: string }, { status: CheckoutStatus; checkoutType: CheckoutType }>(
   { expose: true, method: "GET", path: "/billing/checkouts/:checkoutId", auth: true },
   async ({ checkoutId }) => {
@@ -1055,6 +1477,24 @@ export const getCheckoutStatus = api<{ checkoutId: string }, { status: CheckoutS
 
     const resolvedCheckout = await reconcilePendingCheckout(checkout);
     return { status: resolvedCheckout.status, checkoutType: resolvedCheckout.checkout_type };
+  },
+);
+
+export const getPaymentLinkStatus = api<{ sessionId: string }, { status: CheckoutStatus; sessionType: CheckoutType }>(
+  { expose: true, method: "GET", path: "/billing/payment-links/:sessionId", auth: true },
+  async ({ sessionId }) => {
+    const auth = requireAuth();
+    const session = await getPaymentLinkSessionById(sessionId);
+
+    if (!session) {
+      throw APIError.notFound("Payment link session not found.");
+    }
+    if (session.user_id !== auth.userID && auth.role !== "admin" && auth.role !== "support") {
+      throw APIError.permissionDenied("You do not have access to this payment link session.");
+    }
+
+    const resolvedSession = await reconcilePendingPaymentLink(session);
+    return { status: resolvedSession.status, sessionType: resolvedSession.session_type };
   },
 );
 
@@ -1230,22 +1670,29 @@ export const yocoWebhook = api.raw(
       `;
 
       const session = await findCheckoutForWebhook(event);
-      if (!session) {
+      const paymentLinkSession = session ? null : await findPaymentLinkForWebhook(event);
+      if (!session && !paymentLinkSession) {
         resp.statusCode = 202;
         resp.setHeader("Content-Type", "application/json");
         resp.end(JSON.stringify({ ok: true, ignored: true }));
         return;
       }
 
-      const providerPaymentId = event.payload?.paymentId ?? null;
+      const providerPaymentId = event.payload?.paymentId ?? event.payload?.id ?? null;
       const outcome = classifyYocoWebhookOutcome(eventType, event.payload?.status);
 
-      if (outcome === "paid") {
+      if (session && outcome === "paid") {
         await fulfilSuccessfulCheckout(session, providerPaymentId);
-      } else if (outcome === "failed") {
+      } else if (session && outcome === "failed") {
         await markCheckoutStatus(session, "failed");
-      } else if (outcome === "cancelled") {
+      } else if (session && outcome === "cancelled") {
         await markCheckoutStatus(session, "cancelled");
+      } else if (paymentLinkSession && outcome === "paid") {
+        await fulfilSuccessfulPaymentLink(paymentLinkSession, providerPaymentId);
+      } else if (paymentLinkSession && outcome === "failed") {
+        await markPaymentLinkStatus(paymentLinkSession, "failed");
+      } else if (paymentLinkSession && outcome === "cancelled") {
+        await markPaymentLinkStatus(paymentLinkSession, "cancelled");
       }
 
       await billingDB.exec`
