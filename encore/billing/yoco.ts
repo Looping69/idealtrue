@@ -77,8 +77,16 @@ export interface YocoOrderResponse {
   }>;
 }
 
+function readOptionalSecret(resolve: () => string) {
+  try {
+    return resolve();
+  } catch {
+    return "";
+  }
+}
+
 function getYocoProviderMode(): YocoProviderMode {
-  const configured = (yocoPaymentMode() || process.env.YOCO_PAYMENT_MODE || "live").trim().toLowerCase();
+  const configured = (readOptionalSecret(yocoPaymentMode) || process.env.YOCO_PAYMENT_MODE || "live").trim().toLowerCase();
   if (configured === "test") {
     return "test";
   }
