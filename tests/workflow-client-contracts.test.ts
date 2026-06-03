@@ -212,6 +212,7 @@ test('content studio clients cover entitlements, draft lifecycle, credit checkou
         paymentLinkId: 'plink-credits-1',
         orderId: 'order-credits-1',
         redirectUrl: 'https://pay.example/payment-link-credits',
+        providerMode: 'test',
       });
     }
     if (url.endsWith('/billing/content/drafts/generate')) {
@@ -263,6 +264,7 @@ test('content studio clients cover entitlements, draft lifecycle, credit checkou
   assert.equal(entitlements.contentStudioEnabled, true);
   assert.equal(creditsCheckout.checkoutId, workflowBilling.checkoutPaid.checkoutId);
   assert.equal(creditsPaymentLink.redirectUrl, 'https://pay.example/payment-link-credits');
+  assert.equal(creditsPaymentLink.providerMode, 'test');
   assert.equal(generated.draft.id, workflowContentDrafts.draft.id);
   assert.equal(drafts[0]?.id, workflowContentDrafts.draft.id);
   assert.equal(scheduled.status, 'scheduled');
@@ -432,6 +434,7 @@ test('subscription payment link client creates a server-owned Yoco payment link 
         paymentLinkId: 'plink-subscription-1',
         orderId: 'order-subscription-1',
         redirectUrl: 'https://pay.example/payment-link-subscription',
+        providerMode: 'test',
       });
     }
     if (url.endsWith('/billing/payment-links/payment-link-subscription-1')) {
@@ -444,6 +447,7 @@ test('subscription payment link client creates a server-owned Yoco payment link 
   const status = await getPaymentLinkStatus(paymentLink.sessionId);
 
   assert.equal(paymentLink.redirectUrl, 'https://pay.example/payment-link-subscription');
+  assert.equal(paymentLink.providerMode, 'test');
   assert.equal(status.sessionType, 'subscription');
   assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/billing/subscriptions/payment-link`);
   assert.deepEqual(requestBody(0), { plan: 'professional', billingInterval: 'monthly' });
@@ -483,6 +487,7 @@ test('host billing setup payment link client posts to the payment-link endpoint'
         paymentLinkId: 'plink-host-card-setup',
         orderId: 'order-host-card-setup',
         redirectUrl: 'https://pay.example/payment-link-host-card-setup',
+        providerMode: 'test',
       });
     }
     if (url.endsWith('/billing/payment-links/payment-link-host-card-setup')) {
@@ -495,6 +500,7 @@ test('host billing setup payment link client posts to the payment-link endpoint'
   const status = await getPaymentLinkStatus(paymentLink.sessionId);
 
   assert.equal(paymentLink.redirectUrl, 'https://pay.example/payment-link-host-card-setup');
+  assert.equal(paymentLink.providerMode, 'test');
   assert.equal(status.sessionType, 'host_billing_setup');
   assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/billing/host/setup-payment-link`);
   assert.equal(fetchCalls[0]?.init?.method, 'POST');

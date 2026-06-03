@@ -767,6 +767,7 @@ test('host billing helpers use the voucher-backed billing endpoints via the prox
         paymentLinkId: 'plink-host-card-setup',
         orderId: 'order-host-card-setup',
         redirectUrl: 'https://pay.example.com/r/host-card-setup',
+        providerMode: 'test',
       });
     }
 
@@ -785,6 +786,7 @@ test('host billing helpers use the voucher-backed billing endpoints via the prox
   assert.equal(setupCheckout.redirectUrl, 'https://payments.example.com/host-card-setup');
   assert.equal(fetchCalls[3]?.url, `${DEFAULT_ENCORE_API_URL}/billing/host/setup-payment-link`);
   assert.equal(setupPaymentLink.orderId, 'order-host-card-setup');
+  assert.equal(setupPaymentLink.providerMode, 'test');
 });
 
 test('admin host billing helpers hit the billing moderation endpoints via the proxy', async () => {

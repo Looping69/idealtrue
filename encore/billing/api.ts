@@ -642,12 +642,14 @@ async function storeProviderPaymentLink(params: {
   orderId: string;
   redirectUrl: string;
   status: CheckoutStatus;
+  providerMode: "live" | "test";
 }) {
   const now = new Date().toISOString();
   await billingDB.exec`
     UPDATE billing_payment_link_sessions
     SET payment_link_id = ${params.paymentLinkId},
         provider_order_id = ${params.orderId},
+        provider_mode = ${params.providerMode},
         redirect_url = ${params.redirectUrl},
         status = ${params.status},
         updated_at = ${now}
@@ -694,6 +696,7 @@ async function createPaymentLinkForSession(params: {
     orderId: yoco.order_id,
     redirectUrl: yoco.url,
     status: mapYocoPaymentLinkStatus(yoco.status),
+    providerMode: yoco.provider_mode ?? "live",
   });
 
   return {
@@ -701,6 +704,7 @@ async function createPaymentLinkForSession(params: {
     paymentLinkId: yoco.id,
     orderId: yoco.order_id,
     redirectUrl: yoco.url,
+    providerMode: yoco.provider_mode ?? "live",
   };
 }
 
@@ -1230,7 +1234,7 @@ export const createSubscriptionCheckout = api<SubscriptionCheckoutParams, { chec
 
 export const upgradePlan = createSubscriptionCheckout;
 
-export const createSubscriptionPaymentLink = api<SubscriptionCheckoutParams, { sessionId: string; paymentLinkId: string; orderId: string; redirectUrl: string }>(
+export const createSubscriptionPaymentLink = api<SubscriptionCheckoutParams, { sessionId: string; paymentLinkId: string; orderId: string; redirectUrl: string; providerMode: "live" | "test" }>(
   { expose: true, method: "POST", path: "/billing/subscriptions/payment-link", auth: true },
   async ({ plan, billingInterval }) => {
     const auth = requireRole("host", "admin");
@@ -1348,7 +1352,7 @@ export const createHostBillingSetupCheckout = api<void, { checkoutId: string; re
   },
 );
 
-export const createHostBillingSetupPaymentLink = api<void, { sessionId: string; paymentLinkId: string; orderId: string; redirectUrl: string }>(
+export const createHostBillingSetupPaymentLink = api<void, { sessionId: string; paymentLinkId: string; orderId: string; redirectUrl: string; providerMode: "live" | "test" }>(
   { expose: true, method: "POST", path: "/billing/host/setup-payment-link", auth: true },
   async () => {
     const auth = requireRole("host", "admin");
@@ -1444,7 +1448,7 @@ export const createContentCreditsCheckout = api<PurchaseCreditsParams, { checkou
   },
 );
 
-export const createContentCreditsPaymentLink = api<PurchaseCreditsParams, { sessionId: string; paymentLinkId: string; orderId: string; redirectUrl: string }>(
+export const createContentCreditsPaymentLink = api<PurchaseCreditsParams, { sessionId: string; paymentLinkId: string; orderId: string; redirectUrl: string; providerMode: "live" | "test" }>(
   { expose: true, method: "POST", path: "/billing/content/credits/payment-link", auth: true },
   async ({ credits }) => {
     const auth = requireRole("host", "admin");

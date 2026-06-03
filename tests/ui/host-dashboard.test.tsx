@@ -250,6 +250,7 @@ describe('HostDashboard', () => {
       paymentLinkId: 'payment-link-host-card-setup',
       orderId: 'order-host-card-setup',
       redirectUrl: 'https://pay.example.com/host-card-setup',
+      providerMode: 'test',
     });
     getMyHostBillingAccountMock.mockResolvedValue({
       userId: profile.id,

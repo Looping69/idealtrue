@@ -23,6 +23,7 @@ vi.mock('@/lib/billing-client', () => ({
     paymentLinkId: 'payment-link-1',
     orderId: 'order-1',
     redirectUrl: 'https://pay.yoco.com/r/generated-professional',
+    providerMode: 'test',
   })),
   getCheckoutStatus: vi.fn(),
   getMyHostBillingAccount: vi.fn(),

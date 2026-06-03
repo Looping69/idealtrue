@@ -289,6 +289,7 @@ describe('SocialDashboard', () => {
       paymentLinkId: 'payment-link-10',
       orderId: 'order-10',
       redirectUrl: 'https://pay.example.com/credits-10',
+      providerMode: 'test',
     });
     Object.defineProperty(window, 'location', {
       value: { ...window.location, assign: assignMock },

@@ -3,8 +3,10 @@ import { secret } from "encore.dev/config";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 export const yocoSecretKey = secret<"YOCO_SECRET_KEY">("YOCO_SECRET_KEY");
+export const yocoTestSecretKey = secret<"YOCO_TEST_SECRET_KEY">("YOCO_TEST_SECRET_KEY");
 export const yocoWebhookSecret = secret<"YOCO_WEBHOOK_SECRET">("YOCO_WEBHOOK_SECRET");
 export const idealStayAppUrl = secret<"IDEAL_STAY_APP_URL">("IDEAL_STAY_APP_URL");
+export const yocoPaymentMode = secret<"YOCO_PAYMENT_MODE">("YOCO_PAYMENT_MODE");
 
 const YOCO_API_BASE = process.env.YOCO_API_BASE || "https://payments.yoco.com/api";
 const YOCO_REST_API_BASE = process.env.YOCO_REST_API_BASE || "https://api.yoco.com/v1";
@@ -27,6 +29,8 @@ export interface YocoCheckoutResponse {
   mode?: string;
   processingMode?: "live" | "test";
 }
+
+export type YocoProviderMode = "live" | "test";
 
 export interface YocoWebhookEvent {
   id?: string;
@@ -59,6 +63,7 @@ export interface YocoPaymentLinkResponse {
   customer_description?: string | null;
   created_at?: string;
   updated_at?: string | null;
+  provider_mode?: YocoProviderMode;
 }
 
 export interface YocoOrderResponse {
@@ -72,15 +77,29 @@ export interface YocoOrderResponse {
   }>;
 }
 
+function getYocoProviderMode(): YocoProviderMode {
+  const configured = (yocoPaymentMode() || process.env.YOCO_PAYMENT_MODE || "live").trim().toLowerCase();
+  if (configured === "test") {
+    return "test";
+  }
+  return "live";
+}
+
+function getYocoApiKey() {
+  const mode = getYocoProviderMode();
+  const apiKey = mode === "test" ? yocoTestSecretKey() : yocoSecretKey();
+  if (!apiKey) {
+    throw APIError.unavailable(mode === "test" ? "YOCO_TEST_SECRET_KEY is not configured." : "YOCO_SECRET_KEY is not configured.");
+  }
+  return { apiKey, mode };
+}
+
 export function getAppUrl() {
   return (idealStayAppUrl() || DEFAULT_APP_URL).replace(/\/+$/, "");
 }
 
 export async function createYocoCheckout(input: YocoCheckoutRequest): Promise<YocoCheckoutResponse> {
-  const apiKey = yocoSecretKey();
-  if (!apiKey) {
-    throw APIError.unavailable("YOCO_SECRET_KEY is not configured.");
-  }
+  const { apiKey, mode } = getYocoApiKey();
 
   const idempotencyKey = input.idempotencyKey || input.metadata.checkoutId || input.metadata.externalId;
 
@@ -105,14 +124,11 @@ export async function createYocoCheckout(input: YocoCheckoutRequest): Promise<Yo
   if (!checkout.id || !checkout.redirectUrl) {
     throw APIError.internal("Yoco checkout creation returned an invalid response.");
   }
-  return checkout;
+  return { ...checkout, processingMode: checkout.processingMode ?? mode };
 }
 
 export async function createYocoPaymentLink(input: YocoPaymentLinkRequest): Promise<YocoPaymentLinkResponse> {
-  const apiKey = yocoSecretKey();
-  if (!apiKey) {
-    throw APIError.unavailable("YOCO_SECRET_KEY is not configured.");
-  }
+  const { apiKey, mode } = getYocoApiKey();
 
   const response = await fetch(`${YOCO_REST_API_BASE}/payment_links/`, {
     method: "POST",
@@ -133,14 +149,11 @@ export async function createYocoPaymentLink(input: YocoPaymentLinkRequest): Prom
     throw APIError.internal("Yoco payment link creation returned an invalid response.");
   }
 
-  return paymentLink;
+  return { ...paymentLink, provider_mode: mode };
 }
 
 export async function fetchYocoOrder(orderId: string): Promise<YocoOrderResponse> {
-  const apiKey = yocoSecretKey();
-  if (!apiKey) {
-    throw APIError.unavailable("YOCO_SECRET_KEY is not configured.");
-  }
+  const { apiKey } = getYocoApiKey();
 
   const response = await fetch(`${YOCO_REST_API_BASE}/orders/${encodeURIComponent(orderId)}`, {
     headers: {

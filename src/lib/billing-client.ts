@@ -39,6 +39,7 @@ export interface PaymentLinkSession {
   paymentLinkId: string;
   orderId: string;
   redirectUrl: string;
+  providerMode: 'live' | 'test';
 }
 
 export async function createSubscriptionCheckout(plan: HostPlan, billingInterval: BillingInterval) {
