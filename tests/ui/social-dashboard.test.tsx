@@ -23,7 +23,7 @@ const mockedHostProfile = vi.hoisted(() => ({
   createdAt: '2026-04-20T08:00:00.000Z',
 }));
 
-const createContentCreditsPaymentLinkMock = vi.fn();
+const startBillingPaymentMock = vi.fn();
 const generateContentDraftMock = vi.fn();
 const getCheckoutStatusMock = vi.fn();
 const getContentEntitlementsMock = vi.fn();
@@ -38,11 +38,11 @@ vi.mock('@/contexts/AuthContext', () => ({
 }));
 
 vi.mock('@/lib/billing-client', () => ({
-  createContentCreditsPaymentLink: (...args: unknown[]) => createContentCreditsPaymentLinkMock(...args),
   generateContentDraft: (...args: unknown[]) => generateContentDraftMock(...args),
   getCheckoutStatus: (...args: unknown[]) => getCheckoutStatusMock(...args),
   getContentEntitlements: (...args: unknown[]) => getContentEntitlementsMock(...args),
   listContentDrafts: (...args: unknown[]) => listContentDraftsMock(...args),
+  startBillingPayment: (...args: unknown[]) => startBillingPaymentMock(...args),
   updateContentDraft: (...args: unknown[]) => updateContentDraftMock(...args),
 }));
 
@@ -284,12 +284,13 @@ describe('SocialDashboard', () => {
   it('starts a token top-up checkout from the wallet controls', async () => {
     const user = userEvent.setup();
     const assignMock = vi.fn();
-    createContentCreditsPaymentLinkMock.mockResolvedValue({
-      sessionId: 'payment-link-session-10',
-      paymentLinkId: 'payment-link-10',
-      orderId: 'order-10',
+    startBillingPaymentMock.mockResolvedValue({
+      paymentId: 'payment-intent-10',
+      provider: 'yoco',
+      providerOrderId: 'order-10',
       redirectUrl: 'https://pay.example.com/credits-10',
       providerMode: 'test',
+      status: 'pending',
     });
     Object.defineProperty(window, 'location', {
       value: { ...window.location, assign: assignMock },
@@ -307,7 +308,7 @@ describe('SocialDashboard', () => {
     await user.click(screen.getByRole('button', { name: /studio tools/i }));
     await user.click(screen.getByRole('button', { name: /buy 10 content tokens/i }));
 
-    await waitFor(() => expect(createContentCreditsPaymentLinkMock).toHaveBeenCalledWith(10));
+    await waitFor(() => expect(startBillingPaymentMock).toHaveBeenCalledWith({ purpose: 'content_credits', credits: 10 }));
     expect(assignMock).toHaveBeenCalledWith('https://pay.example.com/credits-10');
   });
 });

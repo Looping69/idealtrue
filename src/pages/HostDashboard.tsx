@@ -23,9 +23,9 @@ import InquiryDeclineDialog from '@/components/InquiryDeclineDialog';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { toast } from 'sonner';
 import {
-  createHostBillingSetupPaymentLink,
   getCheckoutStatus,
   getMyHostBillingAccount,
+  startBillingPayment,
 } from '@/lib/billing-client';
 import { formatRand } from '@/lib/currency';
 import { getHostBillingTimelinePresentation } from '@/lib/host-billing-ui';
@@ -309,8 +309,8 @@ export default function HostDashboard({
   async function handleStartBillingSetup() {
     setStartingBillingSetup(true);
     try {
-      const paymentLink = await createHostBillingSetupPaymentLink();
-      window.location.assign(paymentLink.redirectUrl);
+      const payment = await startBillingPayment({ purpose: 'host_billing_setup' });
+      window.location.assign(payment.redirectUrl);
     } catch (error) {
       console.error('Failed to start host billing setup payment link:', error);
       toast.error(error instanceof Error ? error.message : 'Could not start billing setup.');

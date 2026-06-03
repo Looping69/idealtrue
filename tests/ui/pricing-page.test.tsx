@@ -18,12 +18,13 @@ vi.mock('@/contexts/AuthContext', () => ({
 }));
 
 vi.mock('@/lib/billing-client', () => ({
-  createSubscriptionPaymentLink: vi.fn(async () => ({
-    sessionId: 'payment-link-session-1',
-    paymentLinkId: 'payment-link-1',
-    orderId: 'order-1',
+  startBillingPayment: vi.fn(async () => ({
+    paymentId: 'payment-intent-1',
+    provider: 'yoco',
+    providerOrderId: 'order-1',
     redirectUrl: 'https://pay.yoco.com/r/generated-professional',
     providerMode: 'test',
+    status: 'pending',
   })),
   getCheckoutStatus: vi.fn(),
   getMyHostBillingAccount: vi.fn(),

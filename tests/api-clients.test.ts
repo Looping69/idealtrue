@@ -10,7 +10,7 @@ import {
 import { getEncoreSessionProfile } from '../src/lib/identity-client.ts';
 import { uploadListingMedia } from '../src/lib/media-client.ts';
 import { deleteAdminUser, getAdminPlatformSettings, listAdminHostBillingAccounts, listAdminNotifications, setAdminHostGreylist, setAdminUserAccountStatus } from '../src/lib/admin-client.ts';
-import { createHostBillingSetupCheckout, createHostBillingSetupPaymentLink, getMyHostBillingAccount, redeemHostVoucher } from '../src/lib/billing-client.ts';
+import { createHostBillingSetupCheckout, createHostBillingSetupPaymentLink, getMyHostBillingAccount, redeemHostVoucher, startBillingPayment } from '../src/lib/billing-client.ts';
 import { dismissNotification } from '../src/lib/notification-client.ts';
 import { reviewKycSubmission } from '../src/lib/ops-client.ts';
 import { confirmPayment, deleteListing, getListing, mapReferralStatus, saveListing, submitPaymentProof, updateBookingStatus } from '../src/lib/platform-client.ts';
@@ -771,6 +771,18 @@ test('host billing helpers use the voucher-backed billing endpoints via the prox
       });
     }
 
+    if (url.endsWith('/billing/payments')) {
+      assert.equal(init?.method, 'POST');
+      return createJsonResponse({
+        paymentId: 'payment-host-card-setup',
+        provider: 'yoco',
+        providerMode: 'test',
+        status: 'pending',
+        redirectUrl: 'https://pay.example.com/r/standard-host-card-setup',
+        providerOrderId: 'order-standard-host-card-setup',
+      });
+    }
+
     throw new Error(`Unexpected URL: ${url}`);
   });
 
@@ -778,6 +790,7 @@ test('host billing helpers use the voucher-backed billing endpoints via the prox
   const redeemed = await redeemHostVoucher('HOST-ABC123XYZ9');
   const setupCheckout = await createHostBillingSetupCheckout();
   const setupPaymentLink = await createHostBillingSetupPaymentLink();
+  const standardPayment = await startBillingPayment({ purpose: 'host_billing_setup' });
 
   assert.equal(account.billingSource, 'voucher');
   assert.deepEqual(JSON.parse(String(fetchCalls[1]?.init?.body)), { code: 'HOST-ABC123XYZ9' });
@@ -787,6 +800,9 @@ test('host billing helpers use the voucher-backed billing endpoints via the prox
   assert.equal(fetchCalls[3]?.url, `${DEFAULT_ENCORE_API_URL}/billing/host/setup-payment-link`);
   assert.equal(setupPaymentLink.orderId, 'order-host-card-setup');
   assert.equal(setupPaymentLink.providerMode, 'test');
+  assert.equal(fetchCalls[4]?.url, `${DEFAULT_ENCORE_API_URL}/billing/payments`);
+  assert.deepEqual(JSON.parse(String(fetchCalls[4]?.init?.body)), { purpose: 'host_billing_setup' });
+  assert.equal(standardPayment.paymentId, 'payment-host-card-setup');
 });
 
 test('admin host billing helpers hit the billing moderation endpoints via the proxy', async () => {

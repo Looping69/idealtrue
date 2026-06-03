@@ -42,6 +42,32 @@ export interface PaymentLinkSession {
   providerMode: 'live' | 'test';
 }
 
+export type BillingPaymentPurpose = 'subscription' | 'content_credits' | 'host_billing_setup';
+
+export interface BillingPayment {
+  paymentId: string;
+  provider: 'yoco';
+  providerMode: 'live' | 'test';
+  status: 'pending' | 'paid' | 'failed' | 'cancelled';
+  redirectUrl: string;
+  providerOrderId: string;
+}
+
+export async function startBillingPayment(params:
+  | { purpose: 'subscription'; plan: HostPlan; billingInterval: BillingInterval }
+  | { purpose: 'content_credits'; credits: number }
+  | { purpose: 'host_billing_setup' }
+) {
+  return encoreRequest<BillingPayment>(
+    '/billing/payments',
+    {
+      method: 'POST',
+      body: JSON.stringify(params),
+    },
+    { auth: true },
+  );
+}
+
 export async function createSubscriptionCheckout(plan: HostPlan, billingInterval: BillingInterval) {
   return encoreRequest<{ checkoutId: string; redirectUrl: string }>(
     '/billing/subscriptions/checkout',
@@ -182,6 +208,14 @@ export async function getCheckoutStatus(checkoutId: string) {
 export async function getPaymentLinkStatus(sessionId: string) {
   return encoreRequest<{ status: 'pending' | 'paid' | 'failed' | 'cancelled'; sessionType: 'subscription' | 'content_credits' | 'host_billing_setup' }>(
     `/billing/payment-links/${encodeURIComponent(sessionId)}`,
+    {},
+    { auth: true },
+  );
+}
+
+export async function getBillingPaymentStatus(paymentId: string) {
+  return encoreRequest<{ status: 'pending' | 'paid' | 'failed' | 'cancelled'; purpose: BillingPaymentPurpose; providerMode: 'live' | 'test' }>(
+    `/billing/payments/${encodeURIComponent(paymentId)}`,
     {},
     { auth: true },
   );
