@@ -308,7 +308,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
     }
 
     window.location.assign(YOCO_PAYMENT_LINKS.managed);
-  }, [user]);
+  }, [navigate, user]);
 
   if (fetchingPlan) {
     return (

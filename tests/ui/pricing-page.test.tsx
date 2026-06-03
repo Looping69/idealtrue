@@ -7,13 +7,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PricingPage from '@/pages/PricingPage';
 
 const refreshProfileMock = vi.fn();
+const authState = {
+  user: null as unknown,
+  profile: null as unknown,
+  refreshProfile: refreshProfileMock,
+};
 
 vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({
-    user: null,
-    profile: null,
-    refreshProfile: refreshProfileMock,
-  }),
+  useAuth: () => authState,
 }));
 
 vi.mock('@/lib/billing-client', () => ({
@@ -38,6 +39,31 @@ function LocationProbe() {
 describe('PricingPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    authState.user = null;
+    authState.profile = null;
+  });
+
+  it('opens the Yoco payment link for a selected plan when the user is signed in', async () => {
+    const user = userEvent.setup();
+    const assignMock = vi.fn();
+    authState.user = { id: 'host-1' };
+
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, assign: assignMock },
+      writable: true,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/pricing']}>
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByRole('button', { name: /get more visibility/i }));
+
+    expect(assignMock).toHaveBeenCalledWith('https://pay.yoco.com/r/4nJJ1B');
   });
 
   it('shows the managed hosting card and routes its CTA into managed host signup', async () => {
