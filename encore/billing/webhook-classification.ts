@@ -10,20 +10,22 @@ export function classifyYocoWebhookOutcome(eventType?: string | null, payloadSta
 
   if (
     normalizedEventType === "payment.succeeded" ||
+    normalizedEventType === "order.completed" ||
     normalizedEventType.includes("succeed") ||
     normalizedEventType.includes("success") ||
     normalizedPayloadStatus === "succeeded" ||
     normalizedPayloadStatus === "successful" ||
-    normalizedPayloadStatus === "paid"
+    normalizedPayloadStatus === "paid" ||
+    normalizedPayloadStatus === "completed"
   ) {
     return "paid";
   }
 
-  if (normalizedEventType.includes("fail") || normalizedPayloadStatus === "failed") {
+  if (normalizedEventType.includes("fail") || normalizedEventType === "payment.refunded" || normalizedPayloadStatus === "failed") {
     return "failed";
   }
 
-  if (normalizedEventType.includes("cancel") || normalizedPayloadStatus === "cancelled") {
+  if (normalizedEventType.includes("cancel") || normalizedEventType === "order.cancelled" || normalizedPayloadStatus === "cancelled") {
     return "cancelled";
   }
 

@@ -16,6 +16,7 @@ export interface YocoCheckoutRequest {
   successUrl: string;
   failureUrl?: string;
   metadata: Record<string, string>;
+  idempotencyKey?: string;
 }
 
 export interface YocoCheckoutResponse {
@@ -23,6 +24,7 @@ export interface YocoCheckoutResponse {
   redirectUrl: string;
   status?: string;
   mode?: string;
+  processingMode?: "live" | "test";
 }
 
 export interface YocoWebhookEvent {
@@ -46,21 +48,30 @@ export async function createYocoCheckout(input: YocoCheckoutRequest): Promise<Yo
     throw APIError.unavailable("YOCO_SECRET_KEY is not configured.");
   }
 
+  const idempotencyKey = input.idempotencyKey || input.metadata.checkoutId || input.metadata.externalId;
+
   const response = await fetch(`${YOCO_API_BASE}/checkouts`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
+      ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
     },
     body: JSON.stringify(input),
   });
 
   if (!response.ok) {
     const body = await response.text();
-    throw APIError.internal(`Yoco checkout creation failed: ${body || response.statusText}`);
+    const replayed = response.headers.get("Idempotent-Replayed");
+    const replaySuffix = replayed === "true" ? " (idempotent replay)" : "";
+    throw APIError.internal(`Yoco checkout creation failed${replaySuffix}: ${body || response.statusText}`);
   }
 
-  return response.json() as Promise<YocoCheckoutResponse>;
+  const checkout = (await response.json()) as YocoCheckoutResponse;
+  if (!checkout.id || !checkout.redirectUrl) {
+    throw APIError.internal("Yoco checkout creation returned an invalid response.");
+  }
+  return checkout;
 }
 
 function extractPrimarySignature(signatureHeader: string) {

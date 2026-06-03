@@ -837,6 +837,7 @@ export const createSubscriptionCheckout = api<SubscriptionCheckoutParams, { chec
       successUrl: urls.successUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
       cancelUrl: urls.cancelUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
       failureUrl: urls.failureUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
+      idempotencyKey: checkoutId,
       metadata: {
         checkoutId,
         checkoutType: "subscription",
@@ -942,6 +943,7 @@ export const createHostBillingSetupCheckout = api<void, { checkoutId: string; re
       successUrl: urls.successUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
       cancelUrl: urls.cancelUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
       failureUrl: urls.failureUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
+      idempotencyKey: checkoutId,
       metadata: {
         checkoutId,
         checkoutType: "host_billing_setup",
@@ -1018,6 +1020,7 @@ export const createContentCreditsCheckout = api<PurchaseCreditsParams, { checkou
       successUrl: urls.successUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
       cancelUrl: urls.cancelUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
       failureUrl: urls.failureUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
+      idempotencyKey: checkoutId,
       metadata: {
         checkoutId,
         checkoutType: "content_credits",
