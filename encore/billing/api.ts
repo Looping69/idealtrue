@@ -313,7 +313,7 @@ function buildBillingUrls(kind: CheckoutType, id: string) {
       ? "/pricing"
       : kind === "content_credits"
         ? "/host/social"
-        : "/host";
+        : "/account";
   const searchParams = new URLSearchParams({
     billing_status: "success",
     checkout_id: id,

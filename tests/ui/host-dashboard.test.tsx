@@ -1,14 +1,11 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import HostDashboard from '@/pages/HostDashboard';
-import type { Booking, HostBillingAccount, Listing, UserProfile } from '@/types';
+import type { Booking, Listing, UserProfile } from '@/types';
 
-const getMyHostBillingAccountMock = vi.fn();
-const startBillingPaymentMock = vi.fn();
 const mockUseBookingOpsSummaries = vi.fn();
 
 vi.mock('@/hooks/use-booking-ops-summaries', () => ({
@@ -18,8 +15,6 @@ vi.mock('@/hooks/use-booking-ops-summaries', () => ({
 vi.mock('@/lib/billing-client', () => ({
   getBillingPaymentStatus: vi.fn(),
   getCheckoutStatus: vi.fn(),
-  getMyHostBillingAccount: (...args: unknown[]) => getMyHostBillingAccountMock(...args),
-  startBillingPayment: (...args: unknown[]) => startBillingPaymentMock(...args),
 }));
 
 vi.mock('@/lib/platform-client', () => ({
@@ -116,27 +111,8 @@ function makeBooking(
 
 describe('HostDashboard', () => {
   beforeEach(() => {
-    startBillingPaymentMock.mockReset();
     mockUseBookingOpsSummaries.mockReset();
     mockUseBookingOpsSummaries.mockReturnValue({});
-    const billingAccount: HostBillingAccount = {
-      userId: profile.id,
-      plan: 'professional',
-      billingSource: 'paid',
-      billingStatus: 'active',
-      reminderCount: 0,
-      cardOnFile: true,
-      cardLabel: 'Visa ending in 4242',
-      inReminderWindow: false,
-      greylistEligible: false,
-      nextAction: 'none',
-      currentPeriodStart: '2026-04-01',
-      currentPeriodEnd: '2026-05-01',
-      createdAt: '2026-04-01T00:00:00.000Z',
-      updatedAt: '2026-04-20T00:00:00.000Z',
-    };
-
-    getMyHostBillingAccountMock.mockResolvedValue(billingAccount);
   });
 
   it('shows the full needs-response queue size instead of the preview slice', async () => {
@@ -160,8 +136,6 @@ describe('HostDashboard', () => {
         />
       </MemoryRouter>,
     );
-
-    await waitFor(() => expect(getMyHostBillingAccountMock).toHaveBeenCalled());
 
     expect(screen.getByRole('heading', { name: 'Needs Response' })).toBeInTheDocument();
     expect(screen.getByText('100%')).toBeInTheDocument();
@@ -193,9 +167,6 @@ describe('HostDashboard', () => {
         />
       </MemoryRouter>,
     );
-
-    await waitFor(() => expect(getMyHostBillingAccountMock).toHaveBeenCalled());
-
     expect(screen.getByRole('heading', { name: 'Approved Hold Watchlist' })).toBeInTheDocument();
     expect(screen.getAllByText('Sea Point Stay').length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText(/Payment due/i)).toBeInTheDocument();
@@ -235,52 +206,13 @@ describe('HostDashboard', () => {
         />
       </MemoryRouter>,
     );
-
-    await waitFor(() => expect(getMyHostBillingAccountMock).toHaveBeenCalled());
-
     expect(screen.getByText('Disputes 2')).toBeInTheDocument();
     expect(screen.getByText(/Payment due/i)).toBeInTheDocument();
     expect(screen.getByText(/Nearest deadline:/)).toBeInTheDocument();
     expect(screen.getByText(/guest payment closes/i)).toBeInTheDocument();
   });
 
-  it('starts the Yoco-backed billing setup payment link instead of showing a dead manual card path', async () => {
-    const user = userEvent.setup();
-    startBillingPaymentMock.mockResolvedValue({
-      paymentId: 'payment-intent-host-card-setup',
-      provider: 'yoco',
-      providerReference: 'checkout-host-card-setup',
-      redirectUrl: 'https://pay.example.com/host-card-setup',
-      providerMode: 'test',
-      status: 'pending',
-    });
-    getMyHostBillingAccountMock.mockResolvedValue({
-      userId: profile.id,
-      plan: 'standard',
-      billingSource: 'voucher',
-      billingStatus: 'active',
-      voucherCode: 'HOST-ABC123XYZ9',
-      voucherRedeemedAt: '2026-04-20T08:00:00.000Z',
-      currentPeriodStart: '2026-04-20T08:00:00.000Z',
-      currentPeriodEnd: '2026-07-20T08:00:00.000Z',
-      reminderWindowStartsAt: '2026-07-13T08:00:00.000Z',
-      lastReminderSentAt: null,
-      reminderCount: 0,
-      cardOnFile: false,
-      cardLabel: null,
-      inReminderWindow: true,
-      greylistEligible: false,
-      nextAction: 'add_card',
-      createdAt: '2026-04-20T08:00:00.000Z',
-      updatedAt: '2026-04-20T08:00:00.000Z',
-    });
-
-    const assignMock = vi.fn();
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      value: { assign: assignMock },
-    });
-
+  it('keeps subscription management out of the host overview', () => {
     render(
       <MemoryRouter>
         <HostDashboard
@@ -294,14 +226,7 @@ describe('HostDashboard', () => {
       </MemoryRouter>,
     );
 
-    await waitFor(() => expect(getMyHostBillingAccountMock).toHaveBeenCalled());
-
-    expect(screen.getByText(/Yoco billing setup payment link/i)).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: 'Set Up Billing Card' }));
-
-    expect(startBillingPaymentMock).toHaveBeenCalledTimes(1);
-    expect(startBillingPaymentMock).toHaveBeenCalledWith({ purpose: 'host_billing_setup' });
-    expect(assignMock).toHaveBeenCalledWith('https://pay.example.com/host-card-setup');
+    expect(screen.queryByRole('heading', { name: 'Subscription Management' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Set Up Billing Card' })).not.toBeInTheDocument();
   });
 });

@@ -21,6 +21,7 @@ import {
   LayoutTemplate,
   Images,
   MessageSquareText,
+  CreditCard,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
@@ -84,6 +85,7 @@ export default function HostLayout() {
       icon: Settings,
       items: [
         { name: 'Account', path: '/account', icon: UserCircle2 },
+        { name: 'Subscription', path: '/pricing', icon: CreditCard },
       ]
     }
   ];

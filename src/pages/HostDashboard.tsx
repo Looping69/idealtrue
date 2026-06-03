@@ -1,14 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Booking, BookingOpsSummary, HostBillingAccount, Listing, UserProfile } from '../types';
+import React, { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Booking, BookingOpsSummary, Listing, UserProfile } from '../types';
 import { 
   LayoutDashboard, 
   Calendar, 
   ArrowRight, 
   Plus, 
   Sparkles,
-  CreditCard,
-  Crown,
   MessageSquare,
   Building2,
   DollarSign,
@@ -21,15 +19,7 @@ import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import InquiryDeclineDialog from '@/components/InquiryDeclineDialog';
 import { format, formatDistanceToNowStrict } from 'date-fns';
-import { toast } from 'sonner';
-import {
-  getBillingPaymentStatus,
-  getCheckoutStatus,
-  getMyHostBillingAccount,
-  startBillingPayment,
-} from '@/lib/billing-client';
 import { formatRand } from '@/lib/currency';
-import { getHostBillingTimelinePresentation } from '@/lib/host-billing-ui';
 import {
   getInquiryBadgeLabel,
   getInquiryDeclineReasonDetail,
@@ -129,10 +119,6 @@ export default function HostDashboard({
   onBookingUpdated: (booking: Booking) => void,
 }) {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [billingAccount, setBillingAccount] = useState<HostBillingAccount | null>(null);
-  const [startingBillingSetup, setStartingBillingSetup] = useState(false);
-  const [showVoucherBillingDetails, setShowVoucherBillingDetails] = useState(false);
   const bookingOpsSummaries = useBookingOpsSummaries(bookings);
 
   const {
@@ -148,122 +134,6 @@ export default function HostDashboard({
     onAfterDecline: () => navigate('/host/enquiries'),
   });
 
-  const loadBillingAccount = useCallback(async () => {
-    if (profile?.role !== 'host') {
-      return null;
-    }
-
-    const account = await getMyHostBillingAccount();
-    setBillingAccount(account);
-    return account;
-  }, [profile?.role]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function syncBillingAccount() {
-      try {
-        const account = await getMyHostBillingAccount();
-        if (!cancelled) {
-          setBillingAccount(account);
-        }
-      } catch (error) {
-        console.error('Failed to load host billing account', error);
-      }
-    }
-
-    if (profile?.role === 'host') {
-      void syncBillingAccount();
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [profile?.role]);
-
-  useEffect(() => {
-    if (profile?.role !== 'host') {
-      return;
-    }
-
-    const billingStatus = searchParams.get('billing_status');
-    const checkoutId = searchParams.get('checkout_id');
-    const paymentId = searchParams.get('payment_id');
-    const billingContext = searchParams.get('billing_context');
-
-    if (!billingStatus || (!paymentId && !checkoutId) || billingContext !== 'host_card_setup') {
-      return;
-    }
-
-    let cancelled = false;
-    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-    async function resolveBillingSetup() {
-      try {
-        for (let attempt = 0; attempt < 8; attempt += 1) {
-          // (|/) Klaasvaakie - standard payments return payment_id; checkout_id is kept for older return URLs.
-          const result = paymentId
-            ? await getBillingPaymentStatus(paymentId)
-            : await getCheckoutStatus(checkoutId!);
-          if (cancelled) {
-            return;
-          }
-
-          const paymentKind = 'purpose' in result ? result.purpose : result.checkoutType;
-          if (paymentKind !== 'host_billing_setup') {
-            navigate('/host', { replace: true });
-            return;
-          }
-
-          if (result.status === 'paid') {
-            const account = await loadBillingAccount();
-            if (cancelled) {
-              return;
-            }
-            toast.success(
-              account?.billingStatus === 'active'
-                ? 'Billing setup confirmed. Your host billing access is active again.'
-                : 'Billing setup confirmed.',
-            );
-            navigate('/host', { replace: true });
-            return;
-          }
-
-          if (billingStatus === 'cancelled' || result.status === 'cancelled') {
-            toast.message('Billing setup checkout was cancelled. No billing changes were applied.');
-            navigate('/host', { replace: true });
-            return;
-          }
-
-          if (billingStatus === 'failed' || result.status === 'failed') {
-            toast.error('Billing setup failed. No billing changes were applied.');
-            navigate('/host', { replace: true });
-            return;
-          }
-
-          if (attempt < 7) {
-            await wait(2000);
-          }
-        }
-
-        toast.message('Billing setup is still being confirmed. Give the webhook a moment, then refresh if needed.');
-        navigate('/host', { replace: true });
-      } catch (error) {
-        if (!cancelled) {
-          console.error('Failed to resolve host billing setup payment', error);
-          toast.error('Could not verify billing setup yet. Refresh the dashboard in a moment.');
-          navigate('/host', { replace: true });
-        }
-      }
-    }
-
-    void resolveBillingSetup();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [loadBillingAccount, navigate, profile?.role, searchParams]);
-
   const activeListings = listings.filter(l => l.status === 'active');
   const groupedBookings = useMemo(() => groupHostInquiries(bookings), [bookings]);
   const needsResponseBookings = groupedBookings.needsResponse;
@@ -272,23 +142,6 @@ export default function HostDashboard({
   const totalRevenue = bookings
     .filter(isBookedStay)
     .reduce((sum, b) => sum + b.totalPrice, 0);
-  const isGreylisted = billingAccount?.billingStatus === 'greylisted';
-  const isVoucherHost = billingAccount?.billingSource === 'voucher';
-  const hasActiveHostPlan = billingAccount?.billingSource === 'voucher' || billingAccount?.billingSource === 'paid';
-  const canStartBillingSetup = Boolean(
-    billingAccount &&
-    !billingAccount.cardOnFile &&
-    (billingAccount.billingSource === 'voucher' || billingAccount.billingStatus === 'greylisted'),
-  );
-  const billingTimeline = getHostBillingTimelinePresentation(billingAccount);
-  const billingTimelineBadgeVariant =
-    billingTimeline.urgencyTone === 'danger'
-      ? 'danger'
-      : billingTimeline.urgencyTone === 'warning'
-        ? 'warning'
-        : billingTimeline.urgencyTone === 'success'
-          ? 'success'
-          : 'neutral';
   const approvedHoldWatchlist = useMemo(() => {
     return [...awaitingGuestPaymentBookings, ...groupedBookings.paymentReview]
       .map((booking) => {
@@ -311,18 +164,6 @@ export default function HostDashboard({
   }, [awaitingGuestPaymentBookings, bookingOpsSummaries, groupedBookings.paymentReview]);
   const activeQueueCount = needsResponseBookings.length + awaitingGuestPaymentBookings.length + groupedBookings.paymentReview.length;
   const mostUrgentApprovedHold = approvedHoldWatchlist[0] ?? null;
-
-  async function handleStartBillingSetup() {
-    setStartingBillingSetup(true);
-    try {
-      const payment = await startBillingPayment({ purpose: 'host_billing_setup' });
-      window.location.assign(payment.redirectUrl);
-    } catch (error) {
-      console.error('Failed to start host billing setup payment link:', error);
-      toast.error(error instanceof Error ? error.message : 'Could not start billing setup.');
-      setStartingBillingSetup(false);
-    }
-  }
 
   return (
     <div className="space-y-8">
@@ -594,163 +435,6 @@ export default function HostDashboard({
             {bookings.length === 0 && <p className="text-center text-outline-variant py-10">No recent activity.</p>}
           </div>
         </div>
-      </div>
-
-      {/* Subscription Management */}
-      <div className="mt-12 space-y-6">
-        <h2 className="text-xl font-bold flex items-center gap-2">
-          <CreditCard className="w-5 h-5" /> Subscription Management
-        </h2>
-        <Card className="p-6">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <h3 className="text-lg font-bold">
-                  {hasActiveHostPlan ? 'Current Plan' : 'Base Tier'}: <span className="capitalize">{profile?.hostPlan || 'Standard'}</span>
-                </h3>
-                {(billingAccount?.billingStatus || profile?.hostPlan) && (
-                  <Badge variant={isGreylisted ? 'warning' : hasActiveHostPlan ? 'success' : 'secondary'} className="flex items-center gap-1">
-                    <Crown className="w-3 h-3" /> {isGreylisted ? 'Greylisted' : hasActiveHostPlan ? 'Active' : 'Inactive'}
-                  </Badge>
-                )}
-              </div>
-              <p className="text-on-surface-variant text-sm max-w-md">
-                {!hasActiveHostPlan
-                  ? 'Your host account is set to the Standard base tier, but hosting billing is not active yet. Redeem your voucher or start a paid plan to go live properly.'
-                  : profile?.hostPlan === 'premium' 
-                  ? 'You are on the highest tier. Enjoy all premium features including priority support and advanced analytics.'
-                  : profile?.hostPlan === 'professional'
-                  ? 'You have access to the content studio and advanced listing features. Upgrade to Premium for priority support.'
-                  : profile?.hostPlan === 'standard'
-                  ? 'You are on the entry host tier. One live listing, content studio access, 10 photos per listing, and no showcase video on Standard.'
-                  : 'Your plan details are syncing.'}
-              </p>
-            </div>
-            <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
-              <Button variant="outline" className="w-full sm:w-auto" onClick={() => navigate('/pricing')}>
-                View All Plans
-              </Button>
-              {profile?.hostPlan !== 'premium' && (
-                <Button className="w-full sm:w-auto" onClick={() => navigate('/pricing')}>
-                  Upgrade Plan
-                </Button>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
-            <div className="rounded-2xl border border-outline-variant bg-surface-container-low p-4">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">Billing Source</p>
-              <p className="mt-2 text-lg font-bold capitalize">{billingAccount?.billingSource || 'none'}</p>
-              <p className="mt-1 text-xs text-on-surface-variant">
-                {isVoucherHost ? 'Voucher-backed onboarding period.' : billingAccount?.billingSource === 'paid' ? 'Paid subscription cycle is active.' : 'No voucher or paid cycle is active yet.'}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-outline-variant bg-surface-container-low p-4">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">Countdown</p>
-              <p className="mt-2 text-sm font-bold">
-                {billingTimeline.countdownLabel}
-              </p>
-              <p className="mt-1 text-xs text-on-surface-variant">{billingTimeline.periodLabel}</p>
-            </div>
-            <div className="rounded-2xl border border-outline-variant bg-surface-container-low p-4">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">Urgency</p>
-              <div className="mt-2 flex items-center gap-2">
-                <Badge variant={billingTimelineBadgeVariant}>{billingTimeline.urgencyLabel}</Badge>
-                <span className="text-xs text-on-surface-variant">{billingTimeline.reminderLabel}</span>
-              </div>
-              <p className="mt-3 text-sm font-bold">{billingTimeline.actionLabel}</p>
-              <p className="mt-1 text-xs text-on-surface-variant">
-                {billingAccount?.cardOnFile ? 'Provider-backed billing setup is confirmed.' : 'A provider-backed billing setup payment is still required.'}
-              </p>
-            </div>
-          </div>
-
-          {isVoucherHost ? (
-            <div className="mt-6 rounded-2xl border border-outline-variant bg-surface-container-low p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">Voucher Billing Timeline</p>
-                  <p className="mt-1 text-sm font-semibold">{billingTimeline.countdownLabel}</p>
-                  <p className="mt-1 text-xs text-on-surface-variant">{billingTimeline.reminderLabel}</p>
-                  <p className="mt-1 text-xs text-on-surface-variant">
-                    Yoco billing setup payment link controls provider-backed card readiness for voucher hosting.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant={billingTimelineBadgeVariant} className="w-fit">
-                    {billingTimeline.urgencyLabel}
-                  </Badge>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 px-3 text-xs"
-                    onClick={() => setShowVoucherBillingDetails((value) => !value)}
-                  >
-                    {showVoucherBillingDetails ? 'Hide Details' : 'Show Details'}
-                  </Button>
-                </div>
-              </div>
-              {showVoucherBillingDetails ? (
-                <div className="mt-4 grid gap-4 md:grid-cols-3">
-                  <div className="rounded-2xl border border-outline-variant bg-background/70 p-4">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">Countdown</p>
-                    <p className="mt-2 text-base font-bold">{billingTimeline.countdownLabel}</p>
-                    <p className="mt-1 text-xs text-on-surface-variant">This is the next billing enforcement checkpoint for voucher hosting.</p>
-                  </div>
-                  <div className="rounded-2xl border border-outline-variant bg-background/70 p-4">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">Urgency</p>
-                    <p className="mt-2 text-base font-bold">{billingTimeline.urgencyLabel}</p>
-                    <p className="mt-1 text-xs text-on-surface-variant">{billingTimeline.reminderLabel}</p>
-                  </div>
-                  <div className="rounded-2xl border border-outline-variant bg-background/70 p-4">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">Required Action</p>
-                    <p className="mt-2 text-base font-bold">{billingTimeline.actionLabel}</p>
-                    <p className="mt-1 text-xs text-on-surface-variant">
-                      {billingAccount?.cardOnFile ? 'No extra billing capture is needed right now.' : 'Finish the Yoco billing setup payment before the voucher window expires.'}
-                    </p>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          {isGreylisted ? (
-            <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-              Your host account is on the billing greylist. Public listings are paused until admin reviews the account.
-            </div>
-          ) : null}
-
-          {!billingAccount?.cardOnFile ? (
-            <div className="mt-6 rounded-2xl border border-outline-variant bg-surface-container-low p-4">
-              <p className="text-sm font-semibold text-on-surface">Provider-backed billing card setup is required.</p>
-              <p className="mt-2 text-sm text-on-surface-variant">
-                Billing card setup now runs through a Yoco payment link. We only mark the card as covered after the provider webhook confirms payment, and we do not invent card details we never received.
-              </p>
-              {billingAccount?.cardLabel ? (
-                <p className="mt-2 text-xs text-on-surface-variant">Latest provider state: {billingAccount.cardLabel}.</p>
-              ) : null}
-              {canStartBillingSetup ? (
-                <p className="mt-2 text-xs text-on-surface-variant">
-                  The payment link charges a small {formatRand(2)} billing setup verification payment so the card state is backed by a real Yoco transaction.
-                </p>
-              ) : null}
-              <div className="mt-4 flex flex-wrap gap-3">
-                {canStartBillingSetup ? (
-                  <Button onClick={handleStartBillingSetup} disabled={startingBillingSetup}>
-                    {startingBillingSetup ? 'Redirecting to Yoco...' : 'Set Up Billing Card'}
-                  </Button>
-                ) : (
-                  <Button onClick={() => navigate('/pricing')}>View Billing Options</Button>
-                )}
-                <Button variant="outline" onClick={() => navigate('/host/listings')}>
-                  Review Listings
-                </Button>
-              </div>
-            </div>
-          ) : null}
-        </Card>
       </div>
 
       <InquiryDeclineDialog

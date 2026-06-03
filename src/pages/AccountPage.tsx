@@ -378,36 +378,52 @@ export default function AccountPage() {
           </Card>
 
           {profile.role === 'host' && (
-            <Card className="mt-8 p-8 border-primary/20 bg-primary/5">
-              <div className="flex items-start gap-4">
-                <div className="p-3 bg-primary/10 rounded-2xl">
-                  {effectiveKycStatus === 'verified' ? (
-                    <ShieldCheck className="w-6 h-6 text-primary" />
-                  ) : effectiveKycStatus === 'pending' ? (
-                    <Clock className="w-6 h-6 text-amber-600" />
-                  ) : (
-                    <ShieldAlert className="w-6 h-6 text-rose-600" />
-                  )}
+            <div className="mt-8 space-y-8">
+              <Card className="p-8 border-primary/20 bg-primary/5">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 bg-primary/10 rounded-2xl">
+                    {effectiveKycStatus === 'verified' ? (
+                      <ShieldCheck className="w-6 h-6 text-primary" />
+                    ) : effectiveKycStatus === 'pending' ? (
+                      <Clock className="w-6 h-6 text-amber-600" />
+                    ) : (
+                      <ShieldAlert className="w-6 h-6 text-rose-600" />
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-lg font-bold">Host Verification</h3>
+                    <p className="text-sm text-on-surface-variant">
+                      Your account is currently <span className="font-bold text-on-surface capitalize">{effectiveKycStatus}</span>.
+                      Verified hosts receive a badge on their listings and higher search visibility.
+                    </p>
+                    {effectiveKycStatus !== 'verified' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2"
+                        onClick={() => setIsKYCModalOpen(true)}
+                      >
+                        {effectiveKycStatus === 'pending' ? "Check Status" : "Complete Verification"}
+                      </Button>
+                    )}
+                  </div>
                 </div>
+              </Card>
+
+              <Card className="p-6">
                 <div className="space-y-2">
-                  <h3 className="text-lg font-bold">Host Verification</h3>
+                  <h3 className="text-lg font-bold">Billing Test Setup</h3>
                   <p className="text-sm text-on-surface-variant">
-                    Your account is currently <span className="font-bold text-on-surface capitalize">{effectiveKycStatus}</span>. 
-                    Verified hosts receive a badge on their listings and higher search visibility.
+                    Billing is being reset. Use the pricing page checkout flows to exercise Yoco instead of managing payment setup here.
                   </p>
-                  {effectiveKycStatus !== 'verified' && (
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="mt-2"
-                      onClick={() => setIsKYCModalOpen(true)}
-                    >
-                      {effectiveKycStatus === 'pending' ? "Check Status" : "Complete Verification"}
+                  <div className="pt-2">
+                    <Button variant="outline" onClick={() => window.location.assign('/pricing')}>
+                      Open Pricing Checkout
                     </Button>
-                  )}
+                  </div>
                 </div>
-              </div>
-            </Card>
+              </Card>
+            </div>
           )}
         </div>
       </div>
