@@ -179,6 +179,7 @@ const faqs = [
 export default function PricingPage({ onBack }: { onBack?: () => void }) {
   const navigate = useNavigate();
   const { user, profile, refreshProfile } = useAuth();
+  const isYocoTestMode = `${import.meta.env.VITE_YOCO_PAYMENT_MODE || ''}`.trim().toLowerCase() === 'test';
   const [loadingPlan, setLoadingPlan] = useState<PlanTier | null>(null);
   const [fetchingPlan, setFetchingPlan] = useState(true);
   const [currentPlan, setCurrentPlan] = useState<PlanTier>("standard");
@@ -354,6 +355,14 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
                 0% Booking Commission
               </span>
             </div>
+
+            {isYocoTestMode ? (
+              <div className="max-w-2xl rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                Yoco test mode is active. Use the test card in the checkout flow, then switch
+                <span className="mx-1 font-semibold">VITE_YOCO_PAYMENT_MODE</span> and
+                <span className="mx-1 font-semibold">YOCO_PAYMENT_MODE</span> back to live when you are done.
+              </div>
+            ) : null}
 
             <div className="max-w-3xl space-y-4">
               <h1 className="text-4xl font-black tracking-tight text-slate-950 md:text-6xl">

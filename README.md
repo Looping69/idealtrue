@@ -142,6 +142,8 @@ For shared preview or staging environments, the same script can now create dispo
 
 Use the backend `YOCO_PAYMENT_MODE=test` setting together with `YOCO_TEST_SECRET_KEY` to exercise the checkout flow without charging a real card.
 
+If you want the public pricing page to show an obvious test-mode warning while you are working, set `VITE_YOCO_PAYMENT_MODE=test` in the frontend environment as well. Flip both flags back to live when you are finished testing.
+
 For Yoco checkout testing, Yoco’s developer docs currently list the successful test card as `4111 1111 1111 1111`. Use any future expiry date and any 3-digit CVC.
 
 Test transactions are isolated from live sales data and should be used for subscription checkout verification before switching back to live mode.

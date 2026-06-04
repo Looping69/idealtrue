@@ -53,6 +53,7 @@ describe('PricingPage', () => {
     vi.clearAllMocks();
     authState.user = null;
     authState.profile = null;
+    vi.stubEnv('VITE_YOCO_PAYMENT_MODE', '');
   });
 
   it('opens the Yoco subscription checkout for a selected plan when the user is signed in', async () => {
@@ -125,5 +126,19 @@ describe('PricingPage', () => {
       expect(location).toContain('management=managed');
       expect(location).toContain('returnTo=%2Fpricing');
     });
+  });
+
+  it('shows a test mode banner when Yoco test mode is enabled on the frontend', async () => {
+    vi.stubEnv('VITE_YOCO_PAYMENT_MODE', 'test');
+
+    render(
+      <MemoryRouter initialEntries={['/pricing']}>
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(/yoco test mode is active/i)).toBeInTheDocument();
   });
 });
