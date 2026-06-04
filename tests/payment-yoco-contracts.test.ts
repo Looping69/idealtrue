@@ -4,11 +4,11 @@ import test, { afterEach } from 'node:test';
 import { DEFAULT_ENCORE_API_URL } from '../src/lib/encore-client';
 import {
   createHostBillingSetupCheckout,
-  createHostBillingSetupPaymentLink,
   createSubscriptionCheckout,
   getCheckoutStatus,
-  getPaymentLinkStatus,
+  createManagedHostingCheckout,
   startBillingPayment,
+  type HostPlan,
 } from '../src/lib/billing-client';
 import { workflowBilling } from './fixtures/workflows';
 
@@ -68,6 +68,35 @@ test('subscription checkout client posts plan interval and reads checkout status
   assert.deepEqual(requestBody(0), { plan: 'professional', billingInterval: 'monthly' });
 });
 
+test('subscription checkout client supports all subscription plans and billing intervals', async () => {
+  installFetch((url) => {
+    if (url.endsWith('/billing/subscriptions/checkout')) {
+      const body = requestBody(fetchCalls.length - 1);
+      return createJsonResponse({
+        checkoutId: `checkout-${body.plan}-${body.billingInterval}`,
+        redirectUrl: `https://pay.example/${body.plan}-${body.billingInterval}`,
+      });
+    }
+    throw new Error(`Unhandled subscription matrix endpoint: ${url}`);
+  });
+
+  const scenarios: Array<[HostPlan, 'monthly' | 'annual']> = [
+    ['standard', 'monthly'],
+    ['professional', 'annual'],
+    ['premium', 'monthly'],
+  ];
+
+  for (const [plan, billingInterval] of scenarios) {
+    const checkout = await createSubscriptionCheckout(plan, billingInterval);
+    assert.equal(checkout.redirectUrl, `https://pay.example/${plan}-${billingInterval}`);
+  }
+
+  assert.deepEqual(
+    fetchCalls.map((call) => JSON.parse(String(call.init?.body || '{}'))),
+    scenarios.map(([plan, billingInterval]) => ({ plan, billingInterval })),
+  );
+});
+
 test('standard billing payment client creates all new Yoco payments through one endpoint', async () => {
   installFetch((url) => {
     if (url.endsWith('/billing/payments')) {
@@ -86,10 +115,12 @@ test('standard billing payment client creates all new Yoco payments through one 
 
   const subscription = await startBillingPayment({ purpose: 'subscription', plan: 'professional', billingInterval: 'monthly' });
   const hostSetup = await startBillingPayment({ purpose: 'host_billing_setup' });
+  const managed = await startBillingPayment({ purpose: 'managed_hosting' });
   const credits = await startBillingPayment({ purpose: 'content_credits', credits: 10 });
 
   assert.equal(subscription.redirectUrl, 'https://pay.example/subscription');
   assert.equal(hostSetup.provider, 'yoco');
+  assert.equal(managed.redirectUrl, 'https://pay.example/managed_hosting');
   assert.equal(credits.providerMode, 'test');
   assert.deepEqual(requestBody(0), { purpose: 'subscription', plan: 'professional', billingInterval: 'monthly' });
   assert.deepEqual(requestBody(1), { purpose: 'host_billing_setup' });
@@ -100,8 +131,32 @@ test('standard billing payment client creates all new Yoco payments through one 
       'POST /billing/payments',
       'POST /billing/payments',
       'POST /billing/payments',
+      'POST /billing/payments',
     ],
   );
+});
+
+test('managed hosting checkout client creates a managed-hosting Yoco payment', async () => {
+  installFetch((url) => {
+    if (url.endsWith('/billing/payments')) {
+      const body = requestBody(fetchCalls.length - 1);
+      return createJsonResponse({
+        paymentId: 'payment-managed-hosting-1',
+        provider: 'yoco',
+        providerMode: 'test',
+        status: 'pending',
+        redirectUrl: 'https://pay.example/managed-hosting',
+        providerReference: 'checkout-managed-hosting-1',
+      });
+    }
+    throw new Error(`Unhandled managed hosting checkout endpoint: ${url}`);
+  });
+
+  const checkout = await createManagedHostingCheckout();
+
+  assert.equal(checkout.redirectUrl, 'https://pay.example/managed-hosting');
+  assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/billing/payments`);
+  assert.deepEqual(requestBody(0), { purpose: 'managed_hosting' });
 });
 
 test('host billing setup checkout client posts to the dedicated Yoco-backed setup endpoint', async () => {
@@ -127,32 +182,5 @@ test('host billing setup checkout client posts to the dedicated Yoco-backed setu
   assert.equal(checkout.redirectUrl, 'https://pay.example/host-card-setup');
   assert.equal(status.checkoutType, 'host_billing_setup');
   assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/billing/host/setup-checkout`);
-  assert.equal(fetchCalls[0]?.init?.method, 'POST');
-});
-
-test('host billing setup payment link client posts to the payment-link endpoint', async () => {
-  installFetch((url) => {
-    if (url.endsWith('/billing/host/setup-payment-link')) {
-      return createJsonResponse({
-        sessionId: 'payment-link-host-card-setup',
-        paymentLinkId: 'plink-host-card-setup',
-        orderId: 'order-host-card-setup',
-        redirectUrl: 'https://pay.example/payment-link-host-card-setup',
-        providerMode: 'test',
-      });
-    }
-    if (url.endsWith('/billing/payment-links/payment-link-host-card-setup')) {
-      return createJsonResponse({ status: 'pending', sessionType: 'host_billing_setup' });
-    }
-    throw new Error(`Unhandled host billing payment link endpoint: ${url}`);
-  });
-
-  const paymentLink = await createHostBillingSetupPaymentLink();
-  const status = await getPaymentLinkStatus(paymentLink.sessionId);
-
-  assert.equal(paymentLink.redirectUrl, 'https://pay.example/payment-link-host-card-setup');
-  assert.equal(paymentLink.providerMode, 'test');
-  assert.equal(status.sessionType, 'host_billing_setup');
-  assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/billing/host/setup-payment-link`);
   assert.equal(fetchCalls[0]?.init?.method, 'POST');
 });

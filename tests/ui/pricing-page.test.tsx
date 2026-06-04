@@ -22,6 +22,14 @@ vi.mock('@/lib/billing-client', () => ({
     checkoutId: 'checkout-subscription-1',
     redirectUrl: 'https://pay.yoco.com/r/generated-professional',
   })),
+  createManagedHostingCheckout: vi.fn(async () => ({
+    paymentId: 'payment-managed-1',
+    provider: 'yoco',
+    providerMode: 'test',
+    status: 'pending',
+    redirectUrl: 'https://pay.yoco.com/r/generated-managed',
+    providerReference: 'checkout-managed-1',
+  })),
   getBillingPaymentStatus: vi.fn(),
   getCheckoutStatus: vi.fn(),
   getMyHostBillingAccount: vi.fn(),
@@ -70,7 +78,33 @@ describe('PricingPage', () => {
     expect(assignMock).toHaveBeenCalledWith('https://pay.yoco.com/r/generated-professional');
   });
 
-  it('shows the managed hosting card and routes its CTA into managed host signup', async () => {
+  it('starts the managed hosting checkout for a signed-in host', async () => {
+    const user = userEvent.setup();
+    const assignMock = vi.fn();
+    authState.user = { id: 'host-1' };
+
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, assign: assignMock },
+      writable: true,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/pricing']}>
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('button', { name: /apply for managed hosting/i })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /apply for managed hosting/i }));
+
+    await waitFor(() => {
+      expect(assignMock).toHaveBeenCalledWith('https://pay.yoco.com/r/generated-managed');
+    });
+  });
+
+  it('routes unauthenticated managed hosting into managed host signup', async () => {
     const user = userEvent.setup();
 
     render(
@@ -82,8 +116,7 @@ describe('PricingPage', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole('button', { name: /apply for managed hosting/i })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /apply for managed hosting/i }));
+    await user.click(await screen.findByRole('button', { name: /apply for managed hosting/i }));
 
     await waitFor(() => {
       const location = screen.getByTestId('location').textContent ?? '';

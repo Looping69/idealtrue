@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
-import { createSubscriptionCheckout, getBillingPaymentStatus, getCheckoutStatus, getMyHostBillingAccount } from "@/lib/billing-client";
+import { createManagedHostingCheckout, createSubscriptionCheckout, getBillingPaymentStatus, getCheckoutStatus, getMyHostBillingAccount } from "@/lib/billing-client";
 import type { HostBillingAccount } from "@/types";
 
 type PlanTier = "standard" | "professional" | "premium";
@@ -38,8 +38,6 @@ interface ManagedOffer {
   tone: string;
   features: PlanFeature[];
 }
-
-const MANAGED_HOSTING_PAYMENT_LINK = "https://pay.yoco.com/r/2BGGAB";
 
 const subscriptionPlans: Plan[] = [
   {
@@ -102,7 +100,7 @@ const subscriptionPlans: Plan[] = [
 const managedOffer: ManagedOffer = {
   id: "managed",
   name: "Managed Hosting",
-  price: "Custom monthly package",
+  price: "R650 / month",
   description: "For hosts who want Ideal Stay to manage the listing work while they keep the upside of direct guest enquiries.",
   bestFor: "Busy hosts, premium homes, multi-property operators, and owners who want the visibility without carrying the day-to-day listing workload themselves.",
   cta: "Apply for Managed Hosting",
@@ -238,7 +236,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
             return;
           }
 
-          if ("purpose" in result && result.purpose !== "subscription") {
+          if ("purpose" in result && result.purpose !== "subscription" && result.purpose !== "managed_hosting") {
             navigate("/pricing", { replace: true });
             return;
           }
@@ -249,7 +247,11 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
               return;
             }
             setCurrentPlan((nextProfile?.hostPlan as PlanTier) || currentPlan);
-            toast.success("Subscription payment confirmed. Your plan access is now live.");
+            toast.success(
+              "purpose" in result && result.purpose === "managed_hosting"
+                ? "Managed hosting payment confirmed. The team can now complete onboarding."
+                : "Subscription payment confirmed. Your plan access is now live.",
+            );
             navigate("/host", { replace: true });
             return;
           }
@@ -311,7 +313,18 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
       return;
     }
 
-    window.location.assign(MANAGED_HOSTING_PAYMENT_LINK);
+    void (async () => {
+      setLoadingPlan(null);
+      try {
+        const checkout = await createManagedHostingCheckout();
+        window.location.assign(checkout.redirectUrl);
+      } catch (error: any) {
+        console.error("Managed hosting checkout error:", error);
+        toast.error(`Managed hosting checkout failed: ${error.message}`);
+      } finally {
+        setLoadingPlan(null);
+      }
+    })();
   }, [navigate, user]);
 
   if (fetchingPlan) {

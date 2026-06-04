@@ -34,15 +34,7 @@ export interface ContentDraft {
   updatedAt: string;
 }
 
-export interface PaymentLinkSession {
-  sessionId: string;
-  paymentLinkId: string;
-  orderId: string;
-  redirectUrl: string;
-  providerMode: 'live' | 'test';
-}
-
-export type BillingPaymentPurpose = 'subscription' | 'content_credits' | 'host_billing_setup';
+export type BillingPaymentPurpose = 'subscription' | 'content_credits' | 'host_billing_setup' | 'managed_hosting';
 
 export interface BillingPayment {
   paymentId: string;
@@ -57,6 +49,7 @@ export async function startBillingPayment(params:
   | { purpose: 'subscription'; plan: HostPlan; billingInterval: BillingInterval }
   | { purpose: 'content_credits'; credits: number }
   | { purpose: 'host_billing_setup' }
+  | { purpose: 'managed_hosting' }
 ) {
   return encoreRequest<BillingPayment>(
     '/billing/payments',
@@ -89,16 +82,6 @@ export async function createHostBillingSetupCheckout() {
   );
 }
 
-export async function createHostBillingSetupPaymentLink() {
-  return encoreRequest<PaymentLinkSession>(
-    '/billing/host/setup-payment-link',
-    {
-      method: 'POST',
-    },
-    { auth: true },
-  );
-}
-
 export async function getContentEntitlements() {
   const response = await encoreRequest<{ entitlements: ContentEntitlements }>(
     '/billing/content/entitlements',
@@ -111,17 +94,6 @@ export async function getContentEntitlements() {
 export async function createContentCreditsCheckout(credits: number) {
   return encoreRequest<{ checkoutId: string; redirectUrl: string }>(
     '/billing/content/credits/checkout',
-    {
-      method: 'POST',
-      body: JSON.stringify({ credits }),
-    },
-    { auth: true },
-  );
-}
-
-export async function createContentCreditsPaymentLink(credits: number) {
-  return encoreRequest<PaymentLinkSession>(
-    '/billing/content/credits/payment-link',
     {
       method: 'POST',
       body: JSON.stringify({ credits }),
@@ -187,16 +159,8 @@ export async function updateContentDraft(params: {
 }
 
 export async function getCheckoutStatus(checkoutId: string) {
-  return encoreRequest<{ status: 'pending' | 'paid' | 'failed' | 'cancelled'; checkoutType: 'subscription' | 'content_credits' | 'host_billing_setup' }>(
+  return encoreRequest<{ status: 'pending' | 'paid' | 'failed' | 'cancelled'; checkoutType: 'subscription' | 'content_credits' | 'host_billing_setup' | 'managed_hosting' }>(
     `/billing/checkouts/${encodeURIComponent(checkoutId)}`,
-    {},
-    { auth: true },
-  );
-}
-
-export async function getPaymentLinkStatus(sessionId: string) {
-  return encoreRequest<{ status: 'pending' | 'paid' | 'failed' | 'cancelled'; sessionType: 'subscription' | 'content_credits' | 'host_billing_setup' }>(
-    `/billing/payment-links/${encodeURIComponent(sessionId)}`,
     {},
     { auth: true },
   );
@@ -217,6 +181,17 @@ export async function getMyHostBillingAccount() {
     { auth: true },
   );
   return response.account;
+}
+
+export async function createManagedHostingCheckout() {
+  return encoreRequest<{ paymentId: string; provider: 'yoco'; providerMode: 'live' | 'test'; status: 'pending' | 'paid' | 'failed' | 'cancelled'; redirectUrl: string; providerReference: string }>(
+    '/billing/payments',
+    {
+      method: 'POST',
+      body: JSON.stringify({ purpose: 'managed_hosting' }),
+    },
+    { auth: true },
+  );
 }
 
 export async function redeemHostVoucher(code: string) {

@@ -28,7 +28,7 @@ type EncoreKycStatus = EncoreUser['kycStatus'];
 export interface AdminCheckout {
   id: string;
   userId: string;
-  checkoutType: 'subscription' | 'content_credits' | 'host_billing_setup';
+  checkoutType: 'subscription' | 'content_credits' | 'host_billing_setup' | 'managed_hosting';
   provider: string;
   status: 'pending' | 'paid' | 'failed' | 'cancelled';
   currency: string;
@@ -64,7 +64,7 @@ export interface AdminObservabilitySnapshot {
 interface EncoreCheckout {
   id: string;
   user_id: string;
-  checkout_type: 'subscription' | 'content_credits' | 'host_billing_setup';
+  checkout_type: 'subscription' | 'content_credits' | 'host_billing_setup' | 'managed_hosting';
   provider: string;
   status: 'pending' | 'paid' | 'failed' | 'cancelled';
   currency: string;

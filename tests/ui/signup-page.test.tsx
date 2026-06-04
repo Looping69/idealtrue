@@ -45,7 +45,7 @@ describe('SignupPage', () => {
 
     expect(await screen.findByText(/managed hosting selected/i)).toBeInTheDocument();
     expect(screen.getByText("I'm a Host")).toBeInTheDocument();
-    expect(screen.getByText(/ideal stay team can onboard the managed package/i)).toBeInTheDocument();
+    expect(screen.getByText(/ideal stay team can onboard the r650 \/ month managed package/i)).toBeInTheDocument();
   });
 
   it('submits managed host onboarding mode through email signup when routed from managed pricing', async () => {

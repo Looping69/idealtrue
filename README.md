@@ -138,6 +138,14 @@ IDEAL_STAY_ALLOW_REMOTE_SEED=true
 
 For shared preview or staging environments, the same script can now create disposable guest and host smoke accounts through the real auth flow, then use an existing admin account to normalize passwords, host plans, KYC state, and demo listings:
 
+### Yoco test mode
+
+Use the backend `YOCO_PAYMENT_MODE=test` setting together with `YOCO_TEST_SECRET_KEY` to exercise the checkout flow without charging a real card.
+
+For Yoco checkout testing, Yoco’s developer docs currently list the successful test card as `4111 1111 1111 1111`. Use any future expiry date and any 3-digit CVC.
+
+Test transactions are isolated from live sales data and should be used for subscription checkout verification before switching back to live mode.
+
 ```bash
 IDEAL_STAY_API_URL=https://your-encore-host \
 IDEAL_STAY_ALLOW_REMOTE_SEED=true \

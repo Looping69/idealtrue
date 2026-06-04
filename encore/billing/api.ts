@@ -49,7 +49,7 @@ import {
 
 type BillingInterval = "monthly" | "annual";
 type ContentDraftStatus = "draft" | "scheduled" | "published";
-type CheckoutType = "subscription" | "content_credits" | "host_billing_setup";
+type CheckoutType = "subscription" | "content_credits" | "host_billing_setup" | "managed_hosting";
 type CheckoutStatus = "pending" | "paid" | "failed" | "cancelled";
 
 interface SubscriptionCheckoutParams {
@@ -209,30 +209,6 @@ type CheckoutSessionRow = {
   updated_at: string;
 };
 
-type PaymentLinkSessionRow = {
-  id: string;
-  user_id: string;
-  session_type: CheckoutType;
-  provider: string;
-  status: CheckoutStatus;
-  currency: string;
-  amount: number;
-  host_plan: HostPlan | null;
-  billing_interval: BillingInterval | null;
-  credit_quantity: number | null;
-  payment_link_id: string | null;
-  provider_order_id: string | null;
-  provider_payment_id: string | null;
-  provider_mode: string | null;
-  redirect_url: string | null;
-  customer_reference: string;
-  customer_description: string | null;
-  metadata: Record<string, unknown> | null;
-  paid_at: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
 type PaymentIntentRow = {
   id: string;
   user_id: string;
@@ -256,17 +232,6 @@ type PaymentIntentRow = {
   paid_at: string | null;
   created_at: string;
   updated_at: string;
-};
-
-type FulfillableBillingSession = {
-  id: string;
-  user_id: string;
-  type: CheckoutType;
-  status: CheckoutStatus;
-  amount: number;
-  host_plan: HostPlan | null;
-  billing_interval: BillingInterval | null;
-  credit_quantity: number | null;
 };
 
 type WebhookEventRow = {
@@ -588,19 +553,6 @@ function toFulfillableCheckoutSession(session: CheckoutSessionRow): FulfillableB
   };
 }
 
-function toFulfillablePaymentLinkSession(session: PaymentLinkSessionRow): FulfillableBillingSession {
-  return {
-    id: session.id,
-    user_id: session.user_id,
-    type: session.session_type,
-    status: session.status,
-    amount: session.amount,
-    host_plan: session.host_plan,
-    billing_interval: session.billing_interval,
-    credit_quantity: session.credit_quantity,
-  };
-}
-
 function toFulfillablePaymentIntent(intent: PaymentIntentRow): FulfillableBillingSession {
   return {
     id: intent.id,
@@ -614,33 +566,6 @@ function toFulfillablePaymentIntent(intent: PaymentIntentRow): FulfillableBillin
   };
 }
 
-function buildPaymentLinkCopy(params: {
-  sessionId: string;
-  type: CheckoutType;
-  userId: string;
-  plan?: HostPlan | null;
-  billingInterval?: BillingInterval | null;
-  credits?: number | null;
-}) {
-  const reference =
-    params.type === "subscription"
-      ? `Ideal Stay ${params.plan} subscription ${params.sessionId}`
-      : params.type === "content_credits"
-        ? `Ideal Stay ${params.credits} content credits ${params.sessionId}`
-        : `Ideal Stay host billing setup ${params.sessionId}`;
-  const description =
-    params.type === "subscription"
-      ? `Ideal Stay ${params.plan} ${params.billingInterval} host plan for user ${params.userId}.`
-      : params.type === "content_credits"
-        ? `Ideal Stay content credit top-up for user ${params.userId}.`
-        : `Ideal Stay host billing setup verification for user ${params.userId}.`;
-
-  return {
-    customerReference: reference.slice(0, 100),
-    customerDescription: description.slice(0, 255),
-  };
-}
-
 async function createPaymentIntentRow(params: {
   userId: string;
   purpose: CheckoutType;
@@ -651,14 +576,18 @@ async function createPaymentIntentRow(params: {
 }) {
   const now = new Date().toISOString();
   const intentId = randomUUID();
-  const copy = buildPaymentLinkCopy({
-    sessionId: intentId,
-    type: params.purpose,
-    userId: params.userId,
-    plan: params.hostPlan,
-    billingInterval: params.billingInterval,
-    credits: params.creditQuantity,
-  });
+  const reference =
+    params.purpose === "subscription"
+      ? `Ideal Stay ${params.hostPlan} subscription ${intentId}`
+      : params.purpose === "content_credits"
+        ? `Ideal Stay ${params.creditQuantity} content credits ${intentId}`
+        : `Ideal Stay host billing setup ${intentId}`;
+  const description =
+    params.purpose === "subscription"
+      ? `Ideal Stay ${params.hostPlan} ${params.billingInterval} host plan for user ${params.userId}.`
+      : params.purpose === "content_credits"
+        ? `Ideal Stay content credit top-up for user ${params.userId}.`
+        : `Ideal Stay host billing setup verification for user ${params.userId}.`;
 
   await billingDB.exec`
     INSERT INTO billing_payment_intents (
@@ -668,15 +597,15 @@ async function createPaymentIntentRow(params: {
     VALUES (
       ${intentId}, ${params.userId}, ${params.purpose}, ${"pending"}, ${"ZAR"}, ${params.amount},
       ${params.hostPlan ?? null}, ${params.billingInterval ?? null}, ${params.creditQuantity ?? null},
-      ${copy.customerReference}, ${copy.customerDescription},
+      ${reference.slice(0, 100)}, ${description.slice(0, 255)},
       ${JSON.stringify({ paymentIntentId: intentId, purpose: params.purpose })}, ${now}, ${now}
     )
   `;
 
   return {
     intentId,
-    customerReference: copy.customerReference,
-    customerDescription: copy.customerDescription,
+    customerReference: reference.slice(0, 100),
+    customerDescription: description.slice(0, 255),
   };
 }
 
@@ -963,89 +892,6 @@ async function markCheckoutStatus(session: CheckoutSessionRow, status: "failed" 
   }
 }
 
-async function markPaymentLinkPaid(session: PaymentLinkSessionRow, providerPaymentId?: string | null) {
-  const now = new Date().toISOString();
-
-  await billingDB.exec`
-    UPDATE billing_payment_link_sessions
-    SET status = ${"paid"},
-        provider_payment_id = ${providerPaymentId ?? null},
-        paid_at = ${now},
-        updated_at = ${now}
-    WHERE id = ${session.id}
-  `;
-}
-
-async function markPaymentLinkStatus(session: PaymentLinkSessionRow, status: "failed" | "cancelled") {
-  if (session.status !== "pending") {
-    return;
-  }
-
-  const now = new Date().toISOString();
-  await billingDB.exec`
-    UPDATE billing_payment_link_sessions
-    SET status = ${status},
-        updated_at = ${now}
-    WHERE id = ${session.id}
-      AND status = ${"pending"}
-  `;
-
-  try {
-    await notifyCheckoutStatusChanged({
-      userId: session.user_id,
-      checkoutType: session.session_type,
-      status,
-      hostPlan: session.host_plan,
-      creditQuantity: session.credit_quantity,
-    });
-  } catch (error) {
-    console.error("Failed to notify payment link status change:", error);
-  }
-}
-
-async function fulfilSuccessfulPaymentLink(session: PaymentLinkSessionRow, providerPaymentId?: string | null) {
-  if (session.status === "paid") {
-    return;
-  }
-
-  const billingSession = toFulfillablePaymentLinkSession(session);
-  if (session.session_type === "subscription") {
-    await activatePlanFromBillingSession(billingSession);
-    if (session.host_plan && session.billing_interval) {
-      try {
-        await notifySubscriptionActivated({
-          userId: session.user_id,
-          plan: session.host_plan,
-          billingInterval: session.billing_interval,
-        });
-      } catch (error) {
-        console.error("Failed to notify subscription activation:", error);
-      }
-    }
-  } else if (session.session_type === "content_credits") {
-    await creditWalletFromBillingSession(billingSession);
-    if (session.credit_quantity) {
-      try {
-        await notifyContentCreditsPurchased({
-          userId: session.user_id,
-          credits: session.credit_quantity,
-        });
-      } catch (error) {
-        console.error("Failed to notify content credit purchase:", error);
-      }
-    }
-  } else {
-    await markHostBillingSetupComplete({
-      userId: session.user_id,
-      provider: "yoco",
-      checkoutId: session.id,
-      providerPaymentId,
-    });
-  }
-
-  await markPaymentLinkPaid(session, providerPaymentId);
-}
-
 async function markPaymentIntentPaid(intent: PaymentIntentRow, providerPaymentId?: string | null) {
   const now = new Date().toISOString();
 
@@ -1167,12 +1013,6 @@ function resolveProviderOrderId(event: YocoWebhookEvent) {
   return null;
 }
 
-function resolveProviderPaymentLinkId(event: YocoWebhookEvent) {
-  const payload = event.payload as (YocoWebhookEvent["payload"] & Record<string, unknown>) | undefined;
-  const directPaymentLinkId = payload?.payment_link_id ?? payload?.paymentLinkId;
-  return typeof directPaymentLinkId === "string" ? directPaymentLinkId : null;
-}
-
 async function findCheckoutForWebhook(event: YocoWebhookEvent) {
   const metadata = resolveProviderMetadata(event);
   const checkoutId = typeof metadata.checkoutId === "string" ? metadata.checkoutId : null;
@@ -1211,14 +1051,6 @@ async function getCheckoutSessionById(checkoutId: string) {
   `;
 }
 
-async function getPaymentLinkSessionById(sessionId: string) {
-  return billingDB.queryRow<PaymentLinkSessionRow>`
-    SELECT *
-    FROM billing_payment_link_sessions
-    WHERE id = ${sessionId}
-  `;
-}
-
 async function getPaymentIntentById(paymentId: string) {
   return billingDB.queryRow<PaymentIntentRow>`
     SELECT *
@@ -1232,8 +1064,6 @@ async function findPaymentIntentForWebhook(event: YocoWebhookEvent) {
   const paymentIntentId = typeof metadata.paymentIntentId === "string" ? metadata.paymentIntentId : null;
   const providerCheckoutId = resolveProviderCheckoutId(event);
   const orderId = resolveProviderOrderId(event);
-  const paymentLinkId = resolveProviderPaymentLinkId(event);
-
   if (paymentIntentId) {
     const byId = await billingDB.queryRow<PaymentIntentRow>`
       SELECT *
@@ -1264,46 +1094,6 @@ async function findPaymentIntentForWebhook(event: YocoWebhookEvent) {
     `;
     if (byOrderId) {
       return byOrderId;
-    }
-  }
-
-  if (paymentLinkId) {
-    const byPaymentLinkId = await billingDB.queryRow<PaymentIntentRow>`
-      SELECT *
-      FROM billing_payment_intents
-      WHERE provider_payment_link_id = ${paymentLinkId}
-    `;
-    if (byPaymentLinkId) {
-      return byPaymentLinkId;
-    }
-  }
-
-  return null;
-}
-
-async function findPaymentLinkForWebhook(event: YocoWebhookEvent) {
-  const orderId = resolveProviderOrderId(event);
-  const paymentLinkId = resolveProviderPaymentLinkId(event);
-
-  if (orderId) {
-    const byOrderId = await billingDB.queryRow<PaymentLinkSessionRow>`
-      SELECT *
-      FROM billing_payment_link_sessions
-      WHERE provider_order_id = ${orderId}
-    `;
-    if (byOrderId) {
-      return byOrderId;
-    }
-  }
-
-  if (paymentLinkId) {
-    const byPaymentLinkId = await billingDB.queryRow<PaymentLinkSessionRow>`
-      SELECT *
-      FROM billing_payment_link_sessions
-      WHERE payment_link_id = ${paymentLinkId}
-    `;
-    if (byPaymentLinkId) {
-      return byPaymentLinkId;
     }
   }
 
@@ -1365,29 +1155,6 @@ async function findSuccessfulWebhookForPaymentIntent(intent: PaymentIntentRow): 
   }
 
   return null;
-}
-
-async function reconcilePendingPaymentLink(session: PaymentLinkSessionRow) {
-  if (session.status !== "pending" || !session.provider_order_id) {
-    return session;
-  }
-
-  const order = await fetchYocoOrder(session.provider_order_id);
-  const status = mapYocoOrderStatus(order.status);
-  const providerPaymentId =
-    order.payments?.find((payment) => payment.status?.trim().toLowerCase() === "approved")?.id ??
-    order.payments?.[0]?.id ??
-    null;
-  if (status === "paid") {
-    await fulfilSuccessfulPaymentLink(session, providerPaymentId);
-    return (await getPaymentLinkSessionById(session.id)) ?? session;
-  }
-  if (status === "cancelled") {
-    await markPaymentLinkStatus(session, "cancelled");
-    return (await getPaymentLinkSessionById(session.id)) ?? session;
-  }
-
-  return session;
 }
 
 async function findSuccessfulWebhookForCheckout(session: CheckoutSessionRow): Promise<YocoWebhookEvent | null> {
@@ -1512,6 +1279,14 @@ export const createBillingPayment = api<CreateBillingPaymentParams, { paymentId:
       });
     }
 
+    if (purpose === "managed_hosting") {
+      return createBillingPaymentIntent({
+        userId: auth.userID,
+        purpose,
+        amount: 650,
+      });
+    }
+
     if (purpose === "content_credits") {
       if (!Number.isInteger(credits) || !credits || credits <= 0) {
         throw APIError.invalidArgument("Content credit payments require a positive credits value.");
@@ -1632,33 +1407,6 @@ export const createHostBillingSetupCheckout = api<void, { checkoutId: string; re
   },
 );
 
-export const createHostBillingSetupPaymentLink = api<void, { sessionId: string; paymentLinkId: string; orderId: string; redirectUrl: string; providerMode: "live" | "test" }>(
-  { expose: true, method: "POST", path: "/billing/host/setup-payment-link", auth: true },
-  async () => {
-    const auth = requireRole("host", "admin");
-    const account = await getHostBillingAccount(auth.userID);
-
-    if (account.cardOnFile) {
-      throw APIError.failedPrecondition("A provider-backed billing card is already on file.");
-    }
-
-    // (|/) Klaasvaakie - legacy payment-link callers are shims over standard Yoco Checkout intents.
-    const payment = await createBillingPaymentIntent({
-      userId: auth.userID,
-      purpose: "host_billing_setup",
-      amount: HOST_BILLING_SETUP_AMOUNT,
-      hostPlan: account.plan,
-    });
-    return {
-      sessionId: payment.paymentId,
-      paymentLinkId: payment.providerReference,
-      orderId: payment.providerReference,
-      redirectUrl: payment.redirectUrl,
-      providerMode: payment.providerMode,
-    };
-  },
-);
-
 export const listAdminHostBilling = api<void, { accounts: AdminHostBillingAccount[] }>(
   { expose: true, method: "GET", path: "/admin/billing/host-accounts", auth: true },
   async () => {
@@ -1736,32 +1484,6 @@ export const createContentCreditsCheckout = api<PurchaseCreditsParams, { checkou
   },
 );
 
-export const createContentCreditsPaymentLink = api<PurchaseCreditsParams, { sessionId: string; paymentLinkId: string; orderId: string; redirectUrl: string; providerMode: "live" | "test" }>(
-  { expose: true, method: "POST", path: "/billing/content/credits/payment-link", auth: true },
-  async ({ credits }) => {
-    const auth = requireRole("host", "admin");
-    if (!Number.isInteger(credits) || credits <= 0) {
-      throw APIError.invalidArgument("Credits must be a positive integer.");
-    }
-
-    const amount = getCreditPrice(credits);
-    // (|/) Klaasvaakie - legacy payment-link callers are shims over standard Yoco Checkout intents.
-    const payment = await createBillingPaymentIntent({
-      userId: auth.userID,
-      purpose: "content_credits",
-      amount,
-      creditQuantity: credits,
-    });
-    return {
-      sessionId: payment.paymentId,
-      paymentLinkId: payment.providerReference,
-      orderId: payment.providerReference,
-      redirectUrl: payment.redirectUrl,
-      providerMode: payment.providerMode,
-    };
-  },
-);
-
 export const getCheckoutStatus = api<{ checkoutId: string }, { status: CheckoutStatus; checkoutType: CheckoutType }>(
   { expose: true, method: "GET", path: "/billing/checkouts/:checkoutId", auth: true },
   async ({ checkoutId }) => {
@@ -1777,33 +1499,6 @@ export const getCheckoutStatus = api<{ checkoutId: string }, { status: CheckoutS
 
     const resolvedCheckout = await reconcilePendingCheckout(checkout);
     return { status: resolvedCheckout.status, checkoutType: resolvedCheckout.checkout_type };
-  },
-);
-
-export const getPaymentLinkStatus = api<{ sessionId: string }, { status: CheckoutStatus; sessionType: CheckoutType }>(
-  { expose: true, method: "GET", path: "/billing/payment-links/:sessionId", auth: true },
-  async ({ sessionId }) => {
-    const auth = requireAuth();
-    const session = await getPaymentLinkSessionById(sessionId);
-
-    if (!session) {
-      const intent = await getPaymentIntentById(sessionId);
-      if (intent) {
-        if (intent.user_id !== auth.userID && auth.role !== "admin" && auth.role !== "support") {
-          throw APIError.permissionDenied("You do not have access to this payment link session.");
-        }
-        // (|/) Klaasvaakie - legacy status URLs can now resolve standard payment intents.
-        const resolvedIntent = await reconcilePendingPaymentIntent(intent);
-        return { status: resolvedIntent.status, sessionType: resolvedIntent.purpose };
-      }
-      throw APIError.notFound("Payment link session not found.");
-    }
-    if (session.user_id !== auth.userID && auth.role !== "admin" && auth.role !== "support") {
-      throw APIError.permissionDenied("You do not have access to this payment link session.");
-    }
-
-    const resolvedSession = await reconcilePendingPaymentLink(session);
-    return { status: resolvedSession.status, sessionType: resolvedSession.session_type };
   },
 );
 
@@ -2002,8 +1697,7 @@ export const yocoWebhook = api.raw(
 
       const paymentIntent = await findPaymentIntentForWebhook(event);
       const session = paymentIntent ? null : await findCheckoutForWebhook(event);
-      const paymentLinkSession = paymentIntent || session ? null : await findPaymentLinkForWebhook(event);
-      if (!paymentIntent && !session && !paymentLinkSession) {
+      if (!paymentIntent && !session) {
         resp.statusCode = 202;
         resp.setHeader("Content-Type", "application/json");
         resp.end(JSON.stringify({ ok: true, ignored: true }));
@@ -2025,12 +1719,6 @@ export const yocoWebhook = api.raw(
         await markCheckoutStatus(session, "failed");
       } else if (session && outcome === "cancelled") {
         await markCheckoutStatus(session, "cancelled");
-      } else if (paymentLinkSession && outcome === "paid") {
-        await fulfilSuccessfulPaymentLink(paymentLinkSession, providerPaymentId);
-      } else if (paymentLinkSession && outcome === "failed") {
-        await markPaymentLinkStatus(paymentLinkSession, "failed");
-      } else if (paymentLinkSession && outcome === "cancelled") {
-        await markPaymentLinkStatus(paymentLinkSession, "cancelled");
       }
 
       await billingDB.exec`

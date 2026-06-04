@@ -45,27 +45,6 @@ export interface YocoWebhookEvent {
   };
 }
 
-export interface YocoPaymentLinkRequest {
-  amount: {
-    amount: number;
-    currency: "ZAR";
-  };
-  customer_reference: string;
-  customer_description?: string | null;
-}
-
-export interface YocoPaymentLinkResponse {
-  id: string;
-  order_id: string;
-  status: "pending" | "paid" | "cancelled";
-  url: string;
-  customer_reference: string;
-  customer_description?: string | null;
-  created_at?: string;
-  updated_at?: string | null;
-  provider_mode?: YocoProviderMode;
-}
-
 export interface YocoOrderResponse {
   id: string;
   status: "open" | "completed" | "cancelled" | string;
@@ -133,31 +112,6 @@ export async function createYocoCheckout(input: YocoCheckoutRequest): Promise<Yo
     throw APIError.internal("Yoco checkout creation returned an invalid response.");
   }
   return { ...checkout, processingMode: checkout.processingMode ?? mode };
-}
-
-export async function createYocoPaymentLink(input: YocoPaymentLinkRequest): Promise<YocoPaymentLinkResponse> {
-  const { apiKey, mode } = getYocoApiKey();
-
-  const response = await fetch(`${YOCO_REST_API_BASE}/payment_links/`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(input),
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw APIError.internal(`Yoco payment link creation failed: ${body || response.statusText}`);
-  }
-
-  const paymentLink = (await response.json()) as YocoPaymentLinkResponse;
-  if (!paymentLink.id || !paymentLink.order_id || !paymentLink.url) {
-    throw APIError.internal("Yoco payment link creation returned an invalid response.");
-  }
-
-  return { ...paymentLink, provider_mode: mode };
 }
 
 export async function fetchYocoOrder(orderId: string): Promise<YocoOrderResponse> {
