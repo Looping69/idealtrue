@@ -326,7 +326,9 @@ export default function KYCModal({ isOpen, onClose }: KYCModalProps) {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>ID Document</Label>
-                  <input 
+                  <input
+                    id="kyc-id-document"
+                    name="kycIdDocument"
                     type="file" 
                     ref={fileInputRef} 
                     className="hidden" 
@@ -358,6 +360,8 @@ export default function KYCModal({ isOpen, onClose }: KYCModalProps) {
                 <div className="space-y-2">
                   <Label>Selfie</Label>
                   <input
+                    id="kyc-selfie-document"
+                    name="kycSelfieDocument"
                     type="file"
                     ref={selfieFileInputRef}
                     className="hidden"

@@ -183,7 +183,15 @@ export default function AccountPage() {
               </div>
               <label className="absolute bottom-0 right-0 p-2 bg-primary text-white rounded-full cursor-pointer shadow-lg hover:scale-110 transition-transform">
                 <Camera className="w-4 h-4" />
-                <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} disabled={isUploading} />
+                <input
+                  id="profilePhoto"
+                  name="profilePhoto"
+                  type="file"
+                  className="hidden"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  disabled={isUploading}
+                />
               </label>
             </div>
             <div>
