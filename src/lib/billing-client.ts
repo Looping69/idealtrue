@@ -79,17 +79,6 @@ export async function createSubscriptionCheckout(plan: HostPlan, billingInterval
   );
 }
 
-export async function createSubscriptionPaymentLink(plan: HostPlan, billingInterval: BillingInterval) {
-  return encoreRequest<PaymentLinkSession>(
-    '/billing/subscriptions/payment-link',
-    {
-      method: 'POST',
-      body: JSON.stringify({ plan, billingInterval }),
-    },
-    { auth: true },
-  );
-}
-
 export async function createHostBillingSetupCheckout() {
   return encoreRequest<{ checkoutId: string; redirectUrl: string }>(
     '/billing/host/setup-checkout',

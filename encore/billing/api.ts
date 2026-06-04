@@ -1529,29 +1529,6 @@ export const createBillingPayment = api<CreateBillingPaymentParams, { paymentId:
   },
 );
 
-export const createSubscriptionPaymentLink = api<SubscriptionCheckoutParams, { sessionId: string; paymentLinkId: string; orderId: string; redirectUrl: string; providerMode: "live" | "test" }>(
-  { expose: true, method: "POST", path: "/billing/subscriptions/payment-link", auth: true },
-  async ({ plan, billingInterval }) => {
-    const auth = requireRole("host", "admin");
-    const amount = getPlanAmount(plan, billingInterval);
-    // (|/) Klaasvaakie - legacy payment-link callers are shims over standard Yoco Checkout intents.
-    const payment = await createBillingPaymentIntent({
-      userId: auth.userID,
-      purpose: "subscription",
-      amount,
-      hostPlan: plan,
-      billingInterval,
-    });
-    return {
-      sessionId: payment.paymentId,
-      paymentLinkId: payment.providerReference,
-      orderId: payment.providerReference,
-      redirectUrl: payment.redirectUrl,
-      providerMode: payment.providerMode,
-    };
-  },
-);
-
 export const listMySubscriptions = api<void, { subscriptions: SubscriptionRow[] }>(
   { expose: true, method: "GET", path: "/billing/subscriptions", auth: true },
   async () => {

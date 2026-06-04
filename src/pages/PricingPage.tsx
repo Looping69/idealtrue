@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
-import { getBillingPaymentStatus, getCheckoutStatus, getMyHostBillingAccount, startBillingPayment } from "@/lib/billing-client";
+import { createSubscriptionCheckout, getBillingPaymentStatus, getCheckoutStatus, getMyHostBillingAccount } from "@/lib/billing-client";
 import type { HostBillingAccount } from "@/types";
 
 type PlanTier = "standard" | "professional" | "premium";
@@ -293,8 +293,8 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
       setLoadingPlan(planId);
 
       try {
-        const payment = await startBillingPayment({ purpose: "subscription", plan: planId, billingInterval: "monthly" });
-        window.location.assign(payment.redirectUrl);
+        const checkout = await createSubscriptionCheckout(planId, "monthly");
+        window.location.assign(checkout.redirectUrl);
       } catch (error: any) {
         console.error("Plan upgrade error:", error);
         toast.error(`Upgrade failed: ${error.message}`);

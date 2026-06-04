@@ -6,7 +6,6 @@ import {
   createHostBillingSetupCheckout,
   createHostBillingSetupPaymentLink,
   createSubscriptionCheckout,
-  createSubscriptionPaymentLink,
   getCheckoutStatus,
   getPaymentLinkStatus,
   startBillingPayment,
@@ -66,33 +65,6 @@ test('subscription checkout client posts plan interval and reads checkout status
   assert.equal(checkout.redirectUrl, 'https://pay.example/subscription');
   assert.equal(status.checkoutType, 'subscription');
   assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/billing/subscriptions/checkout`);
-  assert.deepEqual(requestBody(0), { plan: 'professional', billingInterval: 'monthly' });
-});
-
-test('subscription payment link client creates a server-owned Yoco payment link session', async () => {
-  installFetch((url) => {
-    if (url.endsWith('/billing/subscriptions/payment-link')) {
-      return createJsonResponse({
-        sessionId: 'payment-link-subscription-1',
-        paymentLinkId: 'plink-subscription-1',
-        orderId: 'order-subscription-1',
-        redirectUrl: 'https://pay.example/payment-link-subscription',
-        providerMode: 'test',
-      });
-    }
-    if (url.endsWith('/billing/payment-links/payment-link-subscription-1')) {
-      return createJsonResponse({ status: 'pending', sessionType: 'subscription' });
-    }
-    throw new Error(`Unhandled subscription payment link endpoint: ${url}`);
-  });
-
-  const paymentLink = await createSubscriptionPaymentLink('professional', 'monthly');
-  const status = await getPaymentLinkStatus(paymentLink.sessionId);
-
-  assert.equal(paymentLink.redirectUrl, 'https://pay.example/payment-link-subscription');
-  assert.equal(paymentLink.providerMode, 'test');
-  assert.equal(status.sessionType, 'subscription');
-  assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/billing/subscriptions/payment-link`);
   assert.deepEqual(requestBody(0), { plan: 'professional', billingInterval: 'monthly' });
 });
 

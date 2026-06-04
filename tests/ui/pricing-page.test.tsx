@@ -18,13 +18,9 @@ vi.mock('@/contexts/AuthContext', () => ({
 }));
 
 vi.mock('@/lib/billing-client', () => ({
-  startBillingPayment: vi.fn(async () => ({
-    paymentId: 'payment-intent-1',
-    provider: 'yoco',
-    providerReference: 'checkout-1',
+  createSubscriptionCheckout: vi.fn(async () => ({
+    checkoutId: 'checkout-subscription-1',
     redirectUrl: 'https://pay.yoco.com/r/generated-professional',
-    providerMode: 'test',
-    status: 'pending',
   })),
   getBillingPaymentStatus: vi.fn(),
   getCheckoutStatus: vi.fn(),
@@ -51,7 +47,7 @@ describe('PricingPage', () => {
     authState.profile = null;
   });
 
-  it('opens the Yoco payment link for a selected plan when the user is signed in', async () => {
+  it('opens the Yoco subscription checkout for a selected plan when the user is signed in', async () => {
     const user = userEvent.setup();
     const assignMock = vi.fn();
     authState.user = { id: 'host-1' };
