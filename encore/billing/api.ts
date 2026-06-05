@@ -52,15 +52,6 @@ type ContentDraftStatus = "draft" | "scheduled" | "published";
 type CheckoutType = "subscription" | "content_credits" | "host_billing_setup" | "managed_hosting";
 type CheckoutStatus = "pending" | "paid" | "failed" | "cancelled";
 
-interface SubscriptionCheckoutParams {
-  plan: HostPlan;
-  billingInterval: BillingInterval;
-}
-
-interface PurchaseCreditsParams {
-  credits: number;
-}
-
 interface CreateBillingPaymentParams {
   purpose: CheckoutType;
   plan?: HostPlan;
@@ -493,53 +484,6 @@ async function debitOneContentUse(db: QueryExecutor, userId: string, entitlement
   `;
 }
 
-async function createCheckoutSessionRow(params: {
-  userId: string;
-  checkoutType: CheckoutType;
-  amount: number;
-  hostPlan?: HostPlan;
-  billingInterval?: BillingInterval;
-  creditQuantity?: number;
-  successUrl: string;
-  cancelUrl: string;
-  failureUrl: string;
-}) {
-  const now = new Date().toISOString();
-  const checkoutId = randomUUID();
-
-  await billingDB.exec`
-    INSERT INTO billing_checkout_sessions (
-      id, user_id, checkout_type, status, currency, amount, host_plan, billing_interval,
-      credit_quantity, success_url, cancel_url, failure_url, metadata, created_at, updated_at
-    )
-    VALUES (
-      ${checkoutId}, ${params.userId}, ${params.checkoutType}, ${"pending"}, ${"ZAR"}, ${params.amount},
-      ${params.hostPlan ?? null}, ${params.billingInterval ?? null}, ${params.creditQuantity ?? null},
-      ${params.successUrl}, ${params.cancelUrl}, ${params.failureUrl},
-      ${JSON.stringify({ checkoutId, checkoutType: params.checkoutType })}, ${now}, ${now}
-    )
-  `;
-
-  return checkoutId;
-}
-
-async function storeProviderCheckout(params: {
-  checkoutId: string;
-  providerCheckoutId: string;
-  providerMode?: string;
-  redirectUrl: string;
-}) {
-  const now = new Date().toISOString();
-  await billingDB.exec`
-    UPDATE billing_checkout_sessions
-    SET provider_checkout_id = ${params.providerCheckoutId},
-        provider_mode = ${params.providerMode ?? null},
-        redirect_url = ${params.redirectUrl},
-        updated_at = ${now}
-    WHERE id = ${params.checkoutId}
-  `;
-}
-
 function toFulfillableCheckoutSession(session: CheckoutSessionRow): FulfillableBillingSession {
   return {
     id: session.id,
@@ -581,13 +525,17 @@ async function createPaymentIntentRow(params: {
       ? `Ideal Stay ${params.hostPlan} subscription ${intentId}`
       : params.purpose === "content_credits"
         ? `Ideal Stay ${params.creditQuantity} content credits ${intentId}`
-        : `Ideal Stay host billing setup ${intentId}`;
+        : params.purpose === "managed_hosting"
+          ? `Ideal Stay managed hosting ${intentId}`
+          : `Ideal Stay host billing setup ${intentId}`;
   const description =
     params.purpose === "subscription"
       ? `Ideal Stay ${params.hostPlan} ${params.billingInterval} host plan for user ${params.userId}.`
       : params.purpose === "content_credits"
         ? `Ideal Stay content credit top-up for user ${params.userId}.`
-        : `Ideal Stay host billing setup verification for user ${params.userId}.`;
+        : params.purpose === "managed_hosting"
+          ? `Ideal Stay managed hosting package for user ${params.userId}.`
+          : `Ideal Stay host billing setup verification for user ${params.userId}.`;
 
   await billingDB.exec`
     INSERT INTO billing_payment_intents (
@@ -809,6 +757,66 @@ async function creditWalletFromBillingSession(session: FulfillableBillingSession
   }
 }
 
+async function activateManagedHostingFromPaymentIntent(intent: PaymentIntentRow) {
+  const now = new Date().toISOString();
+
+  await identityDB.exec`
+    UPDATE users
+    SET management_mode = ${"managed"},
+        updated_at = ${now}
+    WHERE id = ${intent.user_id}
+      AND role = ${"host"}
+  `;
+
+  await billingDB.exec`
+    INSERT INTO host_billing_accounts (
+      user_id,
+      plan,
+      billing_source,
+      billing_status,
+      current_period_start,
+      current_period_end,
+      reminder_count,
+      card_on_file,
+      created_at,
+      updated_at
+    )
+    VALUES (
+      ${intent.user_id},
+      ${"premium"},
+      ${"paid"},
+      ${"active"},
+      ${now},
+      ${null},
+      ${0},
+      ${true},
+      ${now},
+      ${now}
+    )
+    ON CONFLICT (user_id) DO UPDATE
+    SET plan = EXCLUDED.plan,
+        billing_source = EXCLUDED.billing_source,
+        billing_status = EXCLUDED.billing_status,
+        current_period_start = EXCLUDED.current_period_start,
+        current_period_end = NULL,
+        reminder_window_starts_at = NULL,
+        voucher_code = NULL,
+        voucher_redeemed_at = NULL,
+        greylisted_at = NULL,
+        greylist_reason = NULL,
+        card_on_file = EXCLUDED.card_on_file,
+        updated_at = EXCLUDED.updated_at
+  `;
+
+  await platformEvents.publish({
+    type: "managed_hosting.paid",
+    aggregateId: intent.id,
+    actorId: intent.user_id,
+    occurredAt: now,
+    payload: JSON.stringify({ purpose: intent.purpose, amount: intent.amount }),
+  });
+}
+
 async function markCheckoutPaid(session: CheckoutSessionRow, providerPaymentId?: string | null) {
   const now = new Date().toISOString();
 
@@ -963,13 +971,15 @@ async function fulfilSuccessfulPaymentIntent(intent: PaymentIntentRow, providerP
         console.error("Failed to notify content credit purchase:", error);
       }
     }
-  } else {
+  } else if (intent.purpose === "host_billing_setup") {
     await markHostBillingSetupComplete({
       userId: intent.user_id,
       provider: "yoco",
       checkoutId: intent.id,
       providerPaymentId,
     });
+  } else if (intent.purpose === "managed_hosting") {
+    await activateManagedHostingFromPaymentIntent(intent);
   }
 
   await markPaymentIntentPaid(intent, providerPaymentId);
@@ -1200,53 +1210,6 @@ export const listPlans = api<void, { plans: SubscriptionPlan[] }>(
   async () => ({ plans: HOST_PLANS }),
 );
 
-export const createSubscriptionCheckout = api<SubscriptionCheckoutParams, { checkoutId: string; redirectUrl: string }>(
-  { expose: true, method: "POST", path: "/billing/subscriptions/checkout", auth: true },
-  async ({ plan, billingInterval }) => {
-    const auth = requireRole("host", "admin");
-
-    const amount = getPlanAmount(plan, billingInterval);
-    const urls = buildBillingUrls("subscription", randomUUID());
-    const checkoutId = await createCheckoutSessionRow({
-      userId: auth.userID,
-      checkoutType: "subscription",
-      amount,
-      hostPlan: plan,
-      billingInterval,
-      successUrl: urls.successUrl,
-      cancelUrl: urls.cancelUrl,
-      failureUrl: urls.failureUrl,
-    });
-
-    const yoco = await createYocoCheckout({
-      amount: toMinorUnits(amount),
-      currency: "ZAR",
-      successUrl: urls.successUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
-      cancelUrl: urls.cancelUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
-      failureUrl: urls.failureUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
-      idempotencyKey: checkoutId,
-      metadata: {
-        checkoutId,
-        checkoutType: "subscription",
-        userId: auth.userID,
-        plan,
-        billingInterval,
-      },
-    });
-
-    await storeProviderCheckout({
-      checkoutId,
-      providerCheckoutId: yoco.id,
-      providerMode: yoco.mode,
-      redirectUrl: yoco.redirectUrl,
-    });
-
-    return { checkoutId, redirectUrl: yoco.redirectUrl };
-  },
-);
-
-export const upgradePlan = createSubscriptionCheckout;
-
 export const createBillingPayment = api<CreateBillingPaymentParams, { paymentId: string; provider: "yoco"; providerMode: "live" | "test"; status: CheckoutStatus; redirectUrl: string; providerReference: string }>(
   { expose: true, method: "POST", path: "/billing/payments", auth: true },
   async ({ purpose, plan, billingInterval, credits }) => {
@@ -1360,53 +1323,6 @@ export const redeemVoucher = api<RedeemHostVoucherParams, { account: HostBilling
   },
 );
 
-export const createHostBillingSetupCheckout = api<void, { checkoutId: string; redirectUrl: string }>(
-  { expose: true, method: "POST", path: "/billing/host/setup-checkout", auth: true },
-  async () => {
-    const auth = requireRole("host", "admin");
-    const account = await getHostBillingAccount(auth.userID);
-
-    if (account.cardOnFile) {
-      throw APIError.failedPrecondition("A provider-backed billing card is already on file.");
-    }
-
-    const urls = buildBillingUrls("host_billing_setup", randomUUID());
-    const checkoutId = await createCheckoutSessionRow({
-      userId: auth.userID,
-      checkoutType: "host_billing_setup",
-      amount: HOST_BILLING_SETUP_AMOUNT,
-      hostPlan: account.plan,
-      successUrl: urls.successUrl,
-      cancelUrl: urls.cancelUrl,
-      failureUrl: urls.failureUrl,
-    });
-
-    const yoco = await createYocoCheckout({
-      amount: toMinorUnits(HOST_BILLING_SETUP_AMOUNT),
-      currency: "ZAR",
-      successUrl: urls.successUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
-      cancelUrl: urls.cancelUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
-      failureUrl: urls.failureUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
-      idempotencyKey: checkoutId,
-      metadata: {
-        checkoutId,
-        checkoutType: "host_billing_setup",
-        userId: auth.userID,
-        plan: account.plan,
-      },
-    });
-
-    await storeProviderCheckout({
-      checkoutId,
-      providerCheckoutId: yoco.id,
-      providerMode: yoco.mode,
-      redirectUrl: yoco.redirectUrl,
-    });
-
-    return { checkoutId, redirectUrl: yoco.redirectUrl };
-  },
-);
-
 export const listAdminHostBilling = api<void, { accounts: AdminHostBillingAccount[] }>(
   { expose: true, method: "GET", path: "/admin/billing/host-accounts", auth: true },
   async () => {
@@ -1435,52 +1351,6 @@ export const getMyContentEntitlements = api<void, { entitlements: ContentEntitle
   async () => {
     const auth = requireRole("host", "admin");
     return { entitlements: await getContentEntitlementsForUser(auth.userID) };
-  },
-);
-
-export const createContentCreditsCheckout = api<PurchaseCreditsParams, { checkoutId: string; redirectUrl: string }>(
-  { expose: true, method: "POST", path: "/billing/content/credits/checkout", auth: true },
-  async ({ credits }) => {
-    const auth = requireRole("host", "admin");
-    if (!Number.isInteger(credits) || credits <= 0) {
-      throw APIError.invalidArgument("Credits must be a positive integer.");
-    }
-
-    const amount = getCreditPrice(credits);
-    const urls = buildBillingUrls("content_credits", randomUUID());
-    const checkoutId = await createCheckoutSessionRow({
-      userId: auth.userID,
-      checkoutType: "content_credits",
-      amount,
-      creditQuantity: credits,
-      successUrl: urls.successUrl,
-      cancelUrl: urls.cancelUrl,
-      failureUrl: urls.failureUrl,
-    });
-
-    const yoco = await createYocoCheckout({
-      amount: toMinorUnits(amount),
-      currency: "ZAR",
-      successUrl: urls.successUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
-      cancelUrl: urls.cancelUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
-      failureUrl: urls.failureUrl.replace(/checkout_id=[^&]*/, `checkout_id=${encodeURIComponent(checkoutId)}`),
-      idempotencyKey: checkoutId,
-      metadata: {
-        checkoutId,
-        checkoutType: "content_credits",
-        userId: auth.userID,
-        credits: String(credits),
-      },
-    });
-
-    await storeProviderCheckout({
-      checkoutId,
-      providerCheckoutId: yoco.id,
-      providerMode: yoco.mode,
-      redirectUrl: yoco.redirectUrl,
-    });
-
-    return { checkoutId, redirectUrl: yoco.redirectUrl };
   },
 );
 

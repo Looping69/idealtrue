@@ -2,9 +2,6 @@ import assert from 'node:assert/strict';
 import test, { afterEach } from 'node:test';
 import { DEFAULT_ENCORE_API_URL } from '../src/lib/encore-client';
 import {
-  createContentCreditsCheckout,
-  createHostBillingSetupCheckout,
-  createSubscriptionCheckout,
   generateContentDraft,
   startBillingPayment,
   getCheckoutStatus,
@@ -200,8 +197,15 @@ test('content studio clients cover entitlements, draft lifecycle, credit checkou
         },
       });
     }
-    if (url.endsWith('/billing/content/credits/checkout')) {
-      return createJsonResponse({ checkoutId: workflowBilling.checkoutPaid.checkoutId, redirectUrl: 'https://pay.example/credits' });
+    if (url.endsWith('/billing/payments')) {
+      return createJsonResponse({
+        paymentId: 'payment-content-credits-1',
+        provider: 'yoco',
+        providerMode: 'test',
+        status: 'pending',
+        redirectUrl: 'https://pay.example/credits',
+        providerReference: workflowBilling.checkoutPaid.checkoutId,
+      });
     }
     if (url.endsWith('/billing/content/drafts/generate')) {
       return createJsonResponse({
@@ -230,7 +234,7 @@ test('content studio clients cover entitlements, draft lifecycle, credit checkou
   });
 
   const entitlements = await getContentEntitlements();
-  const creditsCheckout = await createContentCreditsCheckout(10);
+  const creditsCheckout = await startBillingPayment({ purpose: 'content_credits', credits: 10 });
   const generated = await generateContentDraft(workflowListings.active as any, 'instagram' as any, 'friendly' as any, 'stay_carousel' as any, {
     includePrice: true,
     includeSpecialOffer: false,
@@ -245,7 +249,7 @@ test('content studio clients cover entitlements, draft lifecycle, credit checkou
   const checkoutStatus = await getCheckoutStatus(workflowBilling.checkoutPaid.checkoutId);
 
   assert.equal(entitlements.contentStudioEnabled, true);
-  assert.equal(creditsCheckout.checkoutId, workflowBilling.checkoutPaid.checkoutId);
+  assert.equal(creditsCheckout.paymentId, 'payment-content-credits-1');
   assert.equal(generated.draft.id, workflowContentDrafts.draft.id);
   assert.equal(drafts[0]?.id, workflowContentDrafts.draft.id);
   assert.equal(scheduled.status, 'scheduled');
@@ -385,24 +389,26 @@ test('review and referral clients map workflow contracts without mutating status
   assert.equal(requestBody(1).bookingId, workflowBookings.confirmed.id);
 });
 
-test('subscription checkout client posts plan interval and reads checkout status explicitly', async () => {
+test('subscription payment client posts plan interval through the standard Yoco endpoint', async () => {
   installFetch((url) => {
-    if (url.endsWith('/billing/subscriptions/checkout')) {
-      return createJsonResponse({ checkoutId: 'checkout-subscription-1', redirectUrl: 'https://pay.example/subscription' });
-    }
-    if (url.endsWith('/billing/checkouts/checkout-subscription-1')) {
-      return createJsonResponse({ status: 'pending', checkoutType: 'subscription' });
+    if (url.endsWith('/billing/payments')) {
+      return createJsonResponse({
+        paymentId: 'payment-subscription-1',
+        provider: 'yoco',
+        providerMode: 'test',
+        status: 'pending',
+        redirectUrl: 'https://pay.example/subscription',
+        providerReference: 'checkout-subscription-1',
+      });
     }
     throw new Error(`Unhandled subscription endpoint: ${url}`);
   });
 
-  const checkout = await createSubscriptionCheckout('professional', 'monthly');
-  const status = await getCheckoutStatus(checkout.checkoutId);
+  const checkout = await startBillingPayment({ purpose: 'subscription', plan: 'professional', billingInterval: 'monthly' });
 
   assert.equal(checkout.redirectUrl, 'https://pay.example/subscription');
-  assert.equal(status.checkoutType, 'subscription');
-  assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/billing/subscriptions/checkout`);
-  assert.deepEqual(requestBody(0), { plan: 'professional', billingInterval: 'monthly' });
+  assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/billing/payments`);
+  assert.deepEqual(requestBody(0), { purpose: 'subscription', plan: 'professional', billingInterval: 'monthly' });
 });
 
 test('standard billing payment client creates all new Yoco payments through one endpoint', async () => {
@@ -445,28 +451,25 @@ test('standard billing payment client creates all new Yoco payments through one 
   );
 });
 
-test('host billing setup checkout client posts to the dedicated Yoco-backed setup endpoint', async () => {
+test('host billing setup payment client posts through the standard Yoco endpoint', async () => {
   installFetch((url) => {
-    if (url.endsWith('/billing/host/setup-checkout')) {
+    if (url.endsWith('/billing/payments')) {
       return createJsonResponse({
-        checkoutId: workflowBilling.hostCardSetupPaid.checkoutId,
+        paymentId: 'payment-host-setup-1',
+        provider: 'yoco',
+        providerMode: 'test',
+        status: 'pending',
         redirectUrl: 'https://pay.example/host-card-setup',
-      });
-    }
-    if (url.endsWith(`/billing/checkouts/${workflowBilling.hostCardSetupPaid.checkoutId}`)) {
-      return createJsonResponse({
-        status: workflowBilling.hostCardSetupPaid.status,
-        checkoutType: workflowBilling.hostCardSetupPaid.checkoutType,
+        providerReference: workflowBilling.hostCardSetupPaid.checkoutId,
       });
     }
     throw new Error(`Unhandled host billing setup endpoint: ${url}`);
   });
 
-  const checkout = await createHostBillingSetupCheckout();
-  const status = await getCheckoutStatus(checkout.checkoutId);
+  const checkout = await startBillingPayment({ purpose: 'host_billing_setup' });
 
   assert.equal(checkout.redirectUrl, 'https://pay.example/host-card-setup');
-  assert.equal(status.checkoutType, 'host_billing_setup');
-  assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/billing/host/setup-checkout`);
+  assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/billing/payments`);
   assert.equal(fetchCalls[0]?.init?.method, 'POST');
+  assert.deepEqual(requestBody(0), { purpose: 'host_billing_setup' });
 });

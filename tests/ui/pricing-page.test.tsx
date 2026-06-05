@@ -18,9 +18,13 @@ vi.mock('@/contexts/AuthContext', () => ({
 }));
 
 vi.mock('@/lib/billing-client', () => ({
-  createSubscriptionCheckout: vi.fn(async () => ({
-    checkoutId: 'checkout-subscription-1',
-    redirectUrl: 'https://pay.yoco.com/r/generated-professional',
+  startBillingPayment: vi.fn(async (params: { purpose: string }) => ({
+    paymentId: `payment-${params.purpose}`,
+    provider: 'yoco',
+    providerMode: 'test',
+    status: 'pending',
+    redirectUrl: `https://pay.yoco.com/r/generated-${params.purpose}`,
+    providerReference: `checkout-${params.purpose}`,
   })),
   createManagedHostingCheckout: vi.fn(async () => ({
     paymentId: 'payment-managed-1',
@@ -76,7 +80,7 @@ describe('PricingPage', () => {
 
     await user.click(await screen.findByRole('button', { name: /get more visibility/i }));
 
-    expect(assignMock).toHaveBeenCalledWith('https://pay.yoco.com/r/generated-professional');
+    expect(assignMock).toHaveBeenCalledWith('https://pay.yoco.com/r/generated-subscription');
   });
 
   it('starts the managed hosting checkout for a signed-in host', async () => {
