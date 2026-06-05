@@ -134,9 +134,10 @@ export async function getCheckoutStatus(checkoutId: string) {
   );
 }
 
-export async function getBillingPaymentStatus(paymentId: string) {
+export async function getBillingPaymentStatus(paymentId: string, billingStatus?: string | null) {
+  const query = billingStatus ? `?billingStatus=${encodeURIComponent(billingStatus)}` : '';
   return encoreRequest<{ status: 'pending' | 'paid' | 'failed' | 'cancelled'; purpose: BillingPaymentPurpose; providerMode: 'live' | 'test' }>(
-    `/billing/payments/${encodeURIComponent(paymentId)}`,
+    `/billing/payments/${encodeURIComponent(paymentId)}${query}`,
     {},
     { auth: true },
   );

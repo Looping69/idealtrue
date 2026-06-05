@@ -233,7 +233,7 @@ export default function SocialDashboard({ listings }: { listings: Listing[] }) {
     if (!profile || !billingStatus || (!paymentId && !checkoutId)) return;
 
     // (|/) Klaasvaakie - standard payments return payment_id; checkout_id is kept for older return URLs.
-    const statusRequest = paymentId ? getBillingPaymentStatus(paymentId) : getCheckoutStatus(checkoutId!);
+    const statusRequest = paymentId ? getBillingPaymentStatus(paymentId, billingStatus) : getCheckoutStatus(checkoutId!);
 
     void statusRequest
       .then(async (result) => {

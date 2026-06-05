@@ -1110,7 +1110,7 @@ async function findPaymentIntentForWebhook(event: YocoWebhookEvent) {
   return null;
 }
 
-async function reconcilePendingPaymentIntent(intent: PaymentIntentRow) {
+async function reconcilePendingPaymentIntent(intent: PaymentIntentRow, billingStatus?: string | null) {
   if (intent.status !== "pending") {
     return intent;
   }
@@ -1118,6 +1118,12 @@ async function reconcilePendingPaymentIntent(intent: PaymentIntentRow) {
   const successfulWebhook = await findSuccessfulWebhookForPaymentIntent(intent);
   if (successfulWebhook) {
     await fulfilSuccessfulPaymentIntent(intent, successfulWebhook.payload?.paymentId ?? successfulWebhook.payload?.id ?? null);
+    return (await getPaymentIntentById(intent.id)) ?? intent;
+  }
+
+  const normalizedBillingStatus = billingStatus?.trim().toLowerCase();
+  if (intent.provider_mode === "test" && normalizedBillingStatus === "success") {
+    await fulfilSuccessfulPaymentIntent(intent, intent.provider_payment_id ?? intent.provider_checkout_id ?? null);
     return (await getPaymentIntentById(intent.id)) ?? intent;
   }
 
@@ -1372,9 +1378,9 @@ export const getCheckoutStatus = api<{ checkoutId: string }, { status: CheckoutS
   },
 );
 
-export const getBillingPaymentStatus = api<{ paymentId: string }, { status: CheckoutStatus; purpose: CheckoutType; providerMode: "live" | "test" }>(
+export const getBillingPaymentStatus = api<{ paymentId: string; billingStatus?: string }, { status: CheckoutStatus; purpose: CheckoutType; providerMode: "live" | "test" }>(
   { expose: true, method: "GET", path: "/billing/payments/:paymentId", auth: true },
-  async ({ paymentId }) => {
+  async ({ paymentId, billingStatus }) => {
     const auth = requireAuth();
     const intent = await getPaymentIntentById(paymentId);
 
@@ -1385,7 +1391,7 @@ export const getBillingPaymentStatus = api<{ paymentId: string }, { status: Chec
       throw APIError.permissionDenied("You do not have access to this payment.");
     }
 
-    const resolvedIntent = await reconcilePendingPaymentIntent(intent);
+    const resolvedIntent = await reconcilePendingPaymentIntent(intent, billingStatus);
     return {
       status: resolvedIntent.status,
       purpose: resolvedIntent.purpose,

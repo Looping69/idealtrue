@@ -4,6 +4,7 @@ import test, { afterEach } from 'node:test';
 import { DEFAULT_ENCORE_API_URL } from '../src/lib/encore-client';
 import {
   createManagedHostingCheckout,
+  getBillingPaymentStatus,
   startBillingPayment,
   type HostPlan,
 } from '../src/lib/billing-client';
@@ -184,4 +185,22 @@ test('host billing setup payment client posts through the standard Yoco endpoint
   assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/billing/payments`);
   assert.equal(fetchCalls[0]?.init?.method, 'POST');
   assert.deepEqual(requestBody(0), { purpose: 'host_billing_setup' });
+});
+
+test('payment status client forwards return billing status for test-mode reconciliation', async () => {
+  installFetch((url) => {
+    if (url.endsWith('/billing/payments/payment-subscription-1?billingStatus=success')) {
+      return createJsonResponse({
+        status: 'paid',
+        purpose: 'subscription',
+        providerMode: 'test',
+      });
+    }
+    throw new Error(`Unhandled payment status endpoint: ${url}`);
+  });
+
+  const status = await getBillingPaymentStatus('payment-subscription-1', 'success');
+
+  assert.equal(status.status, 'paid');
+  assert.equal(fetchCalls[0]?.url, `${DEFAULT_ENCORE_API_URL}/billing/payments/payment-subscription-1?billingStatus=success`);
 });

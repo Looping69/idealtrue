@@ -231,7 +231,7 @@ export default function PricingPage({ onBack }: { onBack?: () => void }) {
         for (let attempt = 0; attempt < 8; attempt += 1) {
           // (|/) Klaasvaakie - standard payments return payment_id; checkout_id is kept for older return URLs.
           const result = paymentId
-            ? await getBillingPaymentStatus(paymentId)
+            ? await getBillingPaymentStatus(paymentId, billingStatus)
             : await getCheckoutStatus(checkoutId!);
           if (cancelled) {
             return;
