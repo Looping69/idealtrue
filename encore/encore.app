@@ -9,14 +9,12 @@
 			"http://127.0.0.1:3000",
 			"https://idealstay.co.za",
 			"https://www.idealstay.co.za",
-			"https://*.vercel.app",
 		],
 		"allow_origins_with_credentials": [
 			"http://localhost:3000",
 			"http://127.0.0.1:3000",
 			"https://idealstay.co.za",
 			"https://www.idealstay.co.za",
-			"https://*.vercel.app",
 		],
 		"allow_headers": [
 			"authorization",

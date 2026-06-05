@@ -65,7 +65,7 @@ function readOptionalSecret(resolve: () => string) {
 }
 
 function getYocoProviderMode(): YocoProviderMode {
-  const configured = (readOptionalSecret(yocoPaymentMode) || process.env.YOCO_PAYMENT_MODE || "live").trim().toLowerCase();
+  const configured = (readOptionalSecret(yocoPaymentMode) || process.env.YOCO_PAYMENT_MODE || "test").trim().toLowerCase();
   if (configured === "test") {
     return "test";
   }

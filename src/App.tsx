@@ -20,7 +20,6 @@ import { createBooking, submitPaymentProof } from './lib/platform-client';
 import { cn } from './lib/utils';
 
 const ChatModal = lazy(() => import('./components/ChatModal'));
-const CANONICAL_HOST = 'https://www.idealstay.co.za';
 
 function AppContent() {
   const navigate = useNavigate();
@@ -69,21 +68,6 @@ function AppContent() {
     if (location.pathname !== '/' || !selectedListingIdFromUrl) return null;
     return parseBookingIntent(location.search);
   }, [location.pathname, location.search, selectedListingIdFromUrl]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const hostname = window.location.hostname.toLowerCase();
-    if (hostname.endsWith('.vercel.app')) {
-      const nextUrl = new URL(window.location.href);
-      const canonical = new URL(CANONICAL_HOST);
-      nextUrl.protocol = canonical.protocol;
-      nextUrl.host = canonical.host;
-      window.location.replace(nextUrl.toString());
-    }
-  }, []);
 
   useEffect(() => {
     if (!selectedListingIdFromUrl) {
