@@ -586,6 +586,7 @@ export async function syncPaidBillingAccount(params: {
         voucher_redeemed_at = NULL,
         greylisted_at = NULL,
         greylist_reason = NULL,
+        card_on_file = EXCLUDED.card_on_file,
         updated_at = EXCLUDED.updated_at
   `;
 
